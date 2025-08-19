@@ -264,7 +264,7 @@ export default function Index() {
           </div>
           
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            © 2024 Viu. Todos os direitos reservados.
+            © 2025 Viu. Todos os direitos reservados.
           </div>
         </div>
       </footer>
