@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Navbar } from "@/components/Navbar" 
 import {
   ArrowLeft,
   Construction,
@@ -26,33 +27,7 @@ export default function Placeholder({
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
-      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-                <Palette className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gradient">Viu</span>
-            </Link>
-          </div>
-          
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Dashboard
-            </Link>
-            <Link to="/projects" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Projetos
-            </Link>
-            <Link to="/clients" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Clientes
-            </Link>
-            <Link to="/reports" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Relatórios
-            </Link>
-          </div>
-        </div>
-      </nav>
+        <Navbar status="authenticated" />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}

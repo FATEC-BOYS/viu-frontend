@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Navbar } from "@/components/Navbar" 
+
 import {
   Upload,
   MessageSquare,
@@ -86,45 +88,7 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <Palette className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gradient">Viu</span>
-          </div>
-          
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Recursos
-            </Link>
-            <Link to="/pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Preços
-            </Link>
-            <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Sobre
-            </Link>
-            <Link to="/contact" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Contato
-            </Link>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                Entrar
-              </Button>
-            </Link>
-            <Link to="/dashboard">
-              <Button size="sm" className="bg-gradient-primary hover:opacity-90">
-                Começar Agora
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <Navbar status="unauthenticated" />
 
       {/* Hero Section */}
       <section className="relative py-20 lg:py-32">
@@ -185,7 +149,10 @@ export default function Index() {
               Recursos <span className="text-gradient">Poderosos</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Tudo que você precisa para gerenciar projetos criativos com efici��ncia máxima
+              Tudo que você precisa para gerenciar projetos 
+            </p>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+             criativos com eficiência máxima
             </p>
           </div>
           
