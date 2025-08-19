@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * Tailwind CSS theme
+   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+   * A different format will require also updating the theme in tailwind.config.ts.
+  */
+  :root {
+    --background: 255 255 255;
+    --foreground: 15 15 15;
+
+    --card: 255 255 255;
+    --card-foreground: 15 15 15;
+
+    --popover: 255 255 255;
+    --popover-foreground: 15 15 15;
+
+    --primary: 147 51 234;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 249 250 251;
+    --secondary-foreground: 55 65 81;
+
+    --muted: 249 250 251;
+    --muted-foreground: 107 114 128;
+
+    --accent: 236 254 255;
+    --accent-foreground: 8 145 178;
+
+    --destructive: 239 68 68;
+    --destructive-foreground: 255 255 255;
+
+    --border: 229 231 235;
+    --input: 229 231 235;
+    --ring: 147 51 234;
+
+    --success: 34 197 94;
+    --warning: 245 158 11;
+    --info: 59 130 246;
+
+    --gradient-start: 147 51 234;
+    --gradient-end: 59 130 246;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 15 15 15;
+    --foreground: 245 245 245;
+
+    --card: 24 24 27;
+    --card-foreground: 245 245 245;
+
+    --popover: 24 24 27;
+    --popover-foreground: 245 245 245;
+
+    --primary: 147 51 234;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 39 39 42;
+    --secondary-foreground: 161 161 170;
+
+    --muted: 39 39 42;
+    --muted-foreground: 161 161 170;
+
+    --accent: 24 24 27;
+    --accent-foreground: 147 197 253;
+
+    --destructive: 239 68 68;
+    --destructive-foreground: 255 255 255;
+
+    --border: 39 39 42;
+    --input: 39 39 42;
+    --ring: 147 51 234;
+
+    --success: 34 197 94;
+    --warning: 245 158 11;
+    --info: 59 130 246;
+
+    --gradient-start: 147 51 234;
+    --gradient-end: 59 130 246;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes bounceGentle {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, rgb(var(--gradient-start)), rgb(var(--gradient-end)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
