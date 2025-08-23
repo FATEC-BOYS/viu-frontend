@@ -1,8 +1,3 @@
-/**
- * Navbar com sistema de autenticação
- * SUBSTITUIR o conteúdo atual do client/components/Navbar.tsx
- */
-
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, User, Settings, Bell } from 'lucide-react';
