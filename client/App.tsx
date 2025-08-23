@@ -1,11 +1,15 @@
 import "./global.css";
 
-import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
+
+// Providers
+import { QueryProvider } from "./lib/query-provider";
+import { AuthProvider, ProtectedRoute } from "./lib/auth-context";
+
+// Pages existentes
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
@@ -16,26 +20,70 @@ import Settings from "./pages/Settings";
 import Placeholder from "./pages/Placeholder";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Páginas de autenticação
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+
+// Components
+import Navbar from "./components/Navbar";
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
+  <QueryProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster position="top-right" richColors />
+        <BrowserRouter>
+          <Routes>
+            {/* Rotas públicas (não precisa estar logado) */}
+            <Route 
+              path="/login" 
+              element={
+                <ProtectedRoute requireAuth={false} fallback={<Navigate to="/dashboard" />}>
+                  <Login />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/register" 
+              element={
+                <ProtectedRoute requireAuth={false} fallback={<Navigate to="/dashboard" />}>
+                  <Register />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Rotas protegidas (precisa estar logado) */}
+            <Route 
+              path="/*" 
+              element={
+                <ProtectedRoute fallback={<Navigate to="/login" />}>
+                  <AppLayout />
+                </ProtectedRoute>
+              } 
+            />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </QueryProvider>
+);
+
+// Layout interno da aplicação (com Navbar)
+function AppLayout() {
+  return (
+    <>
+      <Navbar />
+      <main>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/project/:id" element={<ProjectDetail />} />
-
           <Route path="/projects" element={<Projects />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
 
           {/* Placeholder routes for features in development */}
-
           <Route
             path="/integrations"
             element={
@@ -95,16 +143,6 @@ const App = () => (
           />
 
           <Route
-            path="/login"
-            element={
-              <Placeholder
-                title="Login"
-                description="Acesse sua conta Viu para gerenciar seus projetos criativos."
-              />
-            }
-          />
-
-          <Route
             path="/help"
             element={
               <Placeholder
@@ -147,9 +185,9 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+      </main>
+    </>
+  );
+}
 
 createRoot(document.getElementById("root")!).render(<App />);
