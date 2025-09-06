@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { LucideIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient';
 import {
   Card,
@@ -74,7 +75,7 @@ interface ConfiguracoesSistema {
 function ConfigSection({ title, description, icon: Icon, children }: {
   title: string;
   description: string;
-  icon: any;
+  icon: LucideIcon;
   children: React.ReactNode;
 }) {
   return (

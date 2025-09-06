@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import {
   Card,
@@ -122,7 +123,7 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: {
   title: string;
   value: number;
   subtitle: string;
-  icon: any;
+  icon: LucideIcon;
   trend?: { value: string; isPositive: boolean };
 }) {
   return (
