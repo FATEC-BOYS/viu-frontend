@@ -170,8 +170,8 @@ export function Sidebar() {
       collapsible: true,
       items: [
         {
-          title: 'Status das Artes',
-          href: '/relatorios/artes',
+          title: 'Status do sistema',
+          href: '/status',
           icon: BarChart3
         },
         {

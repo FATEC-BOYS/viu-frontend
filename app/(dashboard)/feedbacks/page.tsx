@@ -1,7 +1,6 @@
-// app/feedbacks/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
   Card,
@@ -22,10 +21,7 @@ import {
 import {
   MessageSquare,
   Search,
-  Calendar,
   User,
-  FileImage,
-  Loader2,
   Mic,
   Type,
   MapPin,
@@ -37,11 +33,17 @@ import {
   Volume2
 } from 'lucide-react';
 
-// Tipos baseados no schema
+/* =========================
+   Tipos fortes
+   ========================= */
+
+type FeedbackTipo = 'TEXTO' | 'AUDIO';
+type AutorTipo = 'CLIENTE' | 'DESIGNER';
+
 interface Feedback {
   id: string;
   conteudo: string;
-  tipo: string;
+  tipo: FeedbackTipo;
   arquivo: string | null;
   posicao_x: number | null;
   posicao_y: number | null;
@@ -50,72 +52,82 @@ interface Feedback {
     nome: string;
     projeto: {
       nome: string;
-      cliente: {
-        nome: string;
-      };
+      cliente: { nome: string };
     };
   };
   autor: {
     nome: string;
-    tipo: string;
+    tipo: AutorTipo;
   };
 }
 
-// Componente de Badge de Tipo
-function TipoBadge({ tipo }: { tipo: string }) {
+/* =========================
+   Badge de Tipo
+   ========================= */
+
+function TipoBadge({ tipo }: { tipo: FeedbackTipo | string }) {
   const tipoConfig = {
-    'TEXTO': { 
+    TEXTO: { 
       label: 'Texto', 
       icon: Type,
       color: 'bg-blue-100 text-blue-800 border-blue-200' 
     },
-    'AUDIO': { 
+    AUDIO: { 
       label: 'Áudio', 
       icon: Mic,
       color: 'bg-purple-100 text-purple-800 border-purple-200' 
     },
-  };
+  } as const;
 
-  const config = tipoConfig[tipo as keyof typeof tipoConfig] || { 
-    label: tipo, 
-    icon: MessageSquare,
-    color: 'bg-gray-100 text-gray-800 border-gray-200' 
-  };
-  
-  const Icon = config.icon;
-  
+  const cfg =
+    tipo in tipoConfig
+      ? tipoConfig[tipo as FeedbackTipo]
+      : { label: tipo, icon: MessageSquare, color: 'bg-gray-100 text-gray-800 border-gray-200' };
+
+  const Icon = cfg.icon;
+
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${cfg.color}`}>
       <Icon className="h-3 w-3" />
-      {config.label}
+      {cfg.label}
     </span>
   );
 }
 
-// Componente de Player de Áudio
+/* =========================
+   Player de Áudio
+   ========================= */
+
 function AudioPlayer({ arquivo }: { arquivo: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audio] = useState(new Audio(arquivo));
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(arquivo);
+    audioRef.current = audio;
+
+    const onEnded = () => setIsPlaying(false);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.removeEventListener('ended', onEnded);
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [arquivo]);
 
   const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
     } else {
       audio.play();
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
-
-  // Cleanup do áudio quando o componente é desmontado
-  useState(() => {
-    const currentAudio = audio;
-    currentAudio.addEventListener('ended', () => setIsPlaying(false));
-    
-    return () => {
-      currentAudio.removeEventListener('ended', () => setIsPlaying(false));
-      currentAudio.pause();
-    };
-  });
 
   return (
     <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
@@ -125,11 +137,7 @@ function AudioPlayer({ arquivo }: { arquivo: string }) {
         onClick={togglePlay}
         className="h-8 w-8 p-0"
       >
-        {isPlaying ? (
-          <Pause className="h-3 w-3" />
-        ) : (
-          <Play className="h-3 w-3" />
-        )}
+        {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
       </Button>
       <div className="flex-1 flex items-center gap-2">
         <Volume2 className="h-3 w-3 text-muted-foreground" />
@@ -147,10 +155,13 @@ function AudioPlayer({ arquivo }: { arquivo: string }) {
   );
 }
 
-// Componente do Card de Feedback
+/* =========================
+   Card de Feedback
+   ========================= */
+
 function FeedbackCard({ feedback }: { feedback: Feedback }) {
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
+    return new Date(dateString).toLocaleString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -191,19 +202,19 @@ function FeedbackCard({ feedback }: { feedback: Feedback }) {
       <CardContent className="space-y-4">
         {/* Conteúdo do Feedback */}
         <div className="space-y-3">
-          {/* Texto do feedback */}
+          {/* Texto */}
           {feedback.conteudo && (
             <div className="bg-gray-50 p-3 rounded-lg">
-              <p className="text-sm leading-relaxed">{feedback.conteudo}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{feedback.conteudo}</p>
             </div>
           )}
 
-          {/* Player de áudio se houver arquivo */}
+          {/* Áudio */}
           {feedback.arquivo && feedback.tipo === 'AUDIO' && (
             <AudioPlayer arquivo={feedback.arquivo} />
           )}
 
-          {/* Informações de posição */}
+          {/* Posição */}
           {hasPosition && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -243,99 +254,109 @@ function FeedbackCard({ feedback }: { feedback: Feedback }) {
   );
 }
 
-// Componente Principal
+/* =========================
+   Página Principal
+   ========================= */
+
 export default function FeedbacksPage() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [filteredFeedbacks, setFilteredFeedbacks] = useState<Feedback[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Estados de filtros
-  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [tipoFilter, setTipoFilter] = useState<string>('todos');
   const [autorFilter, setAutorFilter] = useState<string>('todos');
   const [projetoFilter, setProjetoFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<string>('criado_em');
+  const [sortBy, setSortBy] = useState<'criado_em' | 'arte' | 'projeto' | 'autor'>('criado_em');
 
-  // Listas para filtros
-  const [projetos, setProjetos] = useState<Array<{id: string, nome: string}>>([]);
+  // Lista de projetos
+  const [projetos, setProjetos] = useState<Array<{ id: string; nome: string }>>([]);
 
   // Buscar feedbacks
-  useEffect(() => {
-    const fetchFeedbacks = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('feedbacks')
-          .select(`
-            id,
-            conteudo,
-            tipo,
-            arquivo,
-            posicao_x,
-            posicao_y,
-            criado_em,
-            arte:arte_id (
+useEffect(() => {
+  const fetchFeedbacks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('feedbacks')
+        .select(`
+          id,
+          conteudo,
+          tipo,
+          arquivo,
+          posicao_x,
+          posicao_y,
+          criado_em,
+          arte:arte_id (
+            nome,
+            projeto:projeto_id (
               nome,
-              projeto:projeto_id (
-                nome,
-                cliente:cliente_id (nome)
-              )
-            ),
-            autor:autor_id (nome, tipo)
-          `)
-          .order('criado_em', { ascending: false });
+              cliente:cliente_id (nome)
+            )
+          ),
+          autor:autor_id (nome, tipo)
+        `)
+        .order('criado_em', { ascending: false });
 
-        if (error) throw error;
-        
-        setFeedbacks(data || []);
+      if (error) throw error;
 
-        // Extrair projetos únicos para filtro
-        const projetosUnicos = [...new Set(data?.map(feedback => feedback.arte.projeto) || [])]
-          .map((projeto, index) => ({ id: index.toString(), nome: projeto.nome }));
-        setProjetos(projetosUnicos);
+      // Sem tipos gerados, normalize com um cast explícito:
+      const rows = (data ?? []) as unknown as Feedback[];
+      setFeedbacks(rows);
 
-      } catch (error) {
-        console.error('Erro ao buscar feedbacks:', error);
-        setError('Não foi possível carregar os feedbacks.');
-      } finally {
-        setLoading(false);
-      }
-    };
+      // Projetos únicos por nome
+      const nomes = new Set<string>();
+      rows.forEach((fb) => nomes.add(fb.arte.projeto.nome));
+      const projetosUnicos = Array.from(nomes).map((nome, idx) => ({
+        id: String(idx),
+        nome,
+      }));
+      setProjetos(projetosUnicos);
+    } catch (e) {
+      console.error('Erro ao buscar feedbacks:', e);
+      setError('Não foi possível carregar os feedbacks.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchFeedbacks();
-  }, []);
+  fetchFeedbacks();
+}, []);
+
 
   // Aplicar filtros e ordenação
   useEffect(() => {
-    let filtered = feedbacks;
+    let filtered: Feedback[] = feedbacks;
 
-    // Filtro por busca
+    // Busca
     if (searchTerm) {
-      filtered = filtered.filter(feedback =>
-        feedback.conteudo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        feedback.arte.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        feedback.arte.projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        feedback.autor.nome.toLowerCase().includes(searchTerm.toLowerCase())
+      const st = searchTerm.toLowerCase();
+      filtered = filtered.filter((feedback: Feedback) =>
+        feedback.conteudo.toLowerCase().includes(st) ||
+        feedback.arte.nome.toLowerCase().includes(st) ||
+        feedback.arte.projeto.nome.toLowerCase().includes(st) ||
+        feedback.autor.nome.toLowerCase().includes(st)
       );
     }
 
-    // Filtro por tipo
+    // Tipo
     if (tipoFilter !== 'todos') {
-      filtered = filtered.filter(feedback => feedback.tipo === tipoFilter);
+      filtered = filtered.filter((feedback: Feedback) => feedback.tipo === tipoFilter);
     }
 
-    // Filtro por autor
+    // Autor
     if (autorFilter !== 'todos') {
-      filtered = filtered.filter(feedback => feedback.autor.tipo === autorFilter);
+      filtered = filtered.filter((feedback: Feedback) => feedback.autor.tipo === autorFilter);
     }
 
-    // Filtro por projeto
+    // Projeto
     if (projetoFilter !== 'todos') {
-      filtered = filtered.filter(feedback => feedback.arte.projeto.nome === projetoFilter);
+      filtered = filtered.filter((feedback: Feedback) => feedback.arte.projeto.nome === projetoFilter);
     }
 
-    // Ordenação
-    filtered.sort((a, b) => {
+    // Ordenação (clonar antes de ordenar)
+    const ordered = [...filtered].sort((a: Feedback, b: Feedback) => {
       switch (sortBy) {
         case 'criado_em':
           return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
@@ -350,13 +371,13 @@ export default function FeedbacksPage() {
       }
     });
 
-    setFilteredFeedbacks(filtered);
+    setFilteredFeedbacks(ordered);
   }, [feedbacks, searchTerm, tipoFilter, autorFilter, projetoFilter, sortBy]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        {/* Você pode usar um Skeleton se preferir */}
         <p className="ml-2">Carregando feedbacks...</p>
       </div>
     );
@@ -372,11 +393,11 @@ export default function FeedbacksPage() {
 
   const estatisticas = {
     total: feedbacks.length,
-    texto: feedbacks.filter(f => f.tipo === 'TEXTO').length,
-    audio: feedbacks.filter(f => f.tipo === 'AUDIO').length,
-    clientes: feedbacks.filter(f => f.autor.tipo === 'CLIENTE').length,
-    designers: feedbacks.filter(f => f.autor.tipo === 'DESIGNER').length,
-    posicionados: feedbacks.filter(f => f.posicao_x !== null && f.posicao_y !== null).length,
+    texto: feedbacks.filter((f: Feedback) => f.tipo === 'TEXTO').length,
+    audio: feedbacks.filter((f: Feedback) => f.tipo === 'AUDIO').length,
+    clientes: feedbacks.filter((f: Feedback) => f.autor.tipo === 'CLIENTE').length,
+    designers: feedbacks.filter((f: Feedback) => f.autor.tipo === 'DESIGNER').length,
+    posicionados: feedbacks.filter((f: Feedback) => f.posicao_x !== null && f.posicao_y !== null).length,
   };
 
   return (
@@ -434,7 +455,7 @@ export default function FeedbacksPage() {
       {/* Filtros */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por conteúdo, arte, projeto ou autor..."
             value={searchTerm}
@@ -442,7 +463,8 @@ export default function FeedbacksPage() {
             className="pl-10"
           />
         </div>
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
+
+        <Select value={tipoFilter} onValueChange={(v) => setTipoFilter(v)}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
@@ -452,7 +474,8 @@ export default function FeedbacksPage() {
             <SelectItem value="AUDIO">Áudio</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={autorFilter} onValueChange={setAutorFilter}>
+
+        <Select value={autorFilter} onValueChange={(v) => setAutorFilter(v)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Autor" />
           </SelectTrigger>
@@ -462,18 +485,22 @@ export default function FeedbacksPage() {
             <SelectItem value="DESIGNER">Designers</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={projetoFilter} onValueChange={setProjetoFilter}>
+
+        <Select value={projetoFilter} onValueChange={(v) => setProjetoFilter(v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Projeto" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos Projetos</SelectItem>
-            {projetos.map(projeto => (
-              <SelectItem key={projeto.id} value={projeto.nome}>{projeto.nome}</SelectItem>
+            {projetos.map((projeto) => (
+              <SelectItem key={projeto.id} value={projeto.nome}>
+                {projeto.nome}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
+
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
@@ -489,7 +516,7 @@ export default function FeedbacksPage() {
       {/* Grid de Feedbacks */}
       {filteredFeedbacks.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredFeedbacks.map((feedback) => (
+          {filteredFeedbacks.map((feedback: Feedback) => (
             <FeedbackCard key={feedback.id} feedback={feedback} />
           ))}
         </div>
@@ -500,7 +527,7 @@ export default function FeedbacksPage() {
             <h3 className="text-lg font-semibold mb-2">Nenhum feedback encontrado</h3>
             <p className="text-muted-foreground mb-4">
               {searchTerm || tipoFilter !== 'todos' || autorFilter !== 'todos' || projetoFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.' 
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Os feedbacks aparecerão aqui conforme forem enviados.'}
             </p>
           </div>
