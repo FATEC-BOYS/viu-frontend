@@ -34,7 +34,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-// ===================== Tipos =====================
+/* ===================== Tipos ===================== */
 
 interface Arte {
   id: string;
@@ -68,15 +68,52 @@ interface Arte {
 
 type SortKey = 'criado_em' | 'nome' | 'projeto' | 'versao' | 'tamanho';
 
-// ===================== Helpers locais =====================
+/* ===== Tipos auxiliares (shape cru do Supabase) sem any ===== */
 
-// normaliza relacionamentos 1:1 que podem vir como array
-const toOne = <T,>(val: T | T[] | null | undefined): T | null => {
+type MaybeArray<T> = T | T[] | null | undefined;
+
+interface RawCliente {
+  nome: unknown;
+}
+interface RawProjeto {
+  nome: unknown;
+  cliente: MaybeArray<RawCliente>;
+}
+interface RawAutor {
+  nome: unknown;
+}
+interface RawFeedback {
+  id: unknown;
+  conteudo?: unknown;
+}
+interface RawAprovacao {
+  id: unknown;
+  status?: unknown;
+}
+interface RawArte {
+  id: unknown;
+  nome: unknown;
+  descricao?: unknown;
+  arquivo: unknown;
+  tipo: unknown;
+  tamanho: unknown;
+  versao: unknown;
+  status: unknown;
+  criado_em: unknown;
+  atualizado_em: unknown;
+  projeto: MaybeArray<RawProjeto>;
+  autor: MaybeArray<RawAutor>;
+  feedbacks?: RawFeedback[];
+  aprovacoes?: RawAprovacao[];
+}
+
+/* ===== helper: normaliza 1:1 que pode vir como array ===== */
+const toOne = <T,>(val: MaybeArray<T>): T | null => {
   if (Array.isArray(val)) return (val[0] ?? null) as T | null;
   return (val ?? null) as T | null;
 };
 
-// ===================== UI Auxiliares =====================
+/* ===================== UI Auxiliares ===================== */
 
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
@@ -141,25 +178,22 @@ function TipoBadge({ tipo }: { tipo: string }) {
     ({ label: tipo, color: 'bg-gray-100 text-gray-800' } as const);
 
   return (
-    <span
-      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
-    >
+    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
       {config.label}
     </span>
   );
 }
 
 function ArteCard({ arte }: { arte: Arte }) {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('pt-BR');
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
   const getFileExtension = (filename: string) =>
@@ -259,7 +293,7 @@ function ArteCard({ arte }: { arte: Arte }) {
   );
 }
 
-// ===================== Página =====================
+/* ===================== Página ===================== */
 
 export default function ArtesPage() {
   const [artes, setArtes] = useState<Arte[]>([]);
@@ -308,16 +342,31 @@ export default function ArtesPage() {
 
         if (error) throw error;
 
-        // NORMALIZAÇÃO para casar com o tipo Arte
-        const rows: Arte[] = (data ?? []).map((r: any) => {
-          const projeto = toOne<any>(r.projeto);
-          const cliente = projeto ? toOne<any>(projeto.cliente) : null;
-          const autor = toOne<any>(r.autor);
+        const rawRows = (data ?? []) as RawArte[];
+
+        const rows: Arte[] = rawRows.map((r) => {
+          const projeto = toOne<RawProjeto>(r.projeto);
+          const cliente = projeto ? toOne<RawCliente>(projeto.cliente) : null;
+          const autor = toOne<RawAutor>(r.autor);
+
+          const feedbacks = (r.feedbacks ?? []).map(
+            (f): Arte['feedbacks'][number] => ({
+              id: String(f.id),
+              conteudo: String(f.conteudo ?? ''),
+            })
+          );
+
+          const aprovacoes = (r.aprovacoes ?? []).map(
+            (a): Arte['aprovacoes'][number] => ({
+              id: String(a.id),
+              status: String(a.status ?? ''),
+            })
+          );
 
           return {
             id: String(r.id),
             nome: String(r.nome),
-            descricao: r.descricao ?? null,
+            descricao: (r.descricao ?? null) as string | null,
             arquivo: String(r.arquivo),
             tipo: String(r.tipo),
             tamanho: Number(r.tamanho),
@@ -326,22 +375,12 @@ export default function ArtesPage() {
             criado_em: String(r.criado_em),
             atualizado_em: String(r.atualizado_em),
             projeto: {
-              nome: projeto?.nome ?? '',
-              cliente: { nome: cliente?.nome ?? '' },
+              nome: String(projeto?.nome ?? ''),
+              cliente: { nome: String(cliente?.nome ?? '') },
             },
-            autor: { nome: autor?.nome ?? '' },
-            feedbacks: Array.isArray(r.feedbacks)
-              ? r.feedbacks.map((f: any) => ({
-                  id: String(f.id),
-                  conteudo: String(f.conteudo ?? ''),
-                }))
-              : [],
-            aprovacoes: Array.isArray(r.aprovacoes)
-              ? r.aprovacoes.map((a: any) => ({
-                  id: String(a.id),
-                  status: String(a.status ?? ''),
-                }))
-              : [],
+            autor: { nome: String(autor?.nome ?? '') },
+            feedbacks,
+            aprovacoes,
           };
         });
 
@@ -353,8 +392,7 @@ export default function ArtesPage() {
 
         const tiposUnicos = Array.from(new Set(rows.map((a) => a.tipo)));
         setTipos(tiposUnicos);
-      } catch (e) {
-        console.error('Erro ao buscar artes:', e);
+      } catch {
         setError('Não foi possível carregar as artes.');
       } finally {
         setLoading(false);
@@ -394,7 +432,7 @@ export default function ArtesPage() {
       filtered = filtered.filter((arte) => arte.projeto.nome === projetoFilter);
     }
 
-    // Ordenação (copiar antes de ordenar)
+    // Ordenação
     const ordered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'criado_em':
