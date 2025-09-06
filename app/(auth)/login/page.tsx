@@ -5,25 +5,16 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 
-// Client-only; nada de revalidate/dynamic aqui
-
 export default function LoginPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [msg, setMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -33,20 +24,10 @@ export default function LoginPage() {
     setMsg(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
-        const text = error.message.toLowerCase();
-        if (text.includes('email not confirmed')) {
-          setMsg('Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada.');
-        } else if (text.includes('invalid login') || text.includes('invalid credentials')) {
-          setMsg('E-mail ou senha inválidos.');
-        } else {
-          setMsg(`Erro ao entrar: ${error.message}`);
-        }
+        setMsg(`Erro ao entrar: ${error.message}`);
         return;
       }
 
@@ -55,8 +36,11 @@ export default function LoginPage() {
       } else {
         setMsg('Não foi possível iniciar sessão. Tente novamente.');
       }
-    } catch {
-      setMsg('Erro inesperado ao fazer login.');
+    } catch (err) {
+      console.error('Login - exception:', err);
+      const text =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro inesperado ao fazer login.';
+      setMsg(text);
     } finally {
       setSending(false);
     }
@@ -98,9 +82,7 @@ export default function LoginPage() {
               />
             </div>
 
-            {msg && (
-              <p className="text-sm text-center text-destructive">{msg}</p>
-            )}
+            {msg && <p className="text-sm text-center text-destructive">{msg}</p>}
 
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? 'Entrando...' : 'Entrar'}

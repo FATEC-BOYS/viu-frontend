@@ -5,20 +5,13 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-// NÃO exporte revalidate/dynamic aqui (é client-only)
-
 export default function CadastroPage() {
   const router = useRouter();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [sending, setSending] = useState(false);
@@ -30,10 +23,7 @@ export default function CadastroPage() {
     setMsg(null);
 
     try {
-      const origin =
-        typeof window !== 'undefined' ? window.location.origin : '';
-
-      // Este redirect garante que o link do e-mail volte para /callback
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -43,30 +33,22 @@ export default function CadastroPage() {
       });
 
       if (error) {
-        // mensagens mais úteis
-        if (error.message.toLowerCase().includes('rate limit')) {
-          setMsg('Muitas tentativas. Tente novamente em instantes.');
-        } else if (error.message.toLowerCase().includes('weak password')) {
-          setMsg('Senha fraca. Tente usar mais caracteres.');
-        } else {
-          setMsg(`Erro ao cadastrar: ${error.message}`);
-        }
+        setMsg(`Erro ao cadastrar: ${error.message}`);
         return;
       }
 
-      // Se o Supabase estiver exigindo confirmação por e-mail:
       if (data.user && !data.user.confirmed_at) {
-        setMsg(
-          'Conta criada! Verifique seu e-mail e clique no link de confirmação.'
-        );
+        setMsg('Conta criada! Verifique seu e-mail e clique no link de confirmação.');
         return;
       }
 
-      // Se “confirm email” estiver desligado, o usuário já pode logar
       setMsg('Conta criada com sucesso! Redirecionando...');
       router.push('/dashboard');
     } catch (err) {
-      setMsg('Erro inesperado ao cadastrar.');
+      console.error('Cadastro - exception:', err);
+      const text =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro inesperado ao cadastrar.';
+      setMsg(text);
     } finally {
       setSending(false);
     }
@@ -77,9 +59,7 @@ export default function CadastroPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">Criar conta</CardTitle>
-          <CardDescription>
-            Use seu e-mail e crie uma senha para começar.
-          </CardDescription>
+          <CardDescription>Use e-mail e senha para começar.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCadastro} className="space-y-4">
@@ -111,9 +91,7 @@ export default function CadastroPage() {
               />
             </div>
 
-            {msg && (
-              <p className="text-sm text-center text-destructive">{msg}</p>
-            )}
+            {msg && <p className="text-sm text-center text-destructive">{msg}</p>}
 
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? 'Criando...' : 'Criar conta'}
