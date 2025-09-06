@@ -1,4 +1,3 @@
-// app/artes/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,10 +32,10 @@ import {
   Clock,
   XCircle,
   AlertCircle,
-  FolderOpen
 } from 'lucide-react';
 
-// Tipos baseados no schema
+// ===================== Tipos =====================
+
 interface Arte {
   id: string;
   nome: string;
@@ -67,44 +66,56 @@ interface Arte {
   }>;
 }
 
-// Componente de Status Badge
+type SortKey = 'criado_em' | 'nome' | 'projeto' | 'versao' | 'tamanho';
+
+// ===================== Helpers locais =====================
+
+// normaliza relacionamentos 1:1 que podem vir como array
+const toOne = <T,>(val: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
+  return (val ?? null) as T | null;
+};
+
+// ===================== UI Auxiliares =====================
+
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    'EM_ANALISE': { 
-      label: 'Em Análise', 
+    EM_ANALISE: {
+      label: 'Em Análise',
       variant: 'outline' as const,
       icon: Clock,
-      color: 'text-blue-600'
+      color: 'text-blue-600',
     },
-    'APROVADO': { 
-      label: 'Aprovado', 
+    APROVADO: {
+      label: 'Aprovado',
       variant: 'default' as const,
       icon: CheckCircle2,
-      color: 'text-green-600'
+      color: 'text-green-600',
     },
-    'REJEITADO': { 
-      label: 'Rejeitado', 
+    REJEITADO: {
+      label: 'Rejeitado',
       variant: 'destructive' as const,
       icon: XCircle,
-      color: 'text-red-600'
+      color: 'text-red-600',
     },
-    'PENDENTE': { 
-      label: 'Pendente', 
+    PENDENTE: {
+      label: 'Pendente',
       variant: 'secondary' as const,
       icon: AlertCircle,
-      color: 'text-yellow-600'
+      color: 'text-yellow-600',
     },
   };
 
-  const config = statusConfig[status as keyof typeof statusConfig] || { 
-    label: status, 
-    variant: 'outline' as const,
-    icon: AlertCircle,
-    color: 'text-gray-600'
-  };
-  
+  const config =
+    statusConfig[status as keyof typeof statusConfig] ?? {
+      label: status,
+      variant: 'outline' as const,
+      icon: AlertCircle,
+      color: 'text-gray-600',
+    };
+
   const Icon = config.icon;
-  
+
   return (
     <Badge variant={config.variant} className="flex items-center gap-1">
       <Icon className="h-3 w-3" />
@@ -113,32 +124,31 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// Componente de Badge de Tipo
 function TipoBadge({ tipo }: { tipo: string }) {
   const tipoConfig = {
-    'LOGO': { label: 'Logo', color: 'bg-purple-100 text-purple-800' },
-    'BANNER': { label: 'Banner', color: 'bg-blue-100 text-blue-800' },
-    'FLYER': { label: 'Flyer', color: 'bg-green-100 text-green-800' },
-    'CARTAO': { label: 'Cartão', color: 'bg-orange-100 text-orange-800' },
-    'LAYOUT': { label: 'Layout', color: 'bg-pink-100 text-pink-800' },
-    'ICONE': { label: 'Ícone', color: 'bg-cyan-100 text-cyan-800' },
-    'INTERFACE': { label: 'Interface', color: 'bg-indigo-100 text-indigo-800' },
-    'ANIMACAO': { label: 'Animação', color: 'bg-red-100 text-red-800' },
+    LOGO: { label: 'Logo', color: 'bg-purple-100 text-purple-800' },
+    BANNER: { label: 'Banner', color: 'bg-blue-100 text-blue-800' },
+    FLYER: { label: 'Flyer', color: 'bg-green-100 text-green-800' },
+    CARTAO: { label: 'Cartão', color: 'bg-orange-100 text-orange-800' },
+    LAYOUT: { label: 'Layout', color: 'bg-pink-100 text-pink-800' },
+    ICONE: { label: 'Ícone', color: 'bg-cyan-100 text-cyan-800' },
+    INTERFACE: { label: 'Interface', color: 'bg-indigo-100 text-indigo-800' },
+    ANIMACAO: { label: 'Animação', color: 'bg-red-100 text-red-800' },
   };
 
-  const config = tipoConfig[tipo as keyof typeof tipoConfig] || { 
-    label: tipo, 
-    color: 'bg-gray-100 text-gray-800' 
-  };
-  
+  const config =
+    tipoConfig[tipo as keyof typeof tipoConfig] ??
+    ({ label: tipo, color: 'bg-gray-100 text-gray-800' } as const);
+
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+    >
       {config.label}
     </span>
   );
 }
 
-// Componente do Card de Arte
 function ArteCard({ arte }: { arte: Arte }) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -152,9 +162,8 @@ function ArteCard({ arte }: { arte: Arte }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toUpperCase() || '';
-  };
+  const getFileExtension = (filename: string) =>
+    filename.split('.').pop()?.toUpperCase() ?? '';
 
   const feedbackCount = arte.feedbacks.length;
   const hasAprovacao = arte.aprovacoes.length > 0;
@@ -169,7 +178,9 @@ function ArteCard({ arte }: { arte: Arte }) {
               <span className="text-sm text-muted-foreground">v{arte.versao}</span>
             </div>
             <p className="text-sm text-muted-foreground">{arte.projeto.nome}</p>
-            <p className="text-xs text-muted-foreground">Cliente: {arte.projeto.cliente.nome}</p>
+            <p className="text-xs text-muted-foreground">
+              Cliente: {arte.projeto.cliente.nome}
+            </p>
           </div>
           <StatusBadge status={arte.status} />
         </div>
@@ -232,7 +243,7 @@ function ArteCard({ arte }: { arte: Arte }) {
               </span>
             )}
           </div>
-          
+
           {/* Ações */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button variant="ghost" size="sm">
@@ -248,25 +259,27 @@ function ArteCard({ arte }: { arte: Arte }) {
   );
 }
 
-// Componente Principal
+// ===================== Página =====================
+
 export default function ArtesPage() {
   const [artes, setArtes] = useState<Arte[]>([]);
   const [filteredArtes, setFilteredArtes] = useState<Arte[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Estados de filtros
+
+  // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [tipoFilter, setTipoFilter] = useState<string>('todos');
   const [projetoFilter, setProjetoFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<string>('criado_em');
+  const [sortBy, setSortBy] = useState<SortKey>('criado_em');
 
-  // Listas para filtros
-  const [projetos, setProjetos] = useState<Array<{id: string, nome: string}>>([]);
+  // Opções de filtros
+  const [projetos, setProjetos] = useState<Array<{ id: string; nome: string }>>(
+    []
+  );
   const [tipos, setTipos] = useState<string[]>([]);
 
-  // Buscar artes
   useEffect(() => {
     const fetchArtes = async () => {
       try {
@@ -294,20 +307,54 @@ export default function ArtesPage() {
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
-        
-        setArtes(data || []);
 
-        // Extrair projetos únicos para filtro
-        const projetosUnicos = [...new Set(data?.map(arte => arte.projeto) || [])]
-          .map((projeto, index) => ({ id: index.toString(), nome: projeto.nome }));
-        setProjetos(projetosUnicos);
+        // NORMALIZAÇÃO para casar com o tipo Arte
+        const rows: Arte[] = (data ?? []).map((r: any) => {
+          const projeto = toOne<any>(r.projeto);
+          const cliente = projeto ? toOne<any>(projeto.cliente) : null;
+          const autor = toOne<any>(r.autor);
 
-        // Extrair tipos únicos para filtro
-        const tiposUnicos = [...new Set(data?.map(arte => arte.tipo) || [])];
+          return {
+            id: String(r.id),
+            nome: String(r.nome),
+            descricao: r.descricao ?? null,
+            arquivo: String(r.arquivo),
+            tipo: String(r.tipo),
+            tamanho: Number(r.tamanho),
+            versao: Number(r.versao),
+            status: String(r.status),
+            criado_em: String(r.criado_em),
+            atualizado_em: String(r.atualizado_em),
+            projeto: {
+              nome: projeto?.nome ?? '',
+              cliente: { nome: cliente?.nome ?? '' },
+            },
+            autor: { nome: autor?.nome ?? '' },
+            feedbacks: Array.isArray(r.feedbacks)
+              ? r.feedbacks.map((f: any) => ({
+                  id: String(f.id),
+                  conteudo: String(f.conteudo ?? ''),
+                }))
+              : [],
+            aprovacoes: Array.isArray(r.aprovacoes)
+              ? r.aprovacoes.map((a: any) => ({
+                  id: String(a.id),
+                  status: String(a.status ?? ''),
+                }))
+              : [],
+          };
+        });
+
+        setArtes(rows);
+
+        // Opções de filtro com base nos rows normalizados
+        const nomesProjetos = Array.from(new Set(rows.map((a) => a.projeto.nome)));
+        setProjetos(nomesProjetos.map((nome, idx) => ({ id: String(idx), nome })));
+
+        const tiposUnicos = Array.from(new Set(rows.map((a) => a.tipo)));
         setTipos(tiposUnicos);
-
-      } catch (error) {
-        console.error('Erro ao buscar artes:', error);
+      } catch (e) {
+        console.error('Erro ao buscar artes:', e);
         setError('Não foi possível carregar as artes.');
       } finally {
         setLoading(false);
@@ -321,35 +368,39 @@ export default function ArtesPage() {
   useEffect(() => {
     let filtered = artes;
 
-    // Filtro por busca
+    // Busca
     if (searchTerm) {
-      filtered = filtered.filter(arte =>
-        arte.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        arte.projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        arte.projeto.cliente.nome.toLowerCase().includes(searchTerm.toLowerCase())
+      const st = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (arte) =>
+          arte.nome.toLowerCase().includes(st) ||
+          arte.projeto.nome.toLowerCase().includes(st) ||
+          arte.projeto.cliente.nome.toLowerCase().includes(st)
       );
     }
 
-    // Filtro por status
+    // Status
     if (statusFilter !== 'todos') {
-      filtered = filtered.filter(arte => arte.status === statusFilter);
+      filtered = filtered.filter((arte) => arte.status === statusFilter);
     }
 
-    // Filtro por tipo
+    // Tipo
     if (tipoFilter !== 'todos') {
-      filtered = filtered.filter(arte => arte.tipo === tipoFilter);
+      filtered = filtered.filter((arte) => arte.tipo === tipoFilter);
     }
 
-    // Filtro por projeto
+    // Projeto
     if (projetoFilter !== 'todos') {
-      filtered = filtered.filter(arte => arte.projeto.nome === projetoFilter);
+      filtered = filtered.filter((arte) => arte.projeto.nome === projetoFilter);
     }
 
-    // Ordenação
-    filtered.sort((a, b) => {
+    // Ordenação (copiar antes de ordenar)
+    const ordered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'criado_em':
-          return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+          return (
+            new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+          );
         case 'nome':
           return a.nome.localeCompare(b.nome);
         case 'projeto':
@@ -363,7 +414,7 @@ export default function ArtesPage() {
       }
     });
 
-    setFilteredArtes(filtered);
+    setFilteredArtes(ordered);
   }, [artes, searchTerm, statusFilter, tipoFilter, projetoFilter, sortBy]);
 
   if (loading) {
@@ -385,10 +436,10 @@ export default function ArtesPage() {
 
   const estatisticas = {
     total: artes.length,
-    emAnalise: artes.filter(a => a.status === 'EM_ANALISE').length,
-    aprovadas: artes.filter(a => a.status === 'APROVADO').length,
-    rejeitadas: artes.filter(a => a.status === 'REJEITADO').length,
-    pendentes: artes.filter(a => a.status === 'PENDENTE').length,
+    emAnalise: artes.filter((a) => a.status === 'EM_ANALISE').length,
+    aprovadas: artes.filter((a) => a.status === 'APROVADO').length,
+    rejeitadas: artes.filter((a) => a.status === 'REJEITADO').length,
+    pendentes: artes.filter((a) => a.status === 'PENDENTE').length,
   };
 
   return (
@@ -417,25 +468,33 @@ export default function ArtesPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{estatisticas.emAnalise}</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {estatisticas.emAnalise}
+            </div>
             <p className="text-sm text-muted-foreground">Em Análise</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{estatisticas.aprovadas}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {estatisticas.aprovadas}
+            </div>
             <p className="text-sm text-muted-foreground">Aprovadas</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{estatisticas.rejeitadas}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {estatisticas.rejeitadas}
+            </div>
             <p className="text-sm text-muted-foreground">Rejeitadas</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{estatisticas.pendentes}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {estatisticas.pendentes}
+            </div>
             <p className="text-sm text-muted-foreground">Pendentes</p>
           </CardContent>
         </Card>
@@ -452,6 +511,7 @@ export default function ArtesPage() {
             className="pl-10"
           />
         </div>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
@@ -464,29 +524,36 @@ export default function ArtesPage() {
             <SelectItem value="PENDENTE">Pendente</SelectItem>
           </SelectContent>
         </Select>
+
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            {tipos.map(tipo => (
-              <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
+            {tipos.map((tipo) => (
+              <SelectItem key={tipo} value={tipo}>
+                {tipo}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
         <Select value={projetoFilter} onValueChange={setProjetoFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Projeto" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos Projetos</SelectItem>
-            {projetos.map(projeto => (
-              <SelectItem key={projeto.id} value={projeto.nome}>{projeto.nome}</SelectItem>
+            {projetos.map((projeto) => (
+              <SelectItem key={projeto.id} value={projeto.nome}>
+                {projeto.nome}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
+
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
@@ -513,16 +580,22 @@ export default function ArtesPage() {
             <FileImage className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Nenhuma arte encontrada</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || statusFilter !== 'todos' || tipoFilter !== 'todos' || projetoFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.' 
+              {searchTerm ||
+              statusFilter !== 'todos' ||
+              tipoFilter !== 'todos' ||
+              projetoFilter !== 'todos'
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Comece fazendo upload da sua primeira arte.'}
             </p>
-            {!searchTerm && statusFilter === 'todos' && tipoFilter === 'todos' && projetoFilter === 'todos' && (
-              <Button>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Primeira Arte
-              </Button>
-            )}
+            {!searchTerm &&
+              statusFilter === 'todos' &&
+              tipoFilter === 'todos' &&
+              projetoFilter === 'todos' && (
+                <Button>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Primeira Arte
+                </Button>
+              )}
           </div>
         </Card>
       )}
