@@ -1,4 +1,3 @@
-// app/links/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,25 +24,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import {
   Share2,
   Search,
-  Calendar,
   Copy,
   ExternalLink,
   Loader2,
-  Eye,
   EyeOff,
   Plus,
   MoreVertical,
@@ -53,14 +40,15 @@ import {
   FolderOpen,
   Clock,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
 } from 'lucide-react';
 
-// Tipos baseados no schema
+/* ===================== Tipos ===================== */
+
 interface LinkCompartilhado {
   id: string;
   token: string;
-  tipo: string;
+  tipo: 'ARTE' | 'PROJETO' | string;
   expira_em: string | null;
   somente_leitura: boolean;
   criado_em: string;
@@ -81,29 +69,64 @@ interface LinkCompartilhado {
   } | null;
 }
 
-// Componente de Badge de Tipo
+type SortKey = 'criado_em' | 'expira_em' | 'tipo';
+
+/* ===== Tipos auxiliares (shape cru do Supabase) sem any ===== */
+
+type MaybeArray<T> = T | T[] | null | undefined;
+
+interface RawCliente {
+  nome: unknown;
+}
+interface RawProjeto {
+  nome: unknown;
+  cliente: MaybeArray<RawCliente>;
+}
+interface RawArteEntity {
+  nome: unknown;
+  projeto: MaybeArray<RawProjeto>;
+}
+interface RawProjetoEntity {
+  nome: unknown;
+  cliente: MaybeArray<RawCliente>;
+}
+interface RawLink {
+  id: unknown;
+  token: unknown;
+  tipo: unknown;
+  expira_em?: unknown;
+  somente_leitura: unknown;
+  criado_em: unknown;
+  arte?: MaybeArray<RawArteEntity>;
+  projeto?: MaybeArray<RawProjetoEntity>;
+}
+
+/* ===== helper: normaliza 1:1 que pode vir como array ===== */
+const toOne = <T,>(val: MaybeArray<T>): T | null => {
+  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
+  return (val ?? null) as T | null;
+};
+
+/* ===================== UI Auxiliares ===================== */
+
 function TipoLinkBadge({ tipo }: { tipo: string }) {
   const tipoConfig = {
-    'ARTE': { 
-      label: 'Arte', 
+    ARTE: {
+      label: 'Arte',
       icon: FileImage,
-      color: 'bg-blue-100 text-blue-800 border-blue-200' 
+      color: 'bg-blue-100 text-blue-800 border-blue-200',
     },
-    'PROJETO': { 
-      label: 'Projeto', 
+    PROJETO: {
+      label: 'Projeto',
       icon: FolderOpen,
-      color: 'bg-purple-100 text-purple-800 border-purple-200' 
+      color: 'bg-purple-100 text-purple-800 border-purple-200',
     },
   };
+  const config =
+    tipoConfig[tipo as keyof typeof tipoConfig] ??
+    ({ label: tipo, icon: Share2, color: 'bg-gray-100 text-gray-800 border-gray-200' } as const);
 
-  const config = tipoConfig[tipo as keyof typeof tipoConfig] || { 
-    label: tipo, 
-    icon: Share2,
-    color: 'bg-gray-100 text-gray-800 border-gray-200' 
-  };
-  
   const Icon = config.icon;
-  
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
       <Icon className="h-3 w-3" />
@@ -112,7 +135,6 @@ function TipoLinkBadge({ tipo }: { tipo: string }) {
   );
 }
 
-// Componente de Status do Link
 function StatusLink({ expira_em }: { expira_em: string | null }) {
   if (!expira_em) {
     return (
@@ -122,7 +144,6 @@ function StatusLink({ expira_em }: { expira_em: string | null }) {
       </Badge>
     );
   }
-
   const dataExpiracao = new Date(expira_em);
   const agora = new Date();
   const expirado = dataExpiracao < agora;
@@ -136,7 +157,6 @@ function StatusLink({ expira_em }: { expira_em: string | null }) {
       </Badge>
     );
   }
-
   if (expiraEm24h) {
     return (
       <Badge variant="secondary" className="flex items-center gap-1">
@@ -145,7 +165,6 @@ function StatusLink({ expira_em }: { expira_em: string | null }) {
       </Badge>
     );
   }
-
   return (
     <Badge variant="outline" className="flex items-center gap-1">
       <Clock className="h-3 w-3" />
@@ -154,13 +173,12 @@ function StatusLink({ expira_em }: { expira_em: string | null }) {
   );
 }
 
-// Componente do Card de Link
-function LinkCard({ 
-  link, 
-  onCopy, 
-  onDelete, 
-  onRegenerate 
-}: { 
+function LinkCard({
+  link,
+  onCopy,
+  onDelete,
+  onRegenerate,
+}: {
   link: LinkCompartilhado;
   onCopy: (url: string) => void;
   onDelete: (id: string) => void;
@@ -173,7 +191,7 @@ function LinkCard({
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -181,7 +199,6 @@ function LinkCard({
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
     if (diffInHours < 1) return 'Criado agora há pouco';
     if (diffInHours < 24) return `Criado ${diffInHours}h atrás`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -190,15 +207,11 @@ function LinkCard({
   };
 
   const linkUrl = `${window.location.origin}/shared/${link.token}`;
-  const isExpired = link.expira_em && new Date(link.expira_em) < new Date();
+  const isExpired = !!(link.expira_em && new Date(link.expira_em) < new Date());
 
   const getTitle = () => {
-    if (link.tipo === 'ARTE' && link.arte) {
-      return link.arte.nome;
-    }
-    if (link.tipo === 'PROJETO' && link.projeto) {
-      return link.projeto.nome;
-    }
+    if (link.tipo === 'ARTE' && link.arte) return link.arte.nome;
+    if (link.tipo === 'PROJETO' && link.projeto) return link.projeto.nome;
     return 'Link Compartilhado';
   };
 
@@ -229,11 +242,10 @@ function LinkCard({
             </div>
             <div>
               <h3 className="font-semibold">{getTitle()}</h3>
-              {getSubtitle() && (
-                <p className="text-sm text-muted-foreground">{getSubtitle()}</p>
-              )}
+              {getSubtitle() && <p className="text-sm text-muted-foreground">{getSubtitle()}</p>}
             </div>
           </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm">
@@ -253,10 +265,7 @@ function LinkCard({
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Regenerar Token
               </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => onDelete(link.id)}
-                className="text-red-600"
-              >
+              <DropdownMenuItem onClick={() => onDelete(link.id)} className="text-red-600">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir
               </DropdownMenuItem>
@@ -264,22 +273,14 @@ function LinkCard({
           </DropdownMenu>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {/* URL do Link */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">URL do Link</Label>
           <div className="flex items-center gap-2">
-            <Input 
-              value={linkUrl} 
-              readOnly 
-              className="font-mono text-xs"
-            />
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => onCopy(linkUrl)}
-              disabled={isExpired}
-            >
+            <Input value={linkUrl} readOnly className="font-mono text-xs" />
+            <Button size="sm" variant="outline" onClick={() => onCopy(linkUrl)} disabled={isExpired}>
               <Copy className="h-3 w-3" />
             </Button>
           </div>
@@ -301,24 +302,24 @@ function LinkCard({
   );
 }
 
-// Componente Principal
+/* ===================== Página ===================== */
+
 export default function LinksPage() {
   const [links, setLinks] = useState<LinkCompartilhado[]>([]);
   const [filteredLinks, setFilteredLinks] = useState<LinkCompartilhado[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Estados de filtros
+
+  // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState<string>('todos');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<string>('criado_em');
+  const [sortBy, setSortBy] = useState<SortKey>('criado_em');
 
-  // Estados do modal de criação
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating] = useState(false);
+  // (Se quiser um modal de criação, pode reativar depois)
+  // const [showCreateModal, setShowCreateModal] = useState(false);
+  // const [creating, setCreating] = useState(false);
 
-  // Buscar links
   useEffect(() => {
     const fetchLinks = async () => {
       try {
@@ -346,11 +347,44 @@ export default function LinksPage() {
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
-        
-        setLinks(data || []);
 
-      } catch (error) {
-        console.error('Erro ao buscar links:', error);
+        const rawRows = (data ?? []) as RawLink[];
+
+        const rows: LinkCompartilhado[] = rawRows.map((r) => {
+          const arte = toOne<RawArteEntity>(r.arte ?? null);
+          const projetoDaArte = arte ? toOne<RawProjeto>(arte.projeto) : null;
+          const clienteDaArte = projetoDaArte ? toOne<RawCliente>(projetoDaArte.cliente) : null;
+
+          const projeto = toOne<RawProjetoEntity>(r.projeto ?? null);
+          const clienteDoProjeto = projeto ? toOne<RawCliente>(projeto.cliente) : null;
+
+          return {
+            id: String(r.id),
+            token: String(r.token),
+            tipo: String(r.tipo) as LinkCompartilhado['tipo'],
+            expira_em: r.expira_em != null ? String(r.expira_em) : null,
+            somente_leitura: Boolean(r.somente_leitura),
+            criado_em: String(r.criado_em),
+            arte: arte
+              ? {
+                  nome: String(arte.nome ?? ''),
+                  projeto: {
+                    nome: String(projetoDaArte?.nome ?? ''),
+                    cliente: { nome: String(clienteDaArte?.nome ?? '') },
+                  },
+                }
+              : null,
+            projeto: projeto
+              ? {
+                  nome: String(projeto.nome ?? ''),
+                  cliente: { nome: String(clienteDoProjeto?.nome ?? '') },
+                }
+              : null,
+          };
+        });
+
+        setLinks(rows);
+      } catch {
         setError('Não foi possível carregar os links compartilhados.');
       } finally {
         setLoading(false);
@@ -364,33 +398,37 @@ export default function LinksPage() {
   useEffect(() => {
     let filtered = links;
 
-    // Filtro por busca
+    // Busca
     if (searchTerm) {
-      filtered = filtered.filter(link => {
-        const searchLower = searchTerm.toLowerCase();
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter((link) => {
         if (link.tipo === 'ARTE' && link.arte) {
-          return link.arte.nome.toLowerCase().includes(searchLower) ||
-                 link.arte.projeto.nome.toLowerCase().includes(searchLower) ||
-                 link.arte.projeto.cliente.nome.toLowerCase().includes(searchLower);
+          return (
+            link.arte.nome.toLowerCase().includes(q) ||
+            link.arte.projeto.nome.toLowerCase().includes(q) ||
+            link.arte.projeto.cliente.nome.toLowerCase().includes(q)
+          );
         }
         if (link.tipo === 'PROJETO' && link.projeto) {
-          return link.projeto.nome.toLowerCase().includes(searchLower) ||
-                 link.projeto.cliente.nome.toLowerCase().includes(searchLower);
+          return (
+            link.projeto.nome.toLowerCase().includes(q) ||
+            link.projeto.cliente.nome.toLowerCase().includes(q)
+          );
         }
-        return link.token.toLowerCase().includes(searchLower);
+        return link.token.toLowerCase().includes(q);
       });
     }
 
-    // Filtro por tipo
+    // Tipo
     if (tipoFilter !== 'todos') {
-      filtered = filtered.filter(link => link.tipo === tipoFilter);
+      filtered = filtered.filter((link) => link.tipo === tipoFilter);
     }
 
-    // Filtro por status
+    // Status
     if (statusFilter !== 'todos') {
       const agora = new Date();
-      filtered = filtered.filter(link => {
-        const expirado = link.expira_em && new Date(link.expira_em) < agora;
+      filtered = filtered.filter((link) => {
+        const expirado = !!(link.expira_em && new Date(link.expira_em) < agora);
         if (statusFilter === 'ativo') return !expirado;
         if (statusFilter === 'expirado') return expirado;
         if (statusFilter === 'permanente') return !link.expira_em;
@@ -398,16 +436,16 @@ export default function LinksPage() {
       });
     }
 
-    // Ordenação
-    filtered.sort((a, b) => {
+    // Ordenação (copiar antes de ordenar)
+    const ordered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case 'criado_em':
           return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
-        case 'expira_em':
-          if (!a.expira_em && !b.expira_em) return 0;
-          if (!a.expira_em) return 1;
-          if (!b.expira_em) return -1;
-          return new Date(a.expira_em).getTime() - new Date(b.expira_em).getTime();
+        case 'expira_em': {
+          const aExp = a.expira_em ? new Date(a.expira_em).getTime() : Infinity; // permanentes por último
+          const bExp = b.expira_em ? new Date(b.expira_em).getTime() : Infinity;
+          return aExp - bExp;
+        }
         case 'tipo':
           return a.tipo.localeCompare(b.tipo);
         default:
@@ -415,47 +453,39 @@ export default function LinksPage() {
       }
     });
 
-    setFilteredLinks(filtered);
+    setFilteredLinks(ordered);
   }, [links, searchTerm, tipoFilter, statusFilter, sortBy]);
 
   // Ações
   const handleCopy = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      // Aqui você poderia mostrar um toast de sucesso
-    } catch (error) {
-      console.error('Erro ao copiar link:', error);
+      // opcional: toast de sucesso
+    } catch (e) {
+      console.error('Erro ao copiar link:', e);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await supabase
-        .from('link_compartilhado')
-        .delete()
-        .eq('id', id);
-      
-      setLinks(prev => prev.filter(l => l.id !== id));
-    } catch (error) {
-      console.error('Erro ao deletar link:', error);
+      await supabase.from('link_compartilhado').delete().eq('id', id);
+      setLinks((prev) => prev.filter((l) => l.id !== id));
+    } catch (e) {
+      console.error('Erro ao deletar link:', e);
     }
   };
 
   const handleRegenerate = async (id: string) => {
     try {
-      const newToken = Math.random().toString(36).substring(2, 15) + 
-                       Math.random().toString(36).substring(2, 15);
-      
-      await supabase
-        .from('link_compartilhado')
-        .update({ token: newToken })
-        .eq('id', id);
-      
-      setLinks(prev => prev.map(l => 
-        l.id === id ? { ...l, token: newToken } : l
-      ));
-    } catch (error) {
-      console.error('Erro ao regenerar token:', error);
+      const newToken =
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+
+      await supabase.from('link_compartilhado').update({ token: newToken }).eq('id', id);
+
+      setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, token: newToken } : l)));
+    } catch (e) {
+      console.error('Erro ao regenerar token:', e);
     }
   };
 
@@ -478,11 +508,11 @@ export default function LinksPage() {
 
   const estatisticas = {
     total: links.length,
-    ativos: links.filter(l => !l.expira_em || new Date(l.expira_em) > new Date()).length,
-    expirados: links.filter(l => l.expira_em && new Date(l.expira_em) < new Date()).length,
-    artes: links.filter(l => l.tipo === 'ARTE').length,
-    projetos: links.filter(l => l.tipo === 'PROJETO').length,
-    permanentes: links.filter(l => !l.expira_em).length,
+    ativos: links.filter((l) => !l.expira_em || new Date(l.expira_em) > new Date()).length,
+    expirados: links.filter((l) => l.expira_em && new Date(l.expira_em) < new Date()).length,
+    artes: links.filter((l) => l.tipo === 'ARTE').length,
+    projetos: links.filter((l) => l.tipo === 'PROJETO').length,
+    permanentes: links.filter((l) => !l.expira_em).length,
   };
 
   return (
@@ -491,9 +521,7 @@ export default function LinksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Links Compartilhados</h1>
-          <p className="text-muted-foreground">
-            Gerencie links para compartilhar artes e projetos externamente
-          </p>
+          <p className="text-muted-foreground">Gerencie links para compartilhar artes e projetos externamente</p>
         </div>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -552,6 +580,7 @@ export default function LinksPage() {
             className="pl-10"
           />
         </div>
+
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Tipo" />
@@ -562,6 +591,7 @@ export default function LinksPage() {
             <SelectItem value="PROJETO">Projeto</SelectItem>
           </SelectContent>
         </Select>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
@@ -573,7 +603,8 @@ export default function LinksPage() {
             <SelectItem value="permanente">Permanentes</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
+
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
@@ -589,8 +620,8 @@ export default function LinksPage() {
       {filteredLinks.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredLinks.map((link) => (
-            <LinkCard 
-              key={link.id} 
+            <LinkCard
+              key={link.id}
               link={link}
               onCopy={handleCopy}
               onDelete={handleDelete}
@@ -605,7 +636,7 @@ export default function LinksPage() {
             <h3 className="text-lg font-semibold mb-2">Nenhum link encontrado</h3>
             <p className="text-muted-foreground mb-4">
               {searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.' 
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Comece criando seu primeiro link compartilhado.'}
             </p>
             {!searchTerm && tipoFilter === 'todos' && statusFilter === 'todos' && (

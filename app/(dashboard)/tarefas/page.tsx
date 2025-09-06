@@ -1,4 +1,4 @@
-// app/tarefas/page.tsx
+// app/(dashboard)/tarefas/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -32,68 +32,103 @@ import {
   Circle,
   ArrowUp,
   ArrowDown,
-  Minus
+  Minus,
 } from 'lucide-react';
 
-// Tipos baseados no schema
+/* ===================== Tipos ===================== */
+
 interface Tarefa {
   id: string;
   titulo: string;
   descricao: string | null;
-  status: string;
-  prioridade: string;
-  prazo: string | null;
-  criado_em: string;
-  atualizado_em: string;
+  status: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA' | string;
+  prioridade: 'ALTA' | 'MEDIA' | 'BAIXA' | string;
+  prazo: string | null; // ISO
+  criado_em: string; // ISO
+  atualizado_em: string; // ISO
   projeto: {
     nome: string;
-    cliente: {
-      nome: string;
-    };
+    cliente: { nome: string };
   } | null;
-  responsavel: {
-    nome: string;
-  };
+  responsavel: { id: string; nome: string };
 }
 
-// Componente de Status Badge
+type SortKey = 'prazo' | 'prioridade' | 'titulo' | 'status' | 'criado_em';
+
+/* ===== Tipos auxiliares para shape cru do Supabase (sem any) ===== */
+
+type MaybeArray<T> = T | T[] | null | undefined;
+
+interface RawUsuario {
+  id?: unknown;
+  nome?: unknown;
+}
+interface RawCliente {
+  nome?: unknown;
+}
+interface RawProjeto {
+  nome?: unknown;
+  cliente?: MaybeArray<RawCliente>;
+}
+interface RawTarefaRow {
+  id?: unknown;
+  titulo?: unknown;
+  descricao?: unknown;
+  status?: unknown;
+  prioridade?: unknown;
+  prazo?: unknown;
+  criado_em?: unknown;
+  atualizado_em?: unknown;
+  projeto?: MaybeArray<RawProjeto>;
+  responsavel?: MaybeArray<RawUsuario>;
+}
+
+/* helper para normalizar singleton que pode vir como array */
+const toOne = <T,>(val: MaybeArray<T>): T | null => {
+  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
+  return (val ?? null) as T | null;
+};
+
+/* ===================== Badges ===================== */
+
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    'PENDENTE': { 
-      label: 'Pendente', 
+    PENDENTE: {
+      label: 'Pendente',
       variant: 'secondary' as const,
       icon: Circle,
-      color: 'text-yellow-600'
+      color: 'text-yellow-600',
     },
-    'EM_ANDAMENTO': { 
-      label: 'Em Andamento', 
+    EM_ANDAMENTO: {
+      label: 'Em Andamento',
       variant: 'default' as const,
       icon: Clock,
-      color: 'text-blue-600'
+      color: 'text-blue-600',
     },
-    'CONCLUIDA': { 
-      label: 'Concluída', 
+    CONCLUIDA: {
+      label: 'Concluída',
       variant: 'default' as const,
       icon: CheckCircle2,
-      color: 'text-green-600'
+      color: 'text-green-600',
     },
-    'CANCELADA': { 
-      label: 'Cancelada', 
+    CANCELADA: {
+      label: 'Cancelada',
       variant: 'outline' as const,
       icon: AlertTriangle,
-      color: 'text-gray-600'
+      color: 'text-gray-600',
     },
   };
 
-  const config = statusConfig[status as keyof typeof statusConfig] || { 
-    label: status, 
-    variant: 'outline' as const,
-    icon: Circle,
-    color: 'text-gray-600'
-  };
-  
+  const config =
+    statusConfig[status as keyof typeof statusConfig] ??
+    ({
+      label: status,
+      variant: 'outline' as const,
+      icon: Circle,
+      color: 'text-gray-600',
+    } as const);
+
   const Icon = config.icon;
-  
   return (
     <Badge variant={config.variant} className="flex items-center gap-1">
       <Icon className="h-3 w-3" />
@@ -102,43 +137,46 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// Componente de Badge de Prioridade
 function PrioridadeBadge({ prioridade }: { prioridade: string }) {
   const prioridadeConfig = {
-    'ALTA': { 
-      label: 'Alta', 
+    ALTA: {
+      label: 'Alta',
       icon: ArrowUp,
-      color: 'bg-red-100 text-red-800 border-red-200' 
+      color: 'bg-red-100 text-red-800 border-red-200',
     },
-    'MEDIA': { 
-      label: 'Média', 
+    MEDIA: {
+      label: 'Média',
       icon: Minus,
-      color: 'bg-yellow-100 text-yellow-800 border-yellow-200' 
+      color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     },
-    'BAIXA': { 
-      label: 'Baixa', 
+    BAIXA: {
+      label: 'Baixa',
       icon: ArrowDown,
-      color: 'bg-green-100 text-green-800 border-green-200' 
+      color: 'bg-green-100 text-green-800 border-green-200',
     },
   };
 
-  const config = prioridadeConfig[prioridade as keyof typeof prioridadeConfig] || { 
-    label: prioridade, 
-    icon: Minus,
-    color: 'bg-gray-100 text-gray-800 border-gray-200' 
-  };
-  
+  const config =
+    prioridadeConfig[prioridade as keyof typeof prioridadeConfig] ??
+    ({
+      label: prioridade,
+      icon: Minus,
+      color: 'bg-gray-100 text-gray-800 border-gray-200',
+    } as const);
+
   const Icon = config.icon;
-  
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}
+    >
       <Icon className="h-3 w-3" />
       {config.label}
     </span>
   );
 }
 
-// Componente do Card de Tarefa
+/* ===================== Card ===================== */
+
 function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Sem prazo';
@@ -150,8 +188,7 @@ function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
     const deadline = new Date(dateString);
     const today = new Date();
     const diffTime = deadline.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const daysUntilDeadline = getDaysUntilDeadline(tarefa.prazo);
@@ -177,9 +214,7 @@ function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
                   <FolderOpen className="h-3 w-3" />
                   {tarefa.projeto.nome}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Cliente: {tarefa.projeto.cliente.nome}
-                </p>
+                <p className="text-xs text-muted-foreground">Cliente: {tarefa.projeto.cliente.nome}</p>
               </div>
             )}
           </div>
@@ -190,14 +225,10 @@ function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Descrição */}
         {tarefa.descricao && (
-          <p className="text-sm text-muted-foreground line-clamp-3">
-            {tarefa.descricao}
-          </p>
+          <p className="text-sm text-muted-foreground line-clamp-3">{tarefa.descricao}</p>
         )}
 
-        {/* Informações da tarefa */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="space-y-1">
             <div className="flex items-center gap-1 text-muted-foreground">
@@ -211,9 +242,7 @@ function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
               <Calendar className="h-3 w-3" />
               Prazo
             </div>
-            <p className={`font-medium ${
-              isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : ''
-            }`}>
+            <p className={`font-medium ${isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : ''}`}>
               {formatDate(tarefa.prazo)}
               {isOverdue && ` (${Math.abs(daysUntilDeadline!)} dias atrasado)`}
               {isUrgent && !isOverdue && ` (${daysUntilDeadline} dias)`}
@@ -221,45 +250,43 @@ function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
           </div>
         </div>
 
-        {/* Alertas de prazo */}
         {(isOverdue || isUrgent) && (
-          <div className={`flex items-center gap-2 p-2 rounded-md ${
-            isOverdue ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
-          }`}>
+          <div
+            className={`flex items-center gap-2 p-2 rounded-md ${
+              isOverdue ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
+            }`}
+          >
             <AlertTriangle className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              {isOverdue ? 'Tarefa atrasada' : 'Prazo próximo'}
-            </span>
+            <span className="text-sm font-medium">{isOverdue ? 'Tarefa atrasada' : 'Prazo próximo'}</span>
           </div>
         )}
 
-        {/* Data de criação */}
         <div className="pt-2 border-t text-xs text-muted-foreground">
-          Criada em {formatDate(tarefa.criado_em)}
+          Criada em {new Date(tarefa.criado_em).toLocaleDateString('pt-BR')}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-// Componente Principal
+/* ===================== Página ===================== */
+
 export default function TarefasPage() {
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [filteredTarefas, setFilteredTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Estados de filtros
+
+  // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [prioridadeFilter, setPrioridadeFilter] = useState<string>('todos');
-  const [responsavelFilter, setResponsavelFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<string>('prazo');
+  const [responsavelFilter, setResponsavelFilter] = useState<string>('todos'); // guarda o ID do responsável
+  const [sortBy, setSortBy] = useState<SortKey>('prazo');
 
-  // Listas para filtros
-  const [responsaveis, setResponsaveis] = useState<Array<{id: string, nome: string}>>([]);
+  // Lista de responsáveis (para filtro)
+  const [responsaveis, setResponsaveis] = useState<Array<{ id: string; nome: string }>>([]);
 
-  // Buscar tarefas
   useEffect(() => {
     const fetchTarefas = async () => {
       try {
@@ -278,21 +305,50 @@ export default function TarefasPage() {
               nome,
               cliente:cliente_id (nome)
             ),
-            responsavel:responsavel_id (nome)
+            responsavel:responsavel_id (id, nome)
           `)
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
-        
-        setTarefas(data || []);
 
-        // Extrair responsáveis únicos para filtro
-        const responsaveisUnicos = [...new Set(data?.map(tarefa => tarefa.responsavel) || [])]
-          .map((responsavel, index) => ({ id: index.toString(), nome: responsavel.nome }));
-        setResponsaveis(responsaveisUnicos);
+        const raw = (data ?? []) as RawTarefaRow[];
 
-      } catch (error) {
-        console.error('Erro ao buscar tarefas:', error);
+        // normaliza & tipa
+        const rows: Tarefa[] = raw.map((r) => {
+          const projeto = toOne<RawProjeto>(r.projeto);
+          const cliente = toOne<RawCliente>(projeto?.cliente ?? null);
+          const resp = toOne<RawUsuario>(r.responsavel);
+
+          return {
+            id: String(r.id ?? ''),
+            titulo: String(r.titulo ?? ''),
+            descricao: r.descricao == null ? null : String(r.descricao),
+            status: String(r.status ?? '') as Tarefa['status'],
+            prioridade: String(r.prioridade ?? '') as Tarefa['prioridade'],
+            prazo: r.prazo == null ? null : String(r.prazo),
+            criado_em: String(r.criado_em ?? ''),
+            atualizado_em: String(r.atualizado_em ?? ''),
+            projeto: projeto
+              ? {
+                  nome: String(projeto.nome ?? ''),
+                  cliente: { nome: String(cliente?.nome ?? '') },
+                }
+              : null,
+            responsavel: { id: String(resp?.id ?? ''), nome: String(resp?.nome ?? '') },
+          };
+        });
+
+        setTarefas(rows);
+
+        // Responsáveis únicos (usa ID para evitar colisão de nomes)
+        const uniqueById = new Map<string, { id: string; nome: string }>();
+        rows.forEach((t) => {
+          if (t.responsavel.id && !uniqueById.has(t.responsavel.id)) {
+            uniqueById.set(t.responsavel.id, { id: t.responsavel.id, nome: t.responsavel.nome });
+          }
+        });
+        setResponsaveis(Array.from(uniqueById.values()));
+      } catch {
         setError('Não foi possível carregar as tarefas.');
       } finally {
         setLoading(false);
@@ -306,49 +362,50 @@ export default function TarefasPage() {
   useEffect(() => {
     let filtered = tarefas;
 
-    // Filtro por busca
     if (searchTerm) {
-      filtered = filtered.filter(tarefa =>
-        tarefa.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (tarefa.descricao && tarefa.descricao.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (tarefa.projeto && tarefa.projeto.nome.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        tarefa.responsavel.nome.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter((tarefa) => {
+        const hitTitulo = tarefa.titulo.toLowerCase().includes(q);
+        const hitDesc = tarefa.descricao ? tarefa.descricao.toLowerCase().includes(q) : false;
+        const hitProjeto = tarefa.projeto ? tarefa.projeto.nome.toLowerCase().includes(q) : false;
+        const hitResp = tarefa.responsavel.nome.toLowerCase().includes(q);
+        return hitTitulo || hitDesc || hitProjeto || hitResp;
+      });
     }
 
-    // Filtro por status
     if (statusFilter !== 'todos') {
-      filtered = filtered.filter(tarefa => tarefa.status === statusFilter);
+      filtered = filtered.filter((t) => t.status === statusFilter);
     }
 
-    // Filtro por prioridade
     if (prioridadeFilter !== 'todos') {
-      filtered = filtered.filter(tarefa => tarefa.prioridade === prioridadeFilter);
+      filtered = filtered.filter((t) => t.prioridade === prioridadeFilter);
     }
 
-    // Filtro por responsável
     if (responsavelFilter !== 'todos') {
-      filtered = filtered.filter(tarefa => tarefa.responsavel.nome === responsavelFilter);
+      filtered = filtered.filter((t) => t.responsavel.id === responsavelFilter);
     }
 
-    // Ordenação
-    filtered.sort((a, b) => {
+    const ordered = [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case 'prazo':
-          if (!a.prazo && !b.prazo) return 0;
-          if (!a.prazo) return 1;
-          if (!b.prazo) return -1;
-          return new Date(a.prazo).getTime() - new Date(b.prazo).getTime();
-        case 'prioridade':
-          const prioridadeOrder = { 'ALTA': 3, 'MEDIA': 2, 'BAIXA': 1 };
-          return (prioridadeOrder[b.prioridade as keyof typeof prioridadeOrder] || 0) - 
-                 (prioridadeOrder[a.prioridade as keyof typeof prioridadeOrder] || 0);
+        case 'prazo': {
+          const aTime = a.prazo ? new Date(a.prazo).getTime() : Infinity;
+          const bTime = b.prazo ? new Date(b.prazo).getTime() : Infinity;
+          return aTime - bTime;
+        }
+        case 'prioridade': {
+          const order = { ALTA: 3, MEDIA: 2, BAIXA: 1 } as const;
+          const aVal = order[a.prioridade as keyof typeof order] ?? 0;
+          const bVal = order[b.prioridade as keyof typeof order] ?? 0;
+          return bVal - aVal; // maior prioridade primeiro
+        }
         case 'titulo':
           return a.titulo.localeCompare(b.titulo);
-        case 'status':
-          const statusOrder = { 'PENDENTE': 1, 'EM_ANDAMENTO': 2, 'CONCLUIDA': 3, 'CANCELADA': 4 };
-          return (statusOrder[a.status as keyof typeof statusOrder] || 0) - 
-                 (statusOrder[b.status as keyof typeof statusOrder] || 0);
+        case 'status': {
+          const order = { PENDENTE: 1, EM_ANDAMENTO: 2, CONCLUIDA: 3, CANCELADA: 4 } as const;
+          const aVal = order[a.status as keyof typeof order] ?? 0;
+          const bVal = order[b.status as keyof typeof order] ?? 0;
+          return aVal - bVal;
+        }
         case 'criado_em':
           return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
         default:
@@ -356,7 +413,7 @@ export default function TarefasPage() {
       }
     });
 
-    setFilteredTarefas(filtered);
+    setFilteredTarefas(ordered);
   }, [tarefas, searchTerm, statusFilter, prioridadeFilter, responsavelFilter, sortBy]);
 
   if (loading) {
@@ -378,10 +435,10 @@ export default function TarefasPage() {
 
   const estatisticas = {
     total: tarefas.length,
-    pendentes: tarefas.filter(t => t.status === 'PENDENTE').length,
-    emAndamento: tarefas.filter(t => t.status === 'EM_ANDAMENTO').length,
-    concluidas: tarefas.filter(t => t.status === 'CONCLUIDA').length,
-    atrasadas: tarefas.filter(t => {
+    pendentes: tarefas.filter((t) => t.status === 'PENDENTE').length,
+    emAndamento: tarefas.filter((t) => t.status === 'EM_ANDAMENTO').length,
+    concluidas: tarefas.filter((t) => t.status === 'CONCLUIDA').length,
+    atrasadas: tarefas.filter((t) => {
       if (!t.prazo) return false;
       const deadline = new Date(t.prazo);
       const today = new Date();
@@ -395,9 +452,7 @@ export default function TarefasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Tarefas</h1>
-          <p className="text-muted-foreground">
-            Gerencie todas as tarefas dos seus projetos
-          </p>
+          <p className="text-muted-foreground">Gerencie todas as tarefas dos seus projetos</p>
         </div>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -450,6 +505,7 @@ export default function TarefasPage() {
             className="pl-10"
           />
         </div>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
@@ -462,6 +518,7 @@ export default function TarefasPage() {
             <SelectItem value="CANCELADA">Cancelada</SelectItem>
           </SelectContent>
         </Select>
+
         <Select value={prioridadeFilter} onValueChange={setPrioridadeFilter}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Prioridade" />
@@ -473,18 +530,22 @@ export default function TarefasPage() {
             <SelectItem value="BAIXA">Baixa</SelectItem>
           </SelectContent>
         </Select>
+
         <Select value={responsavelFilter} onValueChange={setResponsavelFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Responsável" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            {responsaveis.map(responsavel => (
-              <SelectItem key={responsavel.id} value={responsavel.nome}>{responsavel.nome}</SelectItem>
+            {responsaveis.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.nome}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
+
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
@@ -511,16 +572,22 @@ export default function TarefasPage() {
             <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Nenhuma tarefa encontrada</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || statusFilter !== 'todos' || prioridadeFilter !== 'todos' || responsavelFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.' 
+              {searchTerm ||
+              statusFilter !== 'todos' ||
+              prioridadeFilter !== 'todos' ||
+              responsavelFilter !== 'todos'
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Comece criando sua primeira tarefa.'}
             </p>
-            {!searchTerm && statusFilter === 'todos' && prioridadeFilter === 'todos' && responsavelFilter === 'todos' && (
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Criar Primeira Tarefa
-              </Button>
-            )}
+            {!searchTerm &&
+              statusFilter === 'todos' &&
+              prioridadeFilter === 'todos' &&
+              responsavelFilter === 'todos' && (
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Criar Primeira Tarefa
+                </Button>
+              )}
           </div>
         </Card>
       )}

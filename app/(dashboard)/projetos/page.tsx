@@ -1,3 +1,4 @@
+// app/(dashboard)/projetos/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -29,16 +30,17 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Pause
+  Pause,
 } from 'lucide-react';
 
-// Tipos baseados no schema
+/* ===================== Tipos ===================== */
+
 interface Projeto {
   id: string;
   nome: string;
   descricao: string | null;
-  status: string;
-  orcamento: number | null;
+  status: 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO' | string;
+  orcamento: number | null; // em centavos
   prazo: string | null;
   criado_em: string;
   designer: {
@@ -53,38 +55,72 @@ interface Projeto {
   }>;
 }
 
-// Componente de Status Badge
+type SortKey = 'prazo' | 'nome' | 'cliente' | 'progresso';
+
+/* ===== Tipos auxiliares (shape cru do Supabase) sem any ===== */
+
+type MaybeArray<T> = T | T[] | null | undefined;
+
+interface RawUsuario {
+  nome: unknown;
+}
+interface RawArte {
+  id: unknown;
+  status: unknown;
+}
+interface RawProjetoRow {
+  id: unknown;
+  nome: unknown;
+  descricao?: unknown;
+  status: unknown;
+  orcamento?: unknown;
+  prazo?: unknown;
+  criado_em: unknown;
+  designer: MaybeArray<RawUsuario>;
+  cliente: MaybeArray<RawUsuario>;
+  artes: MaybeArray<RawArte>;
+}
+
+/* helper: normaliza 1:1 que pode vir como array */
+const toOne = <T,>(val: MaybeArray<T>): T | null => {
+  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
+  return (val ?? null) as T | null;
+};
+
+/* ===================== UI ===================== */
+
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    'EM_ANDAMENTO': { 
-      label: 'Em Andamento', 
+    EM_ANDAMENTO: {
+      label: 'Em Andamento',
       variant: 'default' as const,
       icon: Clock,
-      color: 'text-blue-600'
+      color: 'text-blue-600',
     },
-    'CONCLUIDO': { 
-      label: 'Concluído', 
+    CONCLUIDO: {
+      label: 'Concluído',
       variant: 'default' as const,
       icon: CheckCircle2,
-      color: 'text-green-600'
+      color: 'text-green-600',
     },
-    'PAUSADO': { 
-      label: 'Pausado', 
+    PAUSADO: {
+      label: 'Pausado',
       variant: 'secondary' as const,
       icon: Pause,
-      color: 'text-yellow-600'
+      color: 'text-yellow-600',
     },
   };
 
-  const config = statusConfig[status as keyof typeof statusConfig] || { 
-    label: status, 
-    variant: 'outline' as const,
-    icon: AlertTriangle,
-    color: 'text-gray-600'
-  };
-  
+  const config =
+    statusConfig[status as keyof typeof statusConfig] ?? ({
+      label: status,
+      variant: 'outline' as const,
+      icon: AlertTriangle,
+      color: 'text-gray-600',
+    });
+
   const Icon = config.icon;
-  
+
   return (
     <Badge variant={config.variant} className="flex items-center gap-1">
       <Icon className="h-3 w-3" />
@@ -93,10 +129,9 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// Componente do Card de Projeto
 function ProjetoCard({ projeto }: { projeto: Projeto }) {
   const totalArtes = projeto.artes.length;
-  const artesAprovadas = projeto.artes.filter(arte => arte.status === 'APROVADO').length;
+  const artesAprovadas = projeto.artes.filter((arte) => arte.status === 'APROVADO').length;
   const progresso = totalArtes > 0 ? (artesAprovadas / totalArtes) * 100 : 0;
 
   const formatDate = (dateString: string | null) => {
@@ -131,9 +166,7 @@ function ProjetoCard({ projeto }: { projeto: Projeto }) {
       <CardContent className="space-y-4">
         {/* Descrição */}
         {projeto.descricao && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {projeto.descricao}
-          </p>
+          <p className="text-sm text-muted-foreground line-clamp-2">{projeto.descricao}</p>
         )}
 
         {/* Progresso das Artes */}
@@ -164,9 +197,11 @@ function ProjetoCard({ projeto }: { projeto: Projeto }) {
               <Calendar className="h-3 w-3" />
               Prazo
             </div>
-            <p className={`font-medium ${
-              isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : ''
-            }`}>
+            <p
+              className={`font-medium ${
+                isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : ''
+              }`}
+            >
               {formatDate(projeto.prazo)}
               {isOverdue && ' (Atrasado)'}
               {isUrgent && !isOverdue && ` (${daysUntilDeadline} dias)`}
@@ -175,13 +210,13 @@ function ProjetoCard({ projeto }: { projeto: Projeto }) {
         </div>
 
         {/* Orçamento */}
-        {projeto.orcamento && (
+        {typeof projeto.orcamento === 'number' && (
           <div className="pt-2 border-t">
             <span className="text-sm text-muted-foreground">Orçamento: </span>
             <span className="font-semibold">
               {new Intl.NumberFormat('pt-BR', {
                 style: 'currency',
-                currency: 'BRL'
+                currency: 'BRL',
               }).format(projeto.orcamento / 100)}
             </span>
           </div>
@@ -191,19 +226,19 @@ function ProjetoCard({ projeto }: { projeto: Projeto }) {
   );
 }
 
-// Componente Principal
+/* ===================== Página ===================== */
+
 export default function ProjetosPage() {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [filteredProjetos, setFilteredProjetos] = useState<Projeto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Estados de filtros
+
+  // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<string>('prazo');
+  const [sortBy, setSortBy] = useState<SortKey>('prazo');
 
-  // Buscar projetos
   useEffect(() => {
     const fetchProjetos = async () => {
       try {
@@ -224,10 +259,39 @@ export default function ProjetosPage() {
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
-        
-        setProjetos(data || []);
-      } catch (error) {
-        console.error('Erro ao buscar projetos:', error);
+
+        const raw = (data ?? []) as RawProjetoRow[];
+
+        // normaliza o shape cru + garante tipagem forte
+        const rows: Projeto[] = raw.map((r) => {
+          const designer = toOne<RawUsuario>(r.designer);
+          const cliente = toOne<RawUsuario>(r.cliente);
+          const artesArr = (Array.isArray(r.artes) ? r.artes : []) as RawArte[];
+
+          return {
+            id: String(r.id),
+            nome: String(r.nome),
+            descricao: r.descricao == null ? null : String(r.descricao),
+            status: String(r.status) as Projeto['status'],
+            orcamento:
+              typeof r.orcamento === 'number'
+                ? (r.orcamento as number)
+                : r.orcamento == null
+                ? null
+                : Number(r.orcamento),
+            prazo: r.prazo == null ? null : String(r.prazo),
+            criado_em: String(r.criado_em),
+            designer: { nome: String(designer?.nome ?? '') },
+            cliente: { nome: String(cliente?.nome ?? '') },
+            artes: artesArr.map((a) => ({
+              id: String(a.id),
+              status: String(a.status),
+            })),
+          };
+        });
+
+        setProjetos(rows);
+      } catch {
         setError('Não foi possível carregar os projetos.');
       } finally {
         setLoading(false);
@@ -241,43 +305,47 @@ export default function ProjetosPage() {
   useEffect(() => {
     let filtered = projetos;
 
-    // Filtro por busca
     if (searchTerm) {
-      filtered = filtered.filter(projeto =>
-        projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        projeto.cliente.nome.toLowerCase().includes(searchTerm.toLowerCase())
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (projeto) =>
+          projeto.nome.toLowerCase().includes(q) ||
+          projeto.cliente.nome.toLowerCase().includes(q)
       );
     }
 
-    // Filtro por status
     if (statusFilter !== 'todos') {
-      filtered = filtered.filter(projeto => projeto.status === statusFilter);
+      filtered = filtered.filter((projeto) => projeto.status === statusFilter);
     }
 
-    // Ordenação
-    filtered.sort((a, b) => {
+    const ordered = [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case 'prazo':
-          if (!a.prazo && !b.prazo) return 0;
-          if (!a.prazo) return 1;
-          if (!b.prazo) return -1;
-          return new Date(a.prazo).getTime() - new Date(b.prazo).getTime();
+        case 'prazo': {
+          const aTime = a.prazo ? new Date(a.prazo).getTime() : Infinity; // sem prazo vai pro fim
+          const bTime = b.prazo ? new Date(b.prazo).getTime() : Infinity;
+          return aTime - bTime;
+        }
         case 'nome':
           return a.nome.localeCompare(b.nome);
         case 'cliente':
           return a.cliente.nome.localeCompare(b.cliente.nome);
-        case 'progresso':
-          const progressoA = a.artes.length > 0 ? 
-            (a.artes.filter(arte => arte.status === 'APROVADO').length / a.artes.length) : 0;
-          const progressoB = b.artes.length > 0 ? 
-            (b.artes.filter(arte => arte.status === 'APROVADO').length / b.artes.length) : 0;
-          return progressoB - progressoA;
+        case 'progresso': {
+          const progA =
+            a.artes.length > 0
+              ? a.artes.filter((arte) => arte.status === 'APROVADO').length / a.artes.length
+              : 0;
+          const progB =
+            b.artes.length > 0
+              ? b.artes.filter((arte) => arte.status === 'APROVADO').length / b.artes.length
+              : 0;
+          return progB - progA; // maior progresso primeiro
+        }
         default:
           return 0;
       }
     });
 
-    setFilteredProjetos(filtered);
+    setFilteredProjetos(ordered);
   }, [projetos, searchTerm, statusFilter, sortBy]);
 
   if (loading) {
@@ -299,9 +367,9 @@ export default function ProjetosPage() {
 
   const estatisticas = {
     total: projetos.length,
-    emAndamento: projetos.filter(p => p.status === 'EM_ANDAMENTO').length,
-    concluidos: projetos.filter(p => p.status === 'CONCLUIDO').length,
-    pausados: projetos.filter(p => p.status === 'PAUSADO').length,
+    emAndamento: projetos.filter((p) => p.status === 'EM_ANDAMENTO').length,
+    concluidos: projetos.filter((p) => p.status === 'CONCLUIDO').length,
+    pausados: projetos.filter((p) => p.status === 'PAUSADO').length,
   };
 
   return (
@@ -310,9 +378,7 @@ export default function ProjetosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projetos</h1>
-          <p className="text-muted-foreground">
-            Gerencie todos os seus projetos de design
-          </p>
+          <p className="text-muted-foreground">Gerencie todos os seus projetos de design</p>
         </div>
         <Button>
           <PlusCircle className="h-4 w-4 mr-2" />
@@ -351,7 +417,7 @@ export default function ProjetosPage() {
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por projeto ou cliente..."
             value={searchTerm}
@@ -359,6 +425,7 @@ export default function ProjetosPage() {
             className="pl-10"
           />
         </div>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filtrar por status" />
@@ -370,7 +437,8 @@ export default function ProjetosPage() {
             <SelectItem value="PAUSADO">Pausado</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
+
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Ordenar por" />
           </SelectTrigger>
@@ -396,8 +464,8 @@ export default function ProjetosPage() {
             <FileImage className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Nenhum projeto encontrado</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || statusFilter !== 'todos' 
-                ? 'Tente ajustar os filtros de busca.' 
+              {searchTerm || statusFilter !== 'todos'
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Comece criando seu primeiro projeto.'}
             </p>
             {!searchTerm && statusFilter === 'todos' && (
