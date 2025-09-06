@@ -1,61 +1,85 @@
-// app/(auth)/cadastro/page.tsx
 'use client';
 
-import * as React from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-
 import { Button } from '@/components/ui/button';
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+// NÃO exporte revalidate/dynamic aqui (é client-only)
+
 export default function CadastroPage() {
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  const [message, setMessage] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
-  async function handleCadastro(e: React.FormEvent<HTMLFormElement>) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const handleCadastro = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setMessage('');
+    setSending(true);
+    setMsg(null);
 
-    // redirect de confirmação por e-mail (opcional)
-    const emailRedirectTo =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/auth/callback`
-        : undefined;
+    try {
+      const origin =
+        typeof window !== 'undefined' ? window.location.origin : '';
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo },
-    });
+      // Este redirect garante que o link do e-mail volte para /callback
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${origin}/callback?next=/dashboard`,
+        },
+      });
 
-    setLoading(false);
+      if (error) {
+        // mensagens mais úteis
+        if (error.message.toLowerCase().includes('rate limit')) {
+          setMsg('Muitas tentativas. Tente novamente em instantes.');
+        } else if (error.message.toLowerCase().includes('weak password')) {
+          setMsg('Senha fraca. Tente usar mais caracteres.');
+        } else {
+          setMsg(`Erro ao cadastrar: ${error.message}`);
+        }
+        return;
+      }
 
-    if (error) {
-      setMessage(`Erro: ${error.message}`);
-      return;
+      // Se o Supabase estiver exigindo confirmação por e-mail:
+      if (data.user && !data.user.confirmed_at) {
+        setMsg(
+          'Conta criada! Verifique seu e-mail e clique no link de confirmação.'
+        );
+        return;
+      }
+
+      // Se “confirm email” estiver desligado, o usuário já pode logar
+      setMsg('Conta criada com sucesso! Redirecionando...');
+      router.push('/dashboard');
+    } catch (err) {
+      setMsg('Erro inesperado ao cadastrar.');
+    } finally {
+      setSending(false);
     }
-
-    if (data.user) {
-      setMessage('Usuário criado! Verifique seu e-mail para confirmar.');
-      // manda para login depois de uns segundos
-      setTimeout(() => router.push('/login'), 2000);
-    }
-  }
+  };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Criar Conta</CardTitle>
-          <CardDescription>Apenas e-mail e senha.</CardDescription>
+          <CardTitle className="text-2xl">Criar conta</CardTitle>
+          <CardDescription>
+            Use seu e-mail e crie uma senha para começar.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCadastro} className="space-y-4">
@@ -64,11 +88,12 @@ export default function CadastroPage() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 placeholder="seu@email.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
+                disabled={sending}
               />
             </div>
             <div className="space-y-2">
@@ -76,18 +101,23 @@ export default function CadastroPage() {
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 placeholder="••••••••"
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
+                disabled={sending}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Criando...' : 'Criar conta'}
+
+            {msg && (
+              <p className="text-sm text-center text-destructive">{msg}</p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={sending}>
+              {sending ? 'Criando...' : 'Criar conta'}
             </Button>
-            {message && <p className="text-sm text-center text-red-600 pt-4">{message}</p>}
           </form>
         </CardContent>
       </Card>
