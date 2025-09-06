@@ -1,12 +1,14 @@
-// app/login/page.tsx
-'use client'
+// app/(auth)/login/page.tsx
+'use client';
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-// Importando os componentes do Shadcn/ui
-import { Button } from '@/components/ui/button'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+// shadcn/ui
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -14,47 +16,71 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import Link from 'next/link' // Importando o Link do Next.js
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import Link from 'next/link';
+
+// Cria o client do Supabase só em runtime (evita erro no build)
+async function getSupabaseClient() {
+  const { createClient } = await import('@supabase/supabase-js');
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    throw new Error(
+      'Variáveis NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY não configuradas.'
+    );
+  }
+
+  return createClient(url, anon);
+}
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setMessage('')
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    })
+    try {
+      const supabase = await getSupabaseClient();
 
-    if (error) {
-      setMessage('E-mail ou senha inválidos.') // Mensagem mais amigável
-      setLoading(false)
-    } else {
-      // O redirecionamento será tratado por um listener de autenticação
-      // para garantir que a sessão foi estabelecida.
-      // Por enquanto, vamos usar o router do Next.js.
-      router.push('/dashboard')
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setMessage('E-mail ou senha inválidos.');
+        setLoading(false);
+        return;
+      }
+
+      // sucesso
+      router.push('/dashboard');
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Erro inesperado ao inicializar o Supabase.';
+      setMessage(msg);
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Bem-vindo de volta!</CardTitle>
-          <CardDescription>
-            Faça login para acessar sua conta.
-          </CardDescription>
+          <CardDescription>Faça login para acessar sua conta.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -93,12 +119,15 @@ export default function LoginPage() {
         <CardFooter className="flex justify-center text-sm">
           <p>
             Não tem uma conta?{' '}
-            <Link href="/cadastro" className="font-semibold text-primary hover:underline">
+            <Link
+              href="/cadastro"
+              className="font-semibold text-primary hover:underline"
+            >
               Cadastre-se
             </Link>
           </p>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }
