@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx
+// app/(dashboard)/dashboard/page.tsx
 'use client';
 
 import {
@@ -35,7 +35,7 @@ export type Arte = {
   criado_em: string;
   projeto: {
     nome: string;
-  };
+  } | null;
 };
 
 export type Projeto = {
@@ -45,7 +45,7 @@ export type Projeto = {
   prazo: string;
   cliente: {
     nome: string;
-  };
+  } | null;
   artes: Arte[];
 };
 
@@ -55,10 +55,10 @@ export type Feedback = {
   criado_em: string;
   autor: {
     nome: string;
-  };
+  } | null;
   arte: {
     nome: string;
-  };
+  } | null;
 };
 
 export type Tarefa = {
@@ -69,7 +69,7 @@ export type Tarefa = {
   prazo: string;
   projeto: {
     nome: string;
-  };
+  } | null;
 };
 
 // Componente de Card de Métrica
@@ -77,7 +77,7 @@ function MetricCard({ title, value, subtitle, icon: Icon, trend }: {
   title: string;
   value: string | number;
   subtitle: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   trend?: { value: string; isPositive: boolean };
 }) {
   return (
@@ -201,11 +201,11 @@ export default function DashboardPage() {
 
         if (tarefasError) throw tarefasError;
 
-        // Definir dados
-        setProjetos(projetosData || []);
-        setArtes(artesData || []);
-        setFeedbacks(feedbacksData || []);
-        setTarefas(tarefasData || []);
+        // Definir dados com casting seguro
+        setProjetos((projetosData as unknown as Projeto[]) || []);
+        setArtes((artesData as unknown as Arte[]) || []);
+        setFeedbacks((feedbacksData as unknown as Feedback[]) || []);
+        setTarefas((tarefasData as unknown as Tarefa[]) || []);
 
         // Calcular métricas
         const totalArtes = projetosData?.reduce((acc, p) => acc + (p.artes?.length || 0), 0) || 0;
@@ -475,7 +475,7 @@ export default function DashboardPage() {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between">
                     <h5 className="font-medium text-sm">
-                      {feedback.autor?.nome} comentou em "{feedback.arte?.nome}"
+                      {feedback.autor?.nome} comentou em &ldquo;{feedback.arte?.nome}&rdquo;
                     </h5>
                     <span className="text-xs text-muted-foreground">
                       {formatRelativeTime(feedback.criado_em)}
