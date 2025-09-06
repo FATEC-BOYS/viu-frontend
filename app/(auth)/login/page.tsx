@@ -1,79 +1,41 @@
 // app/(auth)/login/page.tsx
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-import { useState } from 'react';
+import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
-// shadcn/ui
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 
-// Cria o client do Supabase só em runtime (evita erro no build)
-async function getSupabaseClient() {
-  const { createClient } = await import('@supabase/supabase-js');
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anon) {
-    throw new Error(
-      'Variáveis NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY não configuradas.'
-    );
-  }
-
-  return createClient(url, anon);
-}
-
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [message, setMessage] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setMessage('');
 
-    try {
-      const supabase = await getSupabaseClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    setLoading(false);
 
-      if (error) {
-        setMessage('E-mail ou senha inválidos.');
-        setLoading(false);
-        return;
-      }
-
-      // sucesso
-      router.push('/dashboard');
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'Erro inesperado ao inicializar o Supabase.';
-      setMessage(msg);
-      setLoading(false);
+    if (error) {
+      setMessage('E-mail ou senha inválidos.');
+      return;
     }
-  };
+
+    router.push('/dashboard');
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -108,9 +70,7 @@ export default function LoginPage() {
                 disabled={loading}
               />
             </div>
-            {message && (
-              <p className="text-sm text-center text-destructive">{message}</p>
-            )}
+            {message && <p className="text-sm text-center text-destructive">{message}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
@@ -119,10 +79,7 @@ export default function LoginPage() {
         <CardFooter className="flex justify-center text-sm">
           <p>
             Não tem uma conta?{' '}
-            <Link
-              href="/cadastro"
-              className="font-semibold text-primary hover:underline"
-            >
+            <Link href="/cadastro" className="font-semibold text-primary hover:underline">
               Cadastre-se
             </Link>
           </p>

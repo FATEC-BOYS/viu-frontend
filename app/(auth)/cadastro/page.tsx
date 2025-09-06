@@ -1,86 +1,61 @@
 // app/(auth)/cadastro/page.tsx
 'use client';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-import { useState } from 'react';
+import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
-// shadcn/ui
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-// cria o client apenas no clique (sem importar o seu supabaseClient que acusa erro no build)
-async function getSupabaseClient() {
-  const { createClient } = await import('@supabase/supabase-js');
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Aqui não estoura no build, só em runtime caso falte env
-  if (!url || !anon) {
-    throw new Error('Variáveis NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY não configuradas.');
-  }
-
-  return createClient(url, anon);
-}
-
 export default function CadastroPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [message, setMessage] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
-  const handleCadastro = async (e: React.FormEvent) => {
+  async function handleCadastro(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setMessage('');
 
-    try {
-      const supabase = await getSupabaseClient();
+    // redirect de confirmação por e-mail (opcional)
+    const emailRedirectTo =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/auth/callback`
+        : undefined;
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo },
+    });
 
-      if (error) {
-        setMessage('Erro: ' + error.message);
-        setLoading(false);
-        return;
-      }
+    setLoading(false);
 
-      if (data.user) {
-        setMessage('Usuário criado com sucesso! Agora você pode fazer login.');
-        setLoading(false);
-        setTimeout(() => router.push('/login'), 1500);
-      } else {
-        setMessage('Cadastro enviado. Verifique seu e-mail para confirmar a conta.');
-        setLoading(false);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro inesperado ao criar o cliente do Supabase.';
-      setMessage('Erro: ' + msg);
-      setLoading(false);
+    if (error) {
+      setMessage(`Erro: ${error.message}`);
+      return;
     }
-  };
+
+    if (data.user) {
+      setMessage('Usuário criado! Verifique seu e-mail para confirmar.');
+      // manda para login depois de uns segundos
+      setTimeout(() => router.push('/login'), 2000);
+    }
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Criar Conta (Teste Simplificado)</CardTitle>
-          <CardDescription>Apenas e-mail e senha para isolar o problema.</CardDescription>
+          <CardTitle className="text-2xl">Criar Conta</CardTitle>
+          <CardDescription>Apenas e-mail e senha.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCadastro} className="space-y-4">
@@ -110,7 +85,7 @@ export default function CadastroPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Criando...' : 'Criar Usuário de Teste'}
+              {loading ? 'Criando...' : 'Criar conta'}
             </Button>
             {message && <p className="text-sm text-center text-red-600 pt-4">{message}</p>}
           </form>
