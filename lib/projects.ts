@@ -131,7 +131,7 @@ export async function createProjeto(payload: ProjetoInput) {
   // validação leve
   const parsed = ProjetoInputSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new Error(parsed.error.errors.map(e => e.message).join(" | "));
+    throw new Error(parsed.error.issues.map((e: { message: any; }) => e.message).join(" | "));
   }
 
   // auth → designer_id
