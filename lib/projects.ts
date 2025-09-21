@@ -1,5 +1,4 @@
 // src/lib/projects.ts
-import { z } from "zod";
 import { supabase } from "@/lib/supabaseClient";
 
 /* ===================== Tipos ===================== */
@@ -12,7 +11,7 @@ export interface Projeto {
   descricao: string | null;
   status: ProjetoStatus;
   orcamento: number | null; // centavos
-  prazo: string | null;     // ISO
+  prazo: string | null; // ISO
   designer: { id: string; nome: string };
   cliente: { id: string; nome: string };
   criado_em: string; // ISO
@@ -25,7 +24,7 @@ export interface ProjetoInput {
   descricao?: string | null;
   status: ProjetoStatus;
   /** valor em R$ (ex.: 123.45) */
-  orcamento: number;         // R$ (não centavos)
+  orcamento: number; // R$ (não centavos)
   /** ISO string ou null (ex.: 2025-09-20T00:00:00.000Z) */
   prazo: string | null;
   /** FK obrigatória */
@@ -34,6 +33,7 @@ export interface ProjetoInput {
 
 /* ===================== Helpers ===================== */
 const isUuid = (v?: string | null) => !!v && /^[0-9a-f-]{36}$/i.test(v);
+const isValidISO = (v: string) => !Number.isNaN(Date.parse(v));
 
 /** Exibe BRL a partir de centavos (inteiro) */
 export function formatBRLFromCents(cents: number | null): string {
@@ -52,18 +52,72 @@ export function parseBRLToCents(input: string): number | null {
   return cents;
 }
 
-/* ===================== (Opcional) Validação leve com zod ===================== */
-const ProjetoInputSchema = z.object({
-  nome: z.string().trim().min(1, "Informe o nome").max(140, "Máx. 140 caracteres"),
-  descricao: z.string().trim().max(2000, "Máx. 2000 caracteres").optional().nullable(),
-  status: z.enum(["EM_ANDAMENTO", "CONCLUIDO", "PAUSADO"]),
-  // orcamento em R$ vindo da UI (>= 0). Aceitamos 0 e inteiros/decimais.
-  orcamento: z.number().min(0),
-  // ISO string ou null (UI já converte date→ISO ou passa null)
-  prazo: z.string().datetime().nullable(),
-  // FK obrigatória (uuid)
-  cliente_id: z.string().uuid("Selecione o cliente"),
-});
+/* ===================== Validação leve (sem Zod) ===================== */
+function validateProjetoInput(payload: ProjetoInput): string[] {
+  const errs: string[] = [];
+
+  const nome = (payload.nome ?? "").trim();
+  if (!nome) errs.push("Informe o nome");
+  if (nome.length > 140) errs.push("Máx. 140 caracteres no nome");
+
+  if (payload.descricao != null) {
+    const d = payload.descricao.trim();
+    if (d.length > 2000) errs.push("Máx. 2000 caracteres na descrição");
+  }
+
+  if (!["EM_ANDAMENTO", "CONCLUIDO", "PAUSADO"].includes(payload.status)) {
+    errs.push("Status inválido");
+  }
+
+  if (typeof payload.orcamento !== "number" || !Number.isFinite(payload.orcamento) || payload.orcamento < 0) {
+    errs.push("Orçamento deve ser um número ≥ 0");
+  }
+
+  if (payload.prazo != null && !isValidISO(payload.prazo)) {
+    errs.push("Prazo inválido (use ISO-8601)");
+  }
+
+  if (!isUuid(payload.cliente_id)) {
+    errs.push("Selecione o cliente");
+  }
+
+  return errs;
+}
+
+function validateProjetoPatch(patch: Partial<ProjetoInput>): string[] {
+  const errs: string[] = [];
+
+  if (patch.nome !== undefined) {
+    const n = patch.nome.trim();
+    if (!n) errs.push("Informe o nome");
+    if (n.length > 140) errs.push("Máx. 140 caracteres no nome");
+  }
+
+  if (patch.descricao !== undefined && patch.descricao != null) {
+    const d = patch.descricao.trim();
+    if (d.length > 2000) errs.push("Máx. 2000 caracteres na descrição");
+  }
+
+  if (patch.status !== undefined && !["EM_ANDAMENTO", "CONCLUIDO", "PAUSADO"].includes(patch.status)) {
+    errs.push("Status inválido");
+  }
+
+  if (patch.orcamento !== undefined) {
+    if (typeof patch.orcamento !== "number" || !Number.isFinite(patch.orcamento) || patch.orcamento < 0) {
+      errs.push("Orçamento deve ser um número ≥ 0");
+    }
+  }
+
+  if (patch.prazo !== undefined && patch.prazo != null && !isValidISO(patch.prazo)) {
+    errs.push("Prazo inválido (use ISO-8601)");
+  }
+
+  if (patch.cliente_id !== undefined && !isUuid(patch.cliente_id)) {
+    errs.push("Selecione o cliente");
+  }
+
+  return errs;
+}
 
 /* ===================== Data Access (Supabase) ===================== */
 export async function listProjetos(params?: {
@@ -128,11 +182,9 @@ export async function getProjeto(id: string) {
 
 /** Cria um projeto a partir do payload da UI (R$ → centavos, obtém designer_id do auth) */
 export async function createProjeto(payload: ProjetoInput) {
-  // validação leve
-  const parsed = ProjetoInputSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new Error(parsed.error.issues.map((e: { message: any; }) => e.message).join(" | "));
-  }
+  // validação leve (sem Zod)
+  const errs = validateProjetoInput(payload);
+  if (errs.length) throw new Error(errs.join(" | "));
 
   // auth → designer_id
   const { data: auth } = await supabase.auth.getUser();
@@ -143,7 +195,8 @@ export async function createProjeto(payload: ProjetoInput) {
   if (!isUuid(payload.cliente_id)) throw new Error("Selecione o cliente");
 
   // normalizações
-  const descricao = payload.descricao && payload.descricao.trim().length > 0 ? payload.descricao.trim() : null;
+  const descricao =
+    payload.descricao && payload.descricao.trim().length > 0 ? payload.descricao.trim() : null;
   const prazo = payload.prazo ?? null;
 
   // R$ → centavos
@@ -177,22 +230,34 @@ export async function createProjeto(payload: ProjetoInput) {
 
 /** Atualiza um projeto a partir do payload da UI (R$ → centavos quando vier) */
 export async function updateProjeto(id: string, patch: Partial<ProjetoInput>) {
-  const toUpdate: Record<string, any> = {};
+  type ProjetoDBUpdate = {
+    nome?: string;
+    descricao?: string | null;
+    status?: ProjetoStatus;
+    orcamento?: number | null;
+    prazo?: string | null;
+    cliente_id?: string;
+  };
+  const toUpdate: ProjetoDBUpdate = {};
+
+  const errs = validateProjetoPatch(patch);
+  if (errs.length) throw new Error(errs.join(" | "));
 
   if (patch.nome !== undefined) toUpdate.nome = patch.nome.trim();
   if (patch.descricao !== undefined) {
-    toUpdate.descricao = patch.descricao && patch.descricao.trim().length > 0 ? patch.descricao.trim() : null;
+    toUpdate.descricao =
+      patch.descricao && patch.descricao.trim().length > 0 ? patch.descricao.trim() : null;
   }
   if (patch.status !== undefined) toUpdate.status = patch.status;
   if (patch.prazo !== undefined) toUpdate.prazo = patch.prazo ?? null;
   if (patch.cliente_id !== undefined) {
-    if (!isUuid(patch.cliente_id)) throw new Error("Selecione o cliente");
     toUpdate.cliente_id = patch.cliente_id;
   }
   if (patch.orcamento !== undefined) {
-    toUpdate.orcamento = Number.isFinite(patch.orcamento)
-      ? Math.round((patch.orcamento as number) * 100)
-      : null;
+    toUpdate.orcamento =
+      typeof patch.orcamento === "number" && Number.isFinite(patch.orcamento)
+        ? Math.round(patch.orcamento * 100)
+        : null;
   }
 
   const { data, error } = await supabase
