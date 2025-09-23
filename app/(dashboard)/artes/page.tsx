@@ -1,158 +1,77 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
+import { listArtesOverview, type ArteOverview } from "@/lib/artes";
+import { ArteQuickLookSheet } from "@/components/artes/ArteQuickLookSheet";
+import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
+
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
+
 import {
-  Upload,
-  Search,
-  Calendar,
-  User,
-  FileImage,
-  Loader2,
-  Eye,
-  Download,
-  MessageSquare,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  AlertCircle,
-} from 'lucide-react';
+  Upload, Search, Calendar, User, FileImage, Loader2, Eye, Download,
+  MessageSquare, CheckCircle2, Clock, XCircle, AlertCircle,
+} from "lucide-react";
 
-/* ===================== Tipos ===================== */
+/* ===================== Helpers URL (sem hook custom) ===================== */
 
-interface Arte {
-  id: string;
-  nome: string;
-  descricao: string | null;
-  arquivo: string;
-  tipo: string;
-  tamanho: number;
-  versao: number;
-  status: string;
-  criado_em: string;
-  atualizado_em: string;
-  projeto: {
-    nome: string;
-    cliente: {
-      nome: string;
-    };
+function useURLHelpers() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const getParam = (key: string, fallback = "") => params.get(key) ?? fallback;
+
+  const setParam = (key: string, value?: string) => {
+    const p = new URLSearchParams(params.toString());
+    if (!value || value === "todos" || value === "") p.delete(key);
+    else p.set(key, value);
+    p.delete("page");
+    router.push(`?${p.toString()}`);
   };
-  autor: {
-    nome: string;
+
+  const setParams = (next: Record<string, string | undefined>) => {
+    const p = new URLSearchParams(params.toString());
+    Object.entries(next).forEach(([k, v]) => {
+      if (!v || v === "todos" || v === "") p.delete(k);
+      else p.set(k, v);
+    });
+    p.delete("page");
+    router.push(`?${p.toString()}`);
   };
-  feedbacks: Array<{
-    id: string;
-    conteudo: string;
-  }>;
-  aprovacoes: Array<{
-    id: string;
-    status: string;
-  }>;
-}
 
-type SortKey = 'criado_em' | 'nome' | 'projeto' | 'versao' | 'tamanho';
-
-/* ===== Tipos auxiliares (shape cru do Supabase) sem any ===== */
-
-type MaybeArray<T> = T | T[] | null | undefined;
-
-interface RawCliente {
-  nome: unknown;
+  return { getParam, setParam, setParams, params };
 }
-interface RawProjeto {
-  nome: unknown;
-  cliente: MaybeArray<RawCliente>;
-}
-interface RawAutor {
-  nome: unknown;
-}
-interface RawFeedback {
-  id: unknown;
-  conteudo?: unknown;
-}
-interface RawAprovacao {
-  id: unknown;
-  status?: unknown;
-}
-interface RawArte {
-  id: unknown;
-  nome: unknown;
-  descricao?: unknown;
-  arquivo: unknown;
-  tipo: unknown;
-  tamanho: unknown;
-  versao: unknown;
-  status: unknown;
-  criado_em: unknown;
-  atualizado_em: unknown;
-  projeto: MaybeArray<RawProjeto>;
-  autor: MaybeArray<RawAutor>;
-  feedbacks?: RawFeedback[];
-  aprovacoes?: RawAprovacao[];
-}
-
-/* ===== helper: normaliza 1:1 que pode vir como array ===== */
-const toOne = <T,>(val: MaybeArray<T>): T | null => {
-  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
-  return (val ?? null) as T | null;
-};
 
 /* ===================== UI Auxiliares ===================== */
 
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    EM_ANALISE: {
-      label: 'Em Análise',
-      variant: 'outline' as const,
-      icon: Clock,
-      color: 'text-blue-600',
-    },
-    APROVADO: {
-      label: 'Aprovado',
-      variant: 'default' as const,
-      icon: CheckCircle2,
-      color: 'text-green-600',
-    },
-    REJEITADO: {
-      label: 'Rejeitado',
-      variant: 'destructive' as const,
-      icon: XCircle,
-      color: 'text-red-600',
-    },
-    PENDENTE: {
-      label: 'Pendente',
-      variant: 'secondary' as const,
-      icon: AlertCircle,
-      color: 'text-yellow-600',
-    },
+    EM_ANALISE: { label: "Em Análise", variant: "outline" as const, icon: Clock },
+    APROVADO:   { label: "Aprovado",   variant: "default" as const, icon: CheckCircle2 },
+    REJEITADO:  { label: "Rejeitado",  variant: "destructive" as const, icon: XCircle },
+    PENDENTE:   { label: "Pendente",   variant: "secondary" as const, icon: AlertCircle },
   };
-
   const config =
     statusConfig[status as keyof typeof statusConfig] ?? {
-      label: status,
-      variant: 'outline' as const,
-      icon: AlertCircle,
-      color: 'text-gray-600',
+      label: status, variant: "outline" as const, icon: AlertCircle,
     };
-
   const Icon = config.icon;
-
   return (
     <Badge variant={config.variant} className="flex items-center gap-1">
       <Icon className="h-3 w-3" />
@@ -163,20 +82,18 @@ function StatusBadge({ status }: { status: string }) {
 
 function TipoBadge({ tipo }: { tipo: string }) {
   const tipoConfig = {
-    LOGO: { label: 'Logo', color: 'bg-purple-100 text-purple-800' },
-    BANNER: { label: 'Banner', color: 'bg-blue-100 text-blue-800' },
-    FLYER: { label: 'Flyer', color: 'bg-green-100 text-green-800' },
-    CARTAO: { label: 'Cartão', color: 'bg-orange-100 text-orange-800' },
-    LAYOUT: { label: 'Layout', color: 'bg-pink-100 text-pink-800' },
-    ICONE: { label: 'Ícone', color: 'bg-cyan-100 text-cyan-800' },
-    INTERFACE: { label: 'Interface', color: 'bg-indigo-100 text-indigo-800' },
-    ANIMACAO: { label: 'Animação', color: 'bg-red-100 text-red-800' },
+    LOGO: { label: "Logo", color: "bg-purple-100 text-purple-800" },
+    BANNER: { label: "Banner", color: "bg-blue-100 text-blue-800" },
+    FLYER: { label: "Flyer", color: "bg-green-100 text-green-800" },
+    CARTAO: { label: "Cartão", color: "bg-orange-100 text-orange-800" },
+    LAYOUT: { label: "Layout", color: "bg-pink-100 text-pink-800" },
+    ICONE: { label: "Ícone", color: "bg-cyan-100 text-cyan-800" },
+    INTERFACE: { label: "Interface", color: "bg-indigo-100 text-indigo-800" },
+    ANIMACAO: { label: "Animação", color: "bg-red-100 text-red-800" },
   };
-
   const config =
     tipoConfig[tipo as keyof typeof tipoConfig] ??
-    ({ label: tipo, color: 'bg-gray-100 text-gray-800' } as const);
-
+    ({ label: tipo, color: "bg-gray-100 text-gray-800" } as const);
   return (
     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
       {config.label}
@@ -184,26 +101,49 @@ function TipoBadge({ tipo }: { tipo: string }) {
   );
 }
 
-function ArteCard({ arte }: { arte: Arte }) {
+/* ===================== Card (com Overview) ===================== */
+
+function ArteCard({
+  arte,
+  onFilter,
+  onQuickLook,
+}: {
+  arte: ArteOverview;
+  onFilter: (key: string, value: string) => void;
+  onQuickLook: (id: string, tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes") => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('pt-BR');
+    new Date(dateString).toLocaleDateString("pt-BR");
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
+    if (!bytes) return "—";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
-  const getFileExtension = (filename: string) =>
-    filename.split('.').pop()?.toUpperCase() ?? '';
+  useEffect(() => {
+    let alive = true;
+    getArtePreviewUrls(arte.arquivo).then(({ previewUrl }) => {
+      if (alive) setPreviewUrl(previewUrl);
+    });
+    return () => { alive = false; };
+  }, [arte.arquivo]);
 
-  const feedbackCount = arte.feedbacks.length;
-  const hasAprovacao = arte.aprovacoes.length > 0;
+  async function handleDownload() {
+    try {
+      const url = await getArteDownloadUrl(arte.arquivo);
+      window.open(url, "_blank");
+    } catch {
+      // TODO: toast de erro
+    }
+  }
 
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+    <Card className="hover:shadow-md transition-shadow group">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-1 flex-1">
@@ -211,33 +151,53 @@ function ArteCard({ arte }: { arte: Arte }) {
               <CardTitle className="text-lg">{arte.nome}</CardTitle>
               <span className="text-sm text-muted-foreground">v{arte.versao}</span>
             </div>
-            <p className="text-sm text-muted-foreground">{arte.projeto.nome}</p>
+            <p className="text-sm text-muted-foreground">
+              <button
+                className="underline hover:opacity-80"
+                onClick={() => onFilter("projeto", arte.projeto_nome)}
+              >
+                {arte.projeto_nome}
+              </button>
+            </p>
             <p className="text-xs text-muted-foreground">
-              Cliente: {arte.projeto.cliente.nome}
+              Cliente:{" "}
+              <button
+                className="underline hover:opacity-80"
+                onClick={() => onFilter("cliente", arte.cliente_nome)}
+              >
+                {arte.cliente_nome}
+              </button>
             </p>
           </div>
           <StatusBadge status={arte.status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Preview placeholder */}
-        <div className="aspect-video rounded-md border bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <FileImage className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-            <p className="text-sm text-gray-500">{getFileExtension(arte.arquivo)}</p>
-          </div>
-        </div>
 
-        {/* Descrição */}
-        {arte.descricao && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {arte.descricao}
-          </p>
-        )}
+      <CardContent className="space-y-4">
+        {/* Preview real (fallback se não houver) */}
+        <div className="aspect-video rounded-md border overflow-hidden bg-gray-50 grid place-items-center">
+          {previewUrl ? (
+            <Image
+              src={previewUrl}
+              alt={arte.nome}
+              width={1280}
+              height={720}
+              className="object-cover w-full h-full"
+              unoptimized
+            />
+          ) : (
+            <div className="text-center">
+              <FileImage className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+              <p className="text-sm text-gray-500">Sem preview</p>
+            </div>
+          )}
+        </div>
 
         {/* Tipo e tamanho */}
         <div className="flex items-center justify-between">
-          <TipoBadge tipo={arte.tipo} />
+          <button onClick={() => onFilter("tipo", arte.tipo)}>
+            <TipoBadge tipo={arte.tipo} />
+          </button>
           <span className="text-xs text-muted-foreground">
             {formatFileSize(arte.tamanho)}
           </span>
@@ -250,7 +210,14 @@ function ArteCard({ arte }: { arte: Arte }) {
               <User className="h-3 w-3" />
               Autor
             </div>
-            <p className="font-medium">{arte.autor.nome}</p>
+            <p className="font-medium">
+              <button
+                className="underline hover:opacity-80"
+                onClick={() => onFilter("autor", arte.autor_nome)}
+              >
+                {arte.autor_nome}
+              </button>
+            </p>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1 text-muted-foreground">
@@ -264,13 +231,16 @@ function ArteCard({ arte }: { arte: Arte }) {
         {/* Estatísticas */}
         <div className="flex items-center justify-between pt-2 border-t">
           <div className="flex items-center gap-3 text-sm">
-            {feedbackCount > 0 && (
-              <span className="flex items-center gap-1 text-muted-foreground">
+            {arte.feedbacks_count > 0 && (
+              <button
+                className="flex items-center gap-1 text-muted-foreground hover:underline"
+                onClick={() => onQuickLook(arte.id, "feedbacks")}
+              >
                 <MessageSquare className="h-3 w-3" />
-                {feedbackCount}
-              </span>
+                {arte.feedbacks_count}
+              </button>
             )}
-            {hasAprovacao && (
+            {arte.tem_aprovacao_aprovada && (
               <span className="flex items-center gap-1 text-green-600">
                 <CheckCircle2 className="h-3 w-3" />
                 Aprovação
@@ -280,10 +250,10 @@ function ArteCard({ arte }: { arte: Arte }) {
 
           {/* Ações */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => onQuickLook(arte.id, "resumo")}>
               <Eye className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={handleDownload}>
               <Download className="h-4 w-4" />
             </Button>
           </div>
@@ -296,164 +266,78 @@ function ArteCard({ arte }: { arte: Arte }) {
 /* ===================== Página ===================== */
 
 export default function ArtesPage() {
-  const [artes, setArtes] = useState<Arte[]>([]);
-  const [filteredArtes, setFilteredArtes] = useState<Arte[]>([]);
+  const { getParam, setParam, setParams } = useURLHelpers();
+
+  // Quick Look
+  const [openQL, setOpenQL] = useState(false);
+  const [arteQL, setArteQL] = useState<string | null>(null);
+  const [defaultTab, setDefaultTab] = useState<"resumo" | "feedbacks" | "tarefas" | "aprovacoes">("resumo");
+  const openQuickLook = (id: string, tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes") => {
+    setArteQL(id);
+    if (tab) setDefaultTab(tab);
+    setOpenQL(true);
+  };
+
+  // Filtros lidos da URL (sem state duplicado)
+  const searchTerm   = getParam("q", "");
+  const statusFilter = getParam("status", "todos");
+  const tipoFilter   = getParam("tipo", "todos");
+  const projetoFilter= getParam("projeto", "todos");
+  const clienteFilter= getParam("cliente", "todos");
+  const autorFilter  = getParam("autor", "todos");
+  const sortBy       = (getParam("orderBy", "criado_em") as "criado_em" | "nome" | "projeto" | "versao" | "tamanho");
+  const page         = Math.max(1, Number(getParam("page", "1")) || 1);
+  const pageSize     = Math.min(96, Math.max(6, Number(getParam("pageSize", "24")) || 24));
+
+  // Dados
   const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<ArteOverview[]>([]);
+  const [count, setCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [tipoFilter, setTipoFilter] = useState<string>('todos');
-  const [projetoFilter, setProjetoFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<SortKey>('criado_em');
-
-  // Opções de filtros
-  const [projetos, setProjetos] = useState<Array<{ id: string; nome: string }>>(
-    []
-  );
-  const [tipos, setTipos] = useState<string[]>([]);
-
+  // Debounce para search (com cleanup)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const fetchArtes = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('artes')
-          .select(`
-            id,
-            nome,
-            descricao,
-            arquivo,
-            tipo,
-            tamanho,
-            versao,
-            status,
-            criado_em,
-            atualizado_em,
-            projeto:projeto_id (
-              nome,
-              cliente:cliente_id (nome)
-            ),
-            autor:autor_id (nome),
-            feedbacks (id, conteudo),
-            aprovacoes (id, status)
-          `)
-          .order('criado_em', { ascending: false });
-
-        if (error) throw error;
-
-        const rawRows = (data ?? []) as RawArte[];
-
-        const rows: Arte[] = rawRows.map((r) => {
-          const projeto = toOne<RawProjeto>(r.projeto);
-          const cliente = projeto ? toOne<RawCliente>(projeto.cliente) : null;
-          const autor = toOne<RawAutor>(r.autor);
-
-          const feedbacks = (r.feedbacks ?? []).map(
-            (f): Arte['feedbacks'][number] => ({
-              id: String(f.id),
-              conteudo: String(f.conteudo ?? ''),
-            })
-          );
-
-          const aprovacoes = (r.aprovacoes ?? []).map(
-            (a): Arte['aprovacoes'][number] => ({
-              id: String(a.id),
-              status: String(a.status ?? ''),
-            })
-          );
-
-          return {
-            id: String(r.id),
-            nome: String(r.nome),
-            descricao: (r.descricao ?? null) as string | null,
-            arquivo: String(r.arquivo),
-            tipo: String(r.tipo),
-            tamanho: Number(r.tamanho),
-            versao: Number(r.versao),
-            status: String(r.status),
-            criado_em: String(r.criado_em),
-            atualizado_em: String(r.atualizado_em),
-            projeto: {
-              nome: String(projeto?.nome ?? ''),
-              cliente: { nome: String(cliente?.nome ?? '') },
-            },
-            autor: { nome: String(autor?.nome ?? '') },
-            feedbacks,
-            aprovacoes,
-          };
-        });
-
-        setArtes(rows);
-
-        // Opções de filtro com base nos rows normalizados
-        const nomesProjetos = Array.from(new Set(rows.map((a) => a.projeto.nome)));
-        setProjetos(nomesProjetos.map((nome, idx) => ({ id: String(idx), nome })));
-
-        const tiposUnicos = Array.from(new Set(rows.map((a) => a.tipo)));
-        setTipos(tiposUnicos);
-      } catch {
-        setError('Não foi possível carregar as artes.');
-      } finally {
-        setLoading(false);
-      }
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
-
-    fetchArtes();
   }, []);
 
-  // Aplicar filtros e ordenação
   useEffect(() => {
-    let filtered = artes;
+    setLoading(true);
+    setError(null);
+    listArtesOverview({
+      q: searchTerm,
+      status: statusFilter,
+      tipo: tipoFilter,
+      projeto: projetoFilter,
+      cliente: clienteFilter,
+      autor: autorFilter,
+      orderBy: sortBy,
+      page,
+      pageSize,
+    })
+      .then(({ data, count }) => {
+        setRows(data);
+        setCount(count);
+      })
+      .catch(() => setError("Não foi possível carregar as artes."))
+      .finally(() => setLoading(false));
+  }, [searchTerm, statusFilter, tipoFilter, projetoFilter, clienteFilter, autorFilter, sortBy, page, pageSize]);
 
-    // Busca
-    if (searchTerm) {
-      const st = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (arte) =>
-          arte.nome.toLowerCase().includes(st) ||
-          arte.projeto.nome.toLowerCase().includes(st) ||
-          arte.projeto.cliente.nome.toLowerCase().includes(st)
-      );
-    }
+  // Facetas dinâmicas (com base no resultado atual)
+  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome))).map((nome, idx) => ({ id: String(idx), nome }));
+  const tipos    = Array.from(new Set(rows.map((a) => a.tipo)));
+  const clientes = Array.from(new Set(rows.map((a) => a.cliente_nome)));
+  const autores  = Array.from(new Set(rows.map((a) => a.autor_nome)));
 
-    // Status
-    if (statusFilter !== 'todos') {
-      filtered = filtered.filter((arte) => arte.status === statusFilter);
-    }
-
-    // Tipo
-    if (tipoFilter !== 'todos') {
-      filtered = filtered.filter((arte) => arte.tipo === tipoFilter);
-    }
-
-    // Projeto
-    if (projetoFilter !== 'todos') {
-      filtered = filtered.filter((arte) => arte.projeto.nome === projetoFilter);
-    }
-
-    // Ordenação
-    const ordered = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'criado_em':
-          return (
-            new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-          );
-        case 'nome':
-          return a.nome.localeCompare(b.nome);
-        case 'projeto':
-          return a.projeto.nome.localeCompare(b.projeto.nome);
-        case 'versao':
-          return b.versao - a.versao;
-        case 'tamanho':
-          return b.tamanho - a.tamanho;
-        default:
-          return 0;
-      }
-    });
-
-    setFilteredArtes(ordered);
-  }, [artes, searchTerm, statusFilter, tipoFilter, projetoFilter, sortBy]);
+  const estatisticas = {
+    total: rows.length,
+    emAnalise: rows.filter((a) => a.status === "EM_ANALISE").length,
+    aprovadas: rows.filter((a) => a.status === "APROVADO").length,
+    rejeitadas: rows.filter((a) => a.status === "REJEITADO").length,
+    pendentes: rows.filter((a) => a.status === "PENDENTE").length,
+  };
 
   if (loading) {
     return (
@@ -472,13 +356,7 @@ export default function ArtesPage() {
     );
   }
 
-  const estatisticas = {
-    total: artes.length,
-    emAnalise: artes.filter((a) => a.status === 'EM_ANALISE').length,
-    aprovadas: artes.filter((a) => a.status === 'APROVADO').length,
-    rejeitadas: artes.filter((a) => a.status === 'REJEITADO').length,
-    pendentes: artes.filter((a) => a.status === 'PENDENTE').length,
-  };
+  const totalPages = Math.max(1, Math.ceil(count / pageSize));
 
   return (
     <div className="space-y-6 p-6">
@@ -486,9 +364,7 @@ export default function ArtesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Artes</h1>
-          <p className="text-muted-foreground">
-            Gerencie todas as artes dos seus projetos
-          </p>
+          <p className="text-muted-foreground">Gerencie todas as artes dos seus projetos</p>
         </div>
         <Button>
           <Upload className="h-4 w-4 mr-2" />
@@ -506,33 +382,25 @@ export default function ArtesPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">
-              {estatisticas.emAnalise}
-            </div>
+            <div className="text-2xl font-bold text-blue-600">{estatisticas.emAnalise}</div>
             <p className="text-sm text-muted-foreground">Em Análise</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">
-              {estatisticas.aprovadas}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{estatisticas.aprovadas}</div>
             <p className="text-sm text-muted-foreground">Aprovadas</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">
-              {estatisticas.rejeitadas}
-            </div>
+            <div className="text-2xl font-bold text-red-600">{estatisticas.rejeitadas}</div>
             <p className="text-sm text-muted-foreground">Rejeitadas</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">
-              {estatisticas.pendentes}
-            </div>
+            <div className="text-2xl font-bold text-yellow-600">{estatisticas.pendentes}</div>
             <p className="text-sm text-muted-foreground">Pendentes</p>
           </CardContent>
         </Card>
@@ -544,13 +412,17 @@ export default function ArtesPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por arte, projeto ou cliente..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            defaultValue={searchTerm}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+              searchTimeoutRef.current = setTimeout(() => setParam("q", value), 350);
+            }}
             className="pl-10"
           />
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => setParam("status", v)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -563,7 +435,7 @@ export default function ArtesPage() {
           </SelectContent>
         </Select>
 
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
+        <Select value={tipoFilter} onValueChange={(v) => setParam("tipo", v)}>
           <SelectTrigger className="w-[130px]">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
@@ -577,7 +449,7 @@ export default function ArtesPage() {
           </SelectContent>
         </Select>
 
-        <Select value={projetoFilter} onValueChange={setProjetoFilter}>
+        <Select value={projetoFilter} onValueChange={(v) => setParam("projeto", v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Projeto" />
           </SelectTrigger>
@@ -591,7 +463,35 @@ export default function ArtesPage() {
           </SelectContent>
         </Select>
 
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
+        <Select value={clienteFilter} onValueChange={(v) => setParam("cliente", v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Cliente" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos Clientes</SelectItem>
+            {clientes.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={autorFilter} onValueChange={(v) => setParam("autor", v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Autor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos Autores</SelectItem>
+            {autores.map((a) => (
+              <SelectItem key={a} value={a}>
+                {a}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={sortBy} onValueChange={(v) => setParam("orderBy", v)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
@@ -605,11 +505,44 @@ export default function ArtesPage() {
         </Select>
       </div>
 
+      {/* Paginação */}
+      {count > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Página {page} de {totalPages} • {count} itens
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setParam("page", String(page + 1))}
+            >
+              Próxima
+            </Button>
+            <Select value={String(pageSize)} onValueChange={(v)=> setParams({ pageSize: v, page: "1" })}>
+              <SelectTrigger className="w-[110px]"><SelectValue placeholder="Itens/página" /></SelectTrigger>
+              <SelectContent>
+                {[12,24,48,96].map(n => <SelectItem key={n} value={String(n)}>{n}/página</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
       {/* Grid de Artes */}
-      {filteredArtes.length > 0 ? (
+      {rows.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredArtes.map((arte) => (
-            <ArteCard key={arte.id} arte={arte} />
+          {rows.map((arte) => (
+            <ArteCard
+              key={arte.id}
+              arte={arte}
+              onFilter={(k, v) => setParam(k, v)}
+              onQuickLook={openQuickLook}
+            />
           ))}
         </div>
       ) : (
@@ -619,16 +552,20 @@ export default function ArtesPage() {
             <h3 className="text-lg font-semibold mb-2">Nenhuma arte encontrada</h3>
             <p className="text-muted-foreground mb-4">
               {searchTerm ||
-              statusFilter !== 'todos' ||
-              tipoFilter !== 'todos' ||
-              projetoFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.'
-                : 'Comece fazendo upload da sua primeira arte.'}
+              statusFilter !== "todos" ||
+              tipoFilter !== "todos" ||
+              projetoFilter !== "todos" ||
+              clienteFilter !== "todos" ||
+              autorFilter !== "todos"
+                ? "Tente ajustar os filtros de busca."
+                : "Comece fazendo upload da sua primeira arte."}
             </p>
             {!searchTerm &&
-              statusFilter === 'todos' &&
-              tipoFilter === 'todos' &&
-              projetoFilter === 'todos' && (
+              statusFilter === "todos" &&
+              tipoFilter === "todos" &&
+              projetoFilter === "todos" &&
+              clienteFilter === "todos" &&
+              autorFilter === "todos" && (
                 <Button>
                   <Upload className="h-4 w-4 mr-2" />
                   Upload Primeira Arte
@@ -637,6 +574,14 @@ export default function ArtesPage() {
           </div>
         </Card>
       )}
+
+      {/* Quick Look */}
+      <ArteQuickLookSheet
+        open={openQL}
+        onOpenChange={setOpenQL}
+        arteId={arteQL}
+        defaultTab={defaultTab}
+      />
     </div>
   );
 }
