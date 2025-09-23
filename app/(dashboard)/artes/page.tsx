@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { listArtesOverview, type ArteOverview } from "@/lib/artes";
@@ -28,6 +28,18 @@ import {
   Upload, Search, Calendar, User, FileImage, Loader2, Eye, Download,
   MessageSquare, CheckCircle2, Clock, XCircle, AlertCircle,
 } from "lucide-react";
+
+/* ===================== Fallback para o Suspense ===================== */
+function ArtesPageFallback() {
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-center h-[40vh] text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Carregando artes...
+      </div>
+    </div>
+  );
+}
 
 /* ===================== Helpers URL (sem hook custom) ===================== */
 
@@ -263,9 +275,9 @@ function ArteCard({
   );
 }
 
-/* ===================== Página ===================== */
-
-export default function ArtesPage() {
+/* ===================== Página (Inner) ===================== */
+/** Esta é a parte que usa useSearchParams → precisa ficar dentro de <Suspense> */
+function ArtesPageInner() {
   const { getParam, setParam, setParams } = useURLHelpers();
 
   // Quick Look
@@ -441,7 +453,7 @@ export default function ArtesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            {tipos.map((tipo) => (
+            {Array.from(new Set(tipos)).map((tipo) => (
               <SelectItem key={tipo} value={tipo}>
                 {tipo}
               </SelectItem>
@@ -469,7 +481,7 @@ export default function ArtesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos Clientes</SelectItem>
-            {clientes.map((c) => (
+            {Array.from(new Set(clientes)).map((c) => (
               <SelectItem key={c} value={c}>
                 {c}
               </SelectItem>
@@ -483,7 +495,7 @@ export default function ArtesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos Autores</SelectItem>
-            {autores.map((a) => (
+            {Array.from(new Set(autores)).map((a) => (
               <SelectItem key={a} value={a}>
                 {a}
               </SelectItem>
@@ -583,5 +595,14 @@ export default function ArtesPage() {
         defaultTab={defaultTab}
       />
     </div>
+  );
+}
+
+/* ===================== Export default: página com Suspense ===================== */
+export default function ArtesPage() {
+  return (
+    <Suspense fallback={<ArtesPageFallback />}>
+      <ArtesPageInner />
+    </Suspense>
   );
 }
