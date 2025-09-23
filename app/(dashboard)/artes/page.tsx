@@ -3,16 +3,14 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { supabase } from "@/lib/supabaseClient";
+
 import { listArtesOverview, type ArteOverview } from "@/lib/artes";
 import { ArteQuickLookSheet } from "@/components/artes/ArteQuickLookSheet";
 import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
+import ArteWizard from "@/components/artes/ArteWizard";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,10 +21,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
-  Upload, Search, Calendar, User, FileImage, Loader2, Eye, Download,
-  MessageSquare, CheckCircle2, Clock, XCircle, AlertCircle,
+  Upload,
+  Search,
+  Calendar,
+  User,
+  FileImage,
+  Loader2,
+  Eye,
+  Download,
+  MessageSquare,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  AlertCircle,
 } from "lucide-react";
 
 /* ===================== Fallback para o Suspense ===================== */
@@ -41,8 +56,7 @@ function ArtesPageFallback() {
   );
 }
 
-/* ===================== Helpers URL (sem hook custom) ===================== */
-
+/* ===================== Helpers URL ===================== */
 function useURLHelpers() {
   const router = useRouter();
   const params = useSearchParams();
@@ -71,17 +85,26 @@ function useURLHelpers() {
 }
 
 /* ===================== UI Auxiliares ===================== */
-
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    EM_ANALISE: { label: "Em Análise", variant: "outline" as const, icon: Clock },
-    APROVADO:   { label: "Aprovado",   variant: "default" as const, icon: CheckCircle2 },
-    REJEITADO:  { label: "Rejeitado",  variant: "destructive" as const, icon: XCircle },
-    PENDENTE:   { label: "Pendente",   variant: "secondary" as const, icon: AlertCircle },
+    EM_ANALISE: {
+      label: "Em Análise",
+      variant: "outline" as const,
+      icon: Clock,
+    },
+    APROVADO: { label: "Aprovado", variant: "default" as const, icon: CheckCircle2 },
+    REJEITADO: {
+      label: "Rejeitado",
+      variant: "destructive" as const,
+      icon: XCircle,
+    },
+    PENDENTE: { label: "Pendente", variant: "secondary" as const, icon: AlertCircle },
   };
   const config =
     statusConfig[status as keyof typeof statusConfig] ?? {
-      label: status, variant: "outline" as const, icon: AlertCircle,
+      label: status,
+      variant: "outline" as const,
+      icon: AlertCircle,
     };
   const Icon = config.icon;
   return (
@@ -107,14 +130,15 @@ function TipoBadge({ tipo }: { tipo: string }) {
     tipoConfig[tipo as keyof typeof tipoConfig] ??
     ({ label: tipo, color: "bg-gray-100 text-gray-800" } as const);
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+    >
       {config.label}
     </span>
   );
 }
 
 /* ===================== Card (com Overview) ===================== */
-
 function ArteCard({
   arte,
   onFilter,
@@ -122,7 +146,10 @@ function ArteCard({
 }: {
   arte: ArteOverview;
   onFilter: (key: string, value: string) => void;
-  onQuickLook: (id: string, tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes") => void;
+  onQuickLook: (
+    id: string,
+    tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes",
+  ) => void;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -142,7 +169,9 @@ function ArteCard({
     getArtePreviewUrls(arte.arquivo).then(({ previewUrl }) => {
       if (alive) setPreviewUrl(previewUrl);
     });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [arte.arquivo]);
 
   async function handleDownload() {
@@ -262,7 +291,11 @@ function ArteCard({
 
           {/* Ações */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="sm" onClick={() => onQuickLook(arte.id, "resumo")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onQuickLook(arte.id, "resumo")}
+            >
               <Eye className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={handleDownload}>
@@ -276,44 +309,57 @@ function ArteCard({
 }
 
 /* ===================== Página (Inner) ===================== */
-/** Esta é a parte que usa useSearchParams → precisa ficar dentro de <Suspense> */
 function ArtesPageInner() {
   const { getParam, setParam, setParams } = useURLHelpers();
+  const router = useRouter();
 
   // Quick Look
   const [openQL, setOpenQL] = useState(false);
   const [arteQL, setArteQL] = useState<string | null>(null);
-  const [defaultTab, setDefaultTab] = useState<"resumo" | "feedbacks" | "tarefas" | "aprovacoes">("resumo");
-  const openQuickLook = (id: string, tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes") => {
+  const [defaultTab, setDefaultTab] =
+    useState<"resumo" | "feedbacks" | "tarefas" | "aprovacoes">("resumo");
+  const openQuickLook = (
+    id: string,
+    tab?: "resumo" | "feedbacks" | "tarefas" | "aprovacoes",
+  ) => {
     setArteQL(id);
     if (tab) setDefaultTab(tab);
     setOpenQL(true);
   };
 
-  // Filtros lidos da URL (sem state duplicado)
-  const searchTerm   = getParam("q", "");
+  // Filtros URL
+  const searchTerm = getParam("q", "");
   const statusFilter = getParam("status", "todos");
-  const tipoFilter   = getParam("tipo", "todos");
-  const projetoFilter= getParam("projeto", "todos");
-  const clienteFilter= getParam("cliente", "todos");
-  const autorFilter  = getParam("autor", "todos");
-  const sortBy       = (getParam("orderBy", "criado_em") as "criado_em" | "nome" | "projeto" | "versao" | "tamanho");
-  const page         = Math.max(1, Number(getParam("page", "1")) || 1);
-  const pageSize     = Math.min(96, Math.max(6, Number(getParam("pageSize", "24")) || 24));
+  const tipoFilter = getParam("tipo", "todos");
+  const projetoFilter = getParam("projeto", "todos"); // nome do projeto
+  const clienteFilter = getParam("cliente", "todos");
+  const autorFilter = getParam("autor", "todos");
+  const sortBy = getParam("orderBy", "criado_em") as
+    | "criado_em"
+    | "nome"
+    | "projeto"
+    | "versao"
+    | "tamanho";
+  const page = Math.max(1, Number(getParam("page", "1")) || 1);
+  const pageSize = Math.min(
+    96,
+    Math.max(6, Number(getParam("pageSize", "24")) || 24),
+  );
 
-  // Dados
+  // Dados lista
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ArteOverview[]>([]);
   const [count, setCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounce para search (com cleanup)
+  // Debounce search
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    };
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -335,13 +381,25 @@ function ArtesPageInner() {
       })
       .catch(() => setError("Não foi possível carregar as artes."))
       .finally(() => setLoading(false));
-  }, [searchTerm, statusFilter, tipoFilter, projetoFilter, clienteFilter, autorFilter, sortBy, page, pageSize]);
+  }, [
+    searchTerm,
+    statusFilter,
+    tipoFilter,
+    projetoFilter,
+    clienteFilter,
+    autorFilter,
+    sortBy,
+    page,
+    pageSize,
+  ]);
 
   // Facetas dinâmicas (com base no resultado atual)
-  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome))).map((nome, idx) => ({ id: String(idx), nome }));
-  const tipos    = Array.from(new Set(rows.map((a) => a.tipo)));
+  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome))).map(
+    (nome, idx) => ({ id: String(idx), nome }),
+  );
+  const tipos = Array.from(new Set(rows.map((a) => a.tipo)));
   const clientes = Array.from(new Set(rows.map((a) => a.cliente_nome)));
-  const autores  = Array.from(new Set(rows.map((a) => a.autor_nome)));
+  const autores = Array.from(new Set(rows.map((a) => a.autor_nome)));
 
   const estatisticas = {
     total: rows.length,
@@ -350,6 +408,55 @@ function ArtesPageInner() {
     rejeitadas: rows.filter((a) => a.status === "REJEITADO").length,
     pendentes: rows.filter((a) => a.status === "PENDENTE").length,
   };
+
+  // ========= Integrar Wizard =========
+  const [openWizard, setOpenWizard] = useState(false);
+  const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [projectsForChooser, setProjectsForChooser] = useState<
+    { id: string; nome: string }[]
+  >([]);
+  const [choosingProject, setChoosingProject] = useState(false);
+
+  // abre modal e resolve user/projeto
+  async function handleOpenNewArte() {
+    // 1) pega userId primeiro
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) console.error(userErr);
+    const uid = userData?.user?.id ?? null;
+    setCurrentUserId(uid);
+
+    // 2) resolve projeto pelo filtro (nome → id) ou pede para escolher
+    let resolvedProjectId: string | null = null;
+    if (projetoFilter && projetoFilter !== "todos") {
+      const { data: p } = await supabase
+        .from("projetos")
+        .select("id")
+        .ilike("nome", projetoFilter)
+        .limit(1)
+        .maybeSingle();
+      if (p?.id) resolvedProjectId = p.id;
+    }
+
+    if (!resolvedProjectId) {
+      setChoosingProject(true);
+      const { data: list } = await supabase
+        .from("projetos")
+        .select("id, nome")
+        .order("criado_em", { ascending: false });
+      setProjectsForChooser(list || []);
+    } else {
+      setWizardProjectId(resolvedProjectId);
+    }
+
+    // 3) abre o modal
+    setOpenWizard(true);
+  }
+
+  function chooseProjectAndContinue(id: string) {
+    setWizardProjectId(id);
+    setChoosingProject(false);
+  }
 
   if (loading) {
     return (
@@ -378,9 +485,9 @@ function ArtesPageInner() {
           <h1 className="text-3xl font-bold tracking-tight">Artes</h1>
           <p className="text-muted-foreground">Gerencie todas as artes dos seus projetos</p>
         </div>
-        <Button>
+        <Button onClick={handleOpenNewArte}>
           <Upload className="h-4 w-4 mr-2" />
-          Upload Arte
+          Nova Arte
         </Button>
       </div>
 
@@ -421,7 +528,7 @@ function ArtesPageInner() {
       {/* Filtros */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por arte, projeto ou cliente..."
             defaultValue={searchTerm}
@@ -524,7 +631,12 @@ function ArtesPageInner() {
             Página {page} de {totalPages} • {count} itens
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setParam("page", String(page - 1))}
+            >
               Anterior
             </Button>
             <Button
@@ -535,10 +647,19 @@ function ArtesPageInner() {
             >
               Próxima
             </Button>
-            <Select value={String(pageSize)} onValueChange={(v)=> setParams({ pageSize: v, page: "1" })}>
-              <SelectTrigger className="w-[110px]"><SelectValue placeholder="Itens/página" /></SelectTrigger>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => setParams({ pageSize: v, page: "1" })}
+            >
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder="Itens/página" />
+              </SelectTrigger>
               <SelectContent>
-                {[12,24,48,96].map(n => <SelectItem key={n} value={String(n)}>{n}/página</SelectItem>)}
+                {[12, 24, 48, 96].map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}/página
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -570,7 +691,7 @@ function ArtesPageInner() {
               clienteFilter !== "todos" ||
               autorFilter !== "todos"
                 ? "Tente ajustar os filtros de busca."
-                : "Comece fazendo upload da sua primeira arte."}
+                : "Comece criando sua primeira arte."}
             </p>
             {!searchTerm &&
               statusFilter === "todos" &&
@@ -578,9 +699,9 @@ function ArtesPageInner() {
               projetoFilter === "todos" &&
               clienteFilter === "todos" &&
               autorFilter === "todos" && (
-                <Button>
+                <Button onClick={handleOpenNewArte}>
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload Primeira Arte
+                  Nova Arte
                 </Button>
               )}
           </div>
@@ -594,11 +715,65 @@ function ArtesPageInner() {
         arteId={arteQL}
         defaultTab={defaultTab}
       />
+
+      {/* Modal — Nova Arte */}
+      <Dialog
+        open={openWizard}
+        onOpenChange={(o) => {
+          setOpenWizard(o);
+          if (!o) {
+            setWizardProjectId(null);
+            setChoosingProject(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Criar nova arte</DialogTitle>
+          </DialogHeader>
+
+          {!currentUserId ? (
+            <div className="text-sm text-muted-foreground">
+              Você precisa estar logado para criar uma arte.
+            </div>
+          ) : choosingProject && !wizardProjectId ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Selecione um projeto para associar a arte:
+              </p>
+              <Select onValueChange={chooseProjectAndContinue}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Escolha um projeto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectsForChooser.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : wizardProjectId && currentUserId ? (
+            <ArteWizard
+              projetoId={wizardProjectId}
+              userId={currentUserId}
+              onFinished={() => {
+                setOpenWizard(false);
+                setWizardProjectId(null);
+                router.refresh();
+              }}
+            />
+          ) : (
+            <div className="text-sm text-muted-foreground">Preparando wizard...</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-/* ===================== Export default: página com Suspense ===================== */
+/* ===================== Export default ===================== */
 export default function ArtesPage() {
   return (
     <Suspense fallback={<ArtesPageFallback />}>
