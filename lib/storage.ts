@@ -1,27 +1,39 @@
 import { supabase } from "@/lib/supabaseClient";
 
-/** Tenta thumbnail; se não, cai no original */
-export async function getArtePreviewUrls(arquivoPath: string) {
-  const THUMB_BUCKET = "thumbnails";
-  const ARTE_BUCKET = "artes";
-  const norm = arquivoPath.replace(/^artes\//, "");
+const THUMB_BUCKET = "thumbnails";
+const ARTE_BUCKET = "artes";
 
-  const thumb = await supabase.storage.from(THUMB_BUCKET).createSignedUrl(norm, 3600);
+/** tenta thumbnail; se não, cai no original */
+export async function getArtePreviewUrls(
+  arquivoPath: string,
+  expiresInSeconds = 60 // padrão: 1 min
+) {
+  // tenta thumb (usa o mesmo path do arte, mas em outro bucket)
+  const thumb = await supabase.storage
+    .from(THUMB_BUCKET)
+    .createSignedUrl(arquivoPath, expiresInSeconds);
   if (!thumb.error && thumb.data?.signedUrl) {
     return { previewUrl: thumb.data.signedUrl, downloadUrl: thumb.data.signedUrl };
   }
 
-  const orig = await supabase.storage.from(ARTE_BUCKET).createSignedUrl(norm, 3600);
+  // fallback: original
+  const orig = await supabase.storage
+    .from(ARTE_BUCKET)
+    .createSignedUrl(arquivoPath, expiresInSeconds);
   if (!orig.error && orig.data?.signedUrl) {
     return { previewUrl: orig.data.signedUrl, downloadUrl: orig.data.signedUrl };
   }
 
-  return { previewUrl: null as string | null, downloadUrl: null as string | null };
+  return { previewUrl: null, downloadUrl: null };
 }
 
-export async function getArteDownloadUrl(arquivoPath: string) {
-  const norm = arquivoPath.replace(/^artes\//, "");
-  const { data, error } = await supabase.storage.from("artes").createSignedUrl(norm, 3600);
+export async function getArteDownloadUrl(
+  arquivoPath: string,
+  expiresInSeconds = 60 // padrão: 1 min
+) {
+  const { data, error } = await supabase.storage
+    .from(ARTE_BUCKET)
+    .createSignedUrl(arquivoPath, expiresInSeconds);
   if (error) throw error;
-  return data.signedUrl;
+  return data?.signedUrl ?? null;
 }

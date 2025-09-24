@@ -10,16 +10,12 @@ import { buildShareUrl } from "./helpers";
 type Props = {
   notificarAoEnviar: boolean;
   setNotificarAoEnviar: (b: boolean) => void;
-
   gerarLinkPublico: boolean;
   setGerarLinkPublico: (b: boolean) => void;
-
   somenteLeitura: boolean;
   setSomenteLeitura: (b: boolean) => void;
-
   expiraDias: number;
   setExpiraDias: (n: number) => void;
-
   preToken: string | null;
   setPreToken: (s: string | null) => void;
 };
@@ -32,7 +28,7 @@ export default function StepOptions({
   preToken, setPreToken,
 }: Props) {
 
-  const shareUrl = useMemo(() => buildShareUrl(preToken), [preToken]);
+  const shareUrl = useMemo(() => (preToken ? buildShareUrl(preToken) : ""), [preToken]);
 
   function handleToggle(checked: boolean) {
     setGerarLinkPublico(checked);
@@ -47,7 +43,18 @@ export default function StepOptions({
 
   async function copyToClipboard() {
     if (!shareUrl) return;
-    try { await navigator.clipboard.writeText(shareUrl); } catch {}
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = shareUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+    } catch {}
   }
 
   return (
@@ -82,8 +89,9 @@ export default function StepOptions({
                   max={365}
                   value={expiraDias}
                   onChange={(e) => {
-                    const n = Number(e.target.value || 7);
-                    setExpiraDias(Math.max(1, n));
+                    const n = Number.parseInt(e.target.value, 10);
+                    const safe = Number.isFinite(n) ? n : 7;
+                    setExpiraDias(Math.min(365, Math.max(1, safe)));
                   }}
                 />
               </div>
@@ -100,6 +108,9 @@ export default function StepOptions({
                   <Input readOnly value={shareUrl} className="flex-1" />
                   <Button type="button" variant="outline" size="icon" onClick={copyToClipboard} title="Copiar">
                     <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => shareUrl && window.open(shareUrl, "_blank")}>
+                    Abrir
                   </Button>
                 </div>
                 <div className="text-[11px] text-muted-foreground flex items-center gap-1">

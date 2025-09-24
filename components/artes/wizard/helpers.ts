@@ -42,11 +42,16 @@ export function randomId() {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// components/artes/wizard/helpers.ts
 export function buildShareUrl(token: string | null) {
   if (!token) return "";
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return `${origin}/share/${token}`;
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL || // ex.: https://viu-frontend.vercel.app
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const prefix = "/l"; 
+  return `${base}${prefix}/${token}`;
 }
+
 
 export function parseStorageError(e: any): string {
   const msg = e?.message || e?.error || e?.code || "Erro inesperado";
