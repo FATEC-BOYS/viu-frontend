@@ -1,13 +1,17 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   eslint: {
-    ignoreDuringBuilds: true, // 👈 isso faz o deploy não travar por causa de lint
+    ignoreDuringBuilds: true,
   },
-  // opcional, se o TypeScript também estiver barrando o build:
-  // typescript: {
-  //   ignoreBuildErrors: true,
-  // },
+  async rewrites() {
+    return [
+      { source: "/shared/:token", destination: "/l/:token" },
+    ];
+  },
+  // Se TypeScript estiver travando o build, descomente:
+  // typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;
