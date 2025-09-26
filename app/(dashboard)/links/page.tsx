@@ -206,7 +206,7 @@ function LinkCard({
     return `Criado em ${formatDate(dateString)}`;
   };
 
-  const linkUrl = `${window.location.origin}/shared/${link.token}`;
+  const linkUrl = `${window.location.origin}/l/${link.token}`;
   const isExpired = !!(link.expira_em && new Date(link.expira_em) < new Date());
 
   const getTitle = () => {
