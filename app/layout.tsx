@@ -16,10 +16,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      <body className={inter.className}>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
+<html lang="pt-BR">
+  <body data-skin="viu-cyber">{children}</body>
+</html>
+
   );
 }
