@@ -1,23 +1,52 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getArteDetail, type ArteDetail } from "@/lib/artes";
+import { toast } from "sonner";
+import {
+  getArteDetail,
+  type ArteDetail,
+  deleteArteById,
+} from "@/lib/artes";
 import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Loader2, Download } from "lucide-react";
+import { Loader2, Download, Trash2, PlusCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 
-type TabKey = "resumo" | "feedbacks" | "tarefas" | "aprovacoes";
+import NovaVersaoDialog from "./NovaVersaoDialog";
+import VersoesList from "./VersoesList";
+
+type TabKey = "resumo" | "feedbacks" | "tarefas" | "aprovacoes" | "versoes";
 
 export function ArteQuickLookSheet({
   open,
   onOpenChange,
   arteId,
   defaultTab = "resumo",
-  onCreateTask, // opcional: callback externo
+  onCreateTask,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -33,6 +62,13 @@ export function ArteQuickLookSheet({
   // preview & download
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  // excluir
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // nova versão
+  const [novaVersaoOpen, setNovaVersaoOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !arteId) return;
@@ -59,14 +95,20 @@ export function ArteQuickLookSheet({
     })();
   }, [open, arteId]);
 
-  const tabsKey = useMemo(() => `${arteId ?? "none"}:${defaultTab}`, [arteId, defaultTab]);
+  const tabsKey = useMemo(
+    () => `${arteId ?? "none"}:${defaultTab}`,
+    [arteId, defaultTab]
+  );
 
-  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
-  const fmtDateTime = (d?: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
+  const fmtDate = (d?: string | null) =>
+    d ? new Date(d).toLocaleDateString("pt-BR") : "—";
 
   const statusBadge = (status?: string) => {
     if (!status) return <Badge variant="outline">—</Badge>;
-    const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+    const map: Record<
+      string,
+      { variant: "default" | "secondary" | "destructive" | "outline"; label: string }
+    > = {
       EM_ANALISE: { variant: "outline", label: "Em Análise" },
       APROVADO: { variant: "default", label: "Aprovado" },
       REJEITADO: { variant: "destructive", label: "Rejeitado" },
@@ -77,10 +119,19 @@ export function ArteQuickLookSheet({
     return <Badge variant={conf.variant}>{conf.label}</Badge>;
   };
 
-  function handleCreateTask() {
-    if (!arteId) return;
-    if (onCreateTask) onCreateTask(arteId);
-    else router.push(`/tarefas/nova?arte=${arteId}`);
+  async function reallyDelete() {
+    if (!detail?.id) return;
+    try {
+      setDeleting(true);
+      await deleteArteById(detail.id, { storageMode: "all" });
+      toast.success("Arte excluída.");
+      onOpenChange(false);
+      router.refresh?.();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao excluir a arte.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   // Renderiza o preview conforme o tipo
@@ -95,7 +146,11 @@ export function ArteQuickLookSheet({
       return (
         <div className="aspect-video border rounded-md overflow-hidden bg-muted">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt={detail?.nome ?? "preview"} className="w-full h-full object-contain" />
+          <img
+            src={previewUrl}
+            alt={detail?.nome ?? "preview"}
+            className="w-full h-full object-contain"
+          />
         </div>
       );
     }
@@ -128,11 +183,14 @@ export function ArteQuickLookSheet({
       );
     }
 
-    // Fallback
     return (
       <div className="aspect-video border rounded-md grid place-items-center text-sm text-muted-foreground">
         {downloadUrl ? (
-          <Button variant="outline" size="sm" onClick={() => window.open(downloadUrl!, "_blank")}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(downloadUrl!, "_blank")}
+          >
             <Download className="h-4 w-4 mr-2" />
             Baixar arquivo
           </Button>
@@ -146,13 +204,36 @@ export function ArteQuickLookSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[560px] p-0">
-        <SheetHeader className="p-4 border-b">
-          <SheetTitle>{detail?.nome ?? (loading ? "Carregando..." : "—")}</SheetTitle>
-          {detail ? (
-            <span className="text-sm text-muted-foreground">
-              {detail?.projeto?.nome ?? "Projeto —"} • {detail?.projeto?.cliente?.nome ?? "Cliente —"}
-            </span>
-          ) : null}
+        <SheetHeader className="p-4 border-b flex justify-between items-center">
+          <div>
+            <SheetTitle>{detail?.nome ?? (loading ? "Carregando..." : "—")}</SheetTitle>
+            {detail ? (
+              <span className="text-sm text-muted-foreground">
+                {detail?.projeto?.nome ?? "Projeto —"} •{" "}
+                {detail?.projeto?.cliente?.nome ?? "Cliente —"}
+              </span>
+            ) : null}
+          </div>
+          {detail && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setNovaVersaoOpen(true)}
+              >
+                <PlusCircle className="h-4 w-4 mr-1" /> Nova versão
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmOpen(true)}
+                disabled={deleting}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Excluir
+              </Button>
+            </div>
+          )}
         </SheetHeader>
 
         {loading ? (
@@ -160,19 +241,23 @@ export function ArteQuickLookSheet({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : detail ? (
-          <Tabs key={tabsKey} defaultValue={defaultTab} className="h-[calc(100vh-64px)] flex flex-col">
+          <Tabs
+            key={tabsKey}
+            defaultValue={defaultTab}
+            className="h-[calc(100vh-64px)] flex flex-col"
+          >
             <div className="p-4 border-b">
               <TabsList>
                 <TabsTrigger value="resumo">Resumo</TabsTrigger>
                 <TabsTrigger value="feedbacks">Feedbacks</TabsTrigger>
                 <TabsTrigger value="tarefas">Tarefas</TabsTrigger>
                 <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+                <TabsTrigger value="versoes">Versões</TabsTrigger>
               </TabsList>
             </div>
 
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
-                {/* RESUMO */}
                 <TabsContent value="resumo" className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{detail?.tipo ?? "—"}</Badge>
@@ -201,89 +286,55 @@ export function ArteQuickLookSheet({
                       <div className="text-muted-foreground">Criado em</div>
                       <div className="font-medium">{fmtDate(detail?.criado_em)}</div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Atualizado em</div>
-                      <div className="font-medium">{fmtDate(detail?.atualizado_em)}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Tamanho</div>
-                      <div className="font-medium">
-                        {typeof detail?.tamanho === "number"
-                          ? `${(detail.tamanho / 1024 / 1024).toFixed(2)} MB`
-                          : "—"}
-                      </div>
-                    </div>
                   </div>
 
                   <PreviewBlock />
                 </TabsContent>
 
-                {/* FEEDBACKS (lista simples por enquanto) */}
-                <TabsContent value="feedbacks" className="space-y-3">
-                  {(detail?.feedbacks?.length ?? 0) === 0 ? (
-                    <p className="text-sm text-muted-foreground">Sem feedbacks.</p>
-                  ) : (
-                    detail!.feedbacks!.map((f) => (
-                      <div key={f.id} className="border rounded-md p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{f?.autor?.nome ?? "—"}</div>
-                          <div className="text-xs text-muted-foreground">{fmtDateTime(f?.criado_em)}</div>
-                        </div>
-                        {f?.conteudo ? <p className="text-sm mt-1 whitespace-pre-wrap">{f.conteudo}</p> : null}
-                      </div>
-                    ))
-                  )}
-                </TabsContent>
-
-                {/* TAREFAS */}
-                <TabsContent value="tarefas" className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium">Tarefas</h4>
-                    <Button size="sm" onClick={handleCreateTask}>Criar tarefa</Button>
-                  </div>
-
-                  {(detail?.tarefas?.length ?? 0) === 0 ? (
-                    <p className="text-sm text-muted-foreground">Sem tarefas vinculadas.</p>
-                  ) : (
-                    detail!.tarefas!.map((t) => (
-                      <div key={t.id} className="border rounded-md p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{t?.titulo ?? "—"}</div>
-                          <Badge variant="outline">{t?.status ?? "—"}</Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Resp.: {t?.responsavel?.nome ?? "—"}
-                          {t?.prazo ? ` • Prazo: ${fmtDate(t.prazo)}` : ""}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </TabsContent>
-
-                {/* APROVAÇÕES */}
-                <TabsContent value="aprovacoes" className="space-y-3">
-                  {(detail?.aprovacoes?.length ?? 0) === 0 ? (
-                    <p className="text-sm text-muted-foreground">Sem aprovações registradas.</p>
-                  ) : (
-                    detail!.aprovacoes!.map((ap) => (
-                      <div key={ap.id} className="border rounded-md p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{ap?.aprovador?.nome ?? "—"}</div>
-                          {statusBadge(ap?.status)}
-                        </div>
-                        {ap?.comentario ? <p className="text-sm mt-1 whitespace-pre-wrap">{ap.comentario}</p> : null}
-                        <div className="text-xs text-muted-foreground">{fmtDateTime(ap?.criado_em)}</div>
-                      </div>
-                    ))
-                  )}
+                <TabsContent value="versoes">
+                  <VersoesList arteId={detail.id} />
                 </TabsContent>
               </div>
             </ScrollArea>
           </Tabs>
         ) : (
-          <div className="p-4 text-sm text-destructive">Não foi possível carregar os detalhes.</div>
+          <div className="p-4 text-sm text-destructive">
+            Não foi possível carregar os detalhes.
+          </div>
         )}
       </SheetContent>
+
+      {/* Confirm delete */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir arte?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. Vai excluir a arte, feedbacks,
+              aprovações e versões relacionadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={reallyDelete} disabled={deleting}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Nova versão */}
+      {detail && (
+        <NovaVersaoDialog
+          open={novaVersaoOpen}
+          onOpenChange={setNovaVersaoOpen}
+          arte={detail}
+          onCreated={() => {
+            toast.success("Nova versão criada");
+            router.refresh();
+          }}
+        />
+      )}
     </Sheet>
   );
 }

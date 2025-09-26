@@ -11,34 +11,25 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Home,
-  FolderOpen,
-  FileImage,
-  CheckSquare,
-  Users,
-  MessageSquare,
-  Bell,
-  BarChart3,
-  Clock,
-  Settings,
-  User,
-  Link as LinkIcon,
-  Plus,
-  Upload,
-  ChevronDown,
-  ChevronRight
+  Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
+  BarChart3, Clock, Settings, User, Link as LinkIcon, Plus, Upload,
+  ChevronDown, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
-// Tipos para contadores
+// pequeno hook para garantir que só aplicamos classes dinâmicas após montar
+function useMounted() {
+  const [m, setM] = useState(false);
+  useEffect(() => setM(true), []);
+  return m;
+}
+
 interface Contadores {
   tarefasPendentes: number;
   feedbacksPendentes: number;
   notificacoesNaoLidas: number;
   projetsVencendo: number;
 }
-
-// Item de navegação
 interface NavItem {
   title: string;
   href: string;
@@ -46,8 +37,6 @@ interface NavItem {
   badge?: number;
   disabled?: boolean;
 }
-
-// Seção de navegação
 interface NavSection {
   title: string;
   items: NavItem[];
@@ -56,6 +45,8 @@ interface NavSection {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const mounted = useMounted();
+
   const [contadores, setContadores] = useState<Contadores>({
     tarefasPendentes: 0,
     feedbacksPendentes: 0,
@@ -64,17 +55,14 @@ export function Sidebar() {
   });
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
 
-  // Buscar contadores do banco
   useEffect(() => {
     const fetchContadores = async () => {
       try {
-        // Tarefas pendentes
         const { count: tarefasPendentes } = await supabase
           .from('tarefas')
           .select('*', { count: 'exact', head: true })
           .in('status', ['PENDENTE', 'EM_ANDAMENTO']);
 
-        // Feedbacks pendentes (últimos 7 dias)
         const dataLimite = new Date();
         dataLimite.setDate(dataLimite.getDate() - 7);
         const { count: feedbacksPendentes } = await supabase
@@ -82,13 +70,11 @@ export function Sidebar() {
           .select('*', { count: 'exact', head: true })
           .gte('criado_em', dataLimite.toISOString());
 
-        // Notificações não lidas
         const { count: notificacoesNaoLidas } = await supabase
           .from('notificacoes')
           .select('*', { count: 'exact', head: true })
           .eq('lida', false);
 
-        // Projetos vencendo (próximos 7 dias)
         const dataFutura = new Date();
         dataFutura.setDate(dataFutura.getDate() + 7);
         const { count: projetsVencendo } = await supabase
@@ -109,112 +95,54 @@ export function Sidebar() {
     };
 
     fetchContadores();
-    
-    // Atualizar contadores a cada 5 minutos
     const interval = setInterval(fetchContadores, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Definir seções de navegação
   const navigationSections: NavSection[] = [
     {
       title: 'Principal',
       items: [
-        {
-          title: 'Dashboard',
-          href: '/dashboard',
-          icon: Home
-        },
-        {
-          title: 'Projetos',
-          href: '/projetos',
-          icon: FolderOpen,
-          badge: contadores.projetsVencendo > 0 ? contadores.projetsVencendo : undefined
-        },
-        {
-          title: 'Artes',
-          href: '/artes',
-          icon: FileImage
-        },
-        {
-          title: 'Tarefas',
-          href: '/tarefas',
-          icon: CheckSquare,
-          badge: contadores.tarefasPendentes
-        }
+        { title: 'Dashboard', href: '/dashboard', icon: Home },
+        { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo || undefined },
+        { title: 'Artes', href: '/artes', icon: FileImage },
+        { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes || undefined }
       ]
     },
     {
       title: 'Gestão',
       items: [
-        {
-          title: 'Clientes',
-          href: '/clientes',
-          icon: Users
-        },
-        {
-          title: 'Feedbacks',
-          href: '/feedbacks',
-          icon: MessageSquare,
-          badge: contadores.feedbacksPendentes
-        },
-        {
-          title: 'Notificações',
-          href: '/notificacoes',
-          icon: Bell,
-          badge: contadores.notificacoesNaoLidas
-        }
+        { title: 'Clientes', href: '/clientes', icon: Users },
+        { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes || undefined },
+        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas || undefined }
       ]
     },
     {
       title: 'Relatórios',
       collapsible: true,
       items: [
-        {
-          title: 'Status do sistema',
-          href: '/status',
-          icon: BarChart3
-        },
-        {
-          title: 'Prazos',
-          href: '/relatorios/prazos',
-          icon: Clock
-        }
+        { title: 'Status do sistema', href: '/status', icon: BarChart3 },
+        { title: 'Prazos', href: '/relatorios/prazos', icon: Clock }
       ]
     },
     {
       title: 'Configurações',
       collapsible: true,
       items: [
-        {
-          title: 'Perfil',
-          href: '/perfil',
-          icon: User
-        },
-        {
-          title: 'Links Compartilhados',
-          href: '/links',
-          icon: LinkIcon
-        },
-        {
-          title: 'Configurações',
-          href: '/configuracoes',
-          icon: Settings
-        }
+        { title: 'Perfil', href: '/perfil', icon: User },
+        { title: 'Links Compartilhados', href: '/links', icon: LinkIcon },
+        { title: 'Configurações', href: '/configuracoes', icon: Settings }
       ]
     }
   ];
 
-  // Toggle seção
   const toggleSection = (sectionTitle: string) => {
-    setSectionsCollapsed(prev => ({
-      ...prev,
-      [sectionTitle]: !prev[sectionTitle]
-    }));
+    setSectionsCollapsed(prev => ({ ...prev, [sectionTitle]: !prev[sectionTitle] }));
   };
 
-  // Verificar se item está ativo
+  // <<< mudança principal: só consideramos "ativo" DEPOIS de mounted >>>
   const isActive = (href: string) => {
+    if (!mounted) return false;
     if (href === '/dashboard') {
       return pathname === '/dashboard' || pathname === '/';
     }
@@ -229,7 +157,7 @@ export function Sidebar() {
         <p className="text-sm text-muted-foreground">Gestão de Projetos</p>
       </div>
 
-      {/* Ações Rápidas */}
+      {/* Ações Rápidas
       <div className="px-4 space-y-2">
         <Button className="w-full justify-start" size="sm">
           <Plus className="mr-2 h-4 w-4" />
@@ -239,7 +167,7 @@ export function Sidebar() {
           <Upload className="mr-2 h-4 w-4" />
           Upload Arte
         </Button>
-      </div>
+      </div> */}
 
       <Separator className="my-4" />
 
@@ -252,7 +180,6 @@ export function Sidebar() {
 
             return (
               <div key={section.title}>
-                {/* Título da Seção */}
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {section.title}
@@ -260,24 +187,25 @@ export function Sidebar() {
                   {section.collapsible && (
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-4 w-4 p-0"
+                      size="icon"            
+                      className="h-6 w-6"
                       onClick={() => toggleSection(section.title)}
+                      aria-label={isCollapsed ? "Expandir seção" : "Recolher seção"}
                     >
                       {isCollapsed ? (
-                        <ChevronRight className="h-3 w-3" />
+                        <ChevronRight className="h-4 w-4" />
                       ) : (
-                        <ChevronDown className="h-3 w-3" />
+                        <ChevronDown className="h-4 w-4" />
                       )}
                     </Button>
                   )}
                 </div>
 
-                {/* Items da Seção */}
                 {showItems && (
                   <div className="space-y-1">
                     {section.items.map((item) => {
                       const Icon = item.icon;
+                      const active = isActive(item.href);
                       return (
                         <Link
                           key={item.href}
@@ -285,21 +213,18 @@ export function Sidebar() {
                           className={cn(
                             "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors",
                             "hover:bg-accent hover:text-accent-foreground",
-                            isActive(item.href)
-                              ? "bg-accent text-accent-foreground"
-                              : "text-muted-foreground",
+                            active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
                             item.disabled && "pointer-events-none opacity-50"
                           )}
+                          // evita warning visual isolado caso algo ainda mude após mount
+                          suppressHydrationWarning
                         >
                           <div className="flex items-center">
                             <Icon className="mr-3 h-4 w-4" />
                             {item.title}
                           </div>
                           {item.badge && item.badge > 0 && (
-                            <Badge 
-                              variant="secondary" 
-                              className="h-5 min-w-[20px] text-xs px-1.5"
-                            >
+                            <Badge variant="secondary" className="h-5 min-w-[20px] text-xs px-1.5">
                               {item.badge > 99 ? '99+' : item.badge}
                             </Badge>
                           )}
@@ -314,7 +239,6 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
 
-      {/* Footer */}
       <div className="p-4 border-t">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">

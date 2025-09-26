@@ -1,4 +1,6 @@
+// components/artes/ArteWizard.tsx
 "use client";
+
 import React, { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -8,8 +10,13 @@ import StepDetails from "./wizard/StepDetails";
 import StepUpload from "./wizard/StepUpload";
 import StepOptions from "./wizard/StepOptions";
 import {
-  Step, randomId, sanitizeFilename, parseStorageError, mimeMatchesSelection,
+  Step,
+  randomId,
+  sanitizeFilename,
+  parseStorageError,
+  mimeMatchesSelection,
 } from "./wizard/helpers";
+import { createSharedLink } from "../artes/_actions";
 
 export type ArteWizardProps = {
   projetoId: string;
@@ -18,7 +25,7 @@ export type ArteWizardProps = {
   onFinished?: (arteId: string) => void;
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB (igual ao bucket, ajuste se mudar bucket)
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 export default function ArteWizard({
   projetoId,
@@ -49,7 +56,10 @@ export default function ArteWizard({
   const [expiraDias, setExpiraDias] = useState<number>(7);
   const [preToken, setPreToken] = useState<string | null>(null);
 
-  const canStep1 = useMemo(() => !!projetoId && !!userId && nome.trim().length > 0, [projetoId, userId, nome]);
+  const canStep1 = useMemo(
+    () => !!projetoId && !!userId && nome.trim().length > 0,
+    [projetoId, userId, nome]
+  );
   const canStep2 = useMemo(() => !!file, [file]);
 
   function next(s: Step) {
@@ -72,13 +82,14 @@ export default function ArteWizard({
       setErr("Selecione um arquivo.");
       return;
     }
+
     // validação de tipo e tamanho
     if (!mimeMatchesSelection(mime, file)) {
       setErr(`Tipo/Extensão do arquivo não confere com o formato escolhido.`);
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setErr(`Arquivo excede 20MB (${(file.size/1024/1024).toFixed(1)}MB).`);
+      setErr(`Arquivo excede 20MB (${(file.size / 1024 / 1024).toFixed(1)}MB).`);
       return;
     }
 
@@ -92,14 +103,16 @@ export default function ArteWizard({
       const path = `${projetoId}/${newArteId}/v${versao}/${safeName}`;
       const finalMime = file.type || mime || "application/octet-stream";
 
-      // upload 1º
-      const { error: upErr } = await supabase.storage.from(bucketName).upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+      // 1) upload no Storage
+      const { error: upErr } = await supabase.storage
+        .from(bucketName)
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
       if (upErr) throw upErr;
 
-      // insert em artes
+      // 2) insert na tabela artes
       const { data, error: insErr } = await supabase
         .from("artes")
         .insert({
@@ -108,7 +121,7 @@ export default function ArteWizard({
           autor_id: userId,
           nome: nome.trim(),
           descricao: descricao.trim() || null,
-          arquivo: path,
+          arquivo: path, // 👈 guardando o path no bucket
           tipo: finalMime,
           tamanho: file.size,
           versao,
@@ -122,34 +135,38 @@ export default function ArteWizard({
       next(3);
     } catch (e: any) {
       console.error(e);
-      setErr(`Falha ao enviar arquivo ou salvar a arte: ${parseStorageError(e)}`);
+      setErr(
+        `Falha ao enviar arquivo ou salvar a arte: ${parseStorageError(e)}`
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  /* ---------- Step 3: finalizar ---------- */
+  /* ---------- Step 3: finalizar (usa Server Action p/ criar o link) ---------- */
   async function finalizeCreate() {
     setBusy(true);
     setErr(null);
     try {
       if (!arteId) throw new Error("arteId ausente. Tente novamente.");
 
-      // link público opcional
-      if (gerarLinkPublico && preToken) {
-        const expira = new Date();
-        expira.setDate(expira.getDate() + Math.max(1, expiraDias));
-        const { error: linkErr } = await supabase.from("link_compartilhado").insert({
+      // Cria link público NO SERVIDOR (bypass RLS)
+      if (gerarLinkPublico) {
+        if (!preToken) {
+          throw new Error(
+            "Token do link ausente. Ative 'Gerar link público' para criar um token."
+          );
+        }
+
+        await createSharedLink({
           token: preToken,
-          tipo: "ARTE",
-          arte_id: arteId,
-          expira_em: expira.toISOString(),
-          somente_leitura: !!somenteLeitura,
+          arteId,
+          expiraDias,
+          somenteLeitura,
         });
-        if (linkErr) throw linkErr;
       }
 
-      // notificação (best-effort)
+      // Notificação (best-effort; pode ficar no client)
       if (notificarAoEnviar) {
         await supabase.from("notificacoes").insert({
           titulo: "Arte criada",
@@ -171,11 +188,29 @@ export default function ArteWizard({
 
   return (
     <div className="w-full">
-      {/* stepper */}
+      {/* Stepper */}
       <div className="mb-4 grid grid-cols-3 gap-2 text-xs">
-        <div className={`rounded-full py-1 text-center ${step >= 1 ? "bg-primary text-primary-foreground" : "bg-muted"}`}>1. Detalhes</div>
-        <div className={`rounded-full py-1 text-center ${step >= 2 ? "bg-primary text-primary-foreground" : "bg-muted"}`}>2. Upload</div>
-        <div className={`rounded-full py-1 text-center ${step >= 3 ? "bg-primary text-primary-foreground" : "bg-muted"}`}>3. Opções</div>
+        <div
+          className={`rounded-full py-1 text-center ${
+            step >= 1 ? "bg-primary text-primary-foreground" : "bg-muted"
+          }`}
+        >
+          1. Detalhes
+        </div>
+        <div
+          className={`rounded-full py-1 text-center ${
+            step >= 2 ? "bg-primary text-primary-foreground" : "bg-muted"
+          }`}
+        >
+          2. Upload
+        </div>
+        <div
+          className={`rounded-full py-1 text-center ${
+            step >= 3 ? "bg-primary text-primary-foreground" : "bg-muted"
+          }`}
+        >
+          3. Opções
+        </div>
       </div>
 
       {err && (
@@ -231,10 +266,14 @@ export default function ArteWizard({
         )}
       </div>
 
-      {/* footer */}
+      {/* Footer */}
       <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-2 border-t bg-background p-4">
         {step > 1 ? (
-          <Button variant="secondary" onClick={() => setStep((step - 1) as Step)} disabled={busy}>
+          <Button
+            variant="secondary"
+            onClick={() => setStep((step - 1) as Step)}
+            disabled={busy}
+          >
             Voltar
           </Button>
         ) : (
@@ -247,12 +286,14 @@ export default function ArteWizard({
             Continuar
           </Button>
         )}
+
         {step === 2 && (
           <Button onClick={createArteWithUpload} disabled={busy || !canStep2}>
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Continuar
           </Button>
         )}
+
         {step === 3 && (
           <Button onClick={finalizeCreate} disabled={busy}>
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

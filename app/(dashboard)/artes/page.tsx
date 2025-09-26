@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 
-import { listArtesOverview, type ArteOverview } from "@/lib/artes";
+import { listArtesOverview, type ArteOverview, type ArteStatus } from "@/lib/artes";
 import { ArteQuickLookSheet } from "@/components/artes/ArteQuickLookSheet";
 import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
 import ArteWizard from "@/components/artes/ArteWizard";
@@ -125,6 +125,18 @@ function TipoBadge({ tipo }: { tipo: string }) {
     ICONE: { label: "Ícone", color: "bg-cyan-100 text-cyan-800" },
     INTERFACE: { label: "Interface", color: "bg-indigo-100 text-indigo-800" },
     ANIMACAO: { label: "Animação", color: "bg-red-100 text-red-800" },
+    ILUSTRACAO: { label: "Ilustração", color: "bg-yellow-100 text-yellow-800" },
+    FOTOGRAFIA: { label: "Fotografia", color: "bg-gray-100 text-gray-800" },
+    INFOGRAFICO: { label: "Infográfico", color: "bg-teal-100 text-teal-800" },
+    APRESENTACAO: { label: "Apresentação", color: "bg-lime-100 text-lime-800" },
+    MATERIAL_IMPRESSO: { label: "Impresso", color: "bg-amber-100 text-amber-800" },
+    SOCIAL_MEDIA: { label: "Social Media", color: "bg-rose-100 text-rose-800" },
+    BRANDING: { label: "Branding", color: "bg-violet-100 text-violet-800" },
+    PACKAGING: { label: "Packaging", color: "bg-fuchsia-100 text-fuchsia-800" },
+    UI_KIT: { label: "UI Kit", color: "bg-sky-100 text-sky-800" },
+    PRODUTO: { label: "Produto", color: "bg-emerald-100 text-emerald-800" },
+    "3D": { label: "3D", color: "bg-stone-100 text-stone-800" },
+    VETOR: { label: "Vetor", color: "bg-zinc-100 text-zinc-800" },
   };
   const config =
     tipoConfig[tipo as keyof typeof tipoConfig] ??
@@ -195,7 +207,7 @@ function ArteCard({
             <p className="text-sm text-muted-foreground">
               <button
                 className="underline hover:opacity-80"
-                onClick={() => onFilter("projeto", arte.projeto_nome)}
+                onClick={() => arte.projeto_nome && onFilter("projeto", arte.projeto_nome)}
               >
                 {arte.projeto_nome}
               </button>
@@ -204,7 +216,7 @@ function ArteCard({
               Cliente:{" "}
               <button
                 className="underline hover:opacity-80"
-                onClick={() => onFilter("cliente", arte.cliente_nome)}
+                onClick={() => arte.cliente_nome && onFilter("cliente", arte.cliente_nome)}
               >
                 {arte.cliente_nome}
               </button>
@@ -254,7 +266,7 @@ function ArteCard({
             <p className="font-medium">
               <button
                 className="underline hover:opacity-80"
-                onClick={() => onFilter("autor", arte.autor_nome)}
+                onClick={() => arte.autor_nome && onFilter("autor", arte.autor_nome)}
               >
                 {arte.autor_nome}
               </button>
@@ -272,7 +284,7 @@ function ArteCard({
         {/* Estatísticas */}
         <div className="flex items-center justify-between pt-2 border-t">
           <div className="flex items-center gap-3 text-sm">
-            {arte.feedbacks_count > 0 && (
+            {(arte.feedbacks_count ?? 0) > 0 && (
               <button
                 className="flex items-center gap-1 text-muted-foreground hover:underline"
                 onClick={() => onQuickLook(arte.id, "feedbacks")}
@@ -366,7 +378,7 @@ function ArtesPageInner() {
     setError(null);
     listArtesOverview({
       q: searchTerm,
-      status: statusFilter,
+      status: statusFilter as ArteStatus | "todos",
       tipo: tipoFilter,
       projeto: projetoFilter,
       cliente: clienteFilter,
@@ -394,12 +406,12 @@ function ArtesPageInner() {
   ]);
 
   // Facetas dinâmicas (com base no resultado atual)
-  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome))).map(
+  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome).filter((p): p is string => !!p))).map(
     (nome, idx) => ({ id: String(idx), nome }),
   );
   const tipos = Array.from(new Set(rows.map((a) => a.tipo)));
-  const clientes = Array.from(new Set(rows.map((a) => a.cliente_nome)));
-  const autores = Array.from(new Set(rows.map((a) => a.autor_nome)));
+  const clientes = Array.from(new Set(rows.map((a) => a.cliente_nome).filter((c): c is string => !!c)));
+  const autores = Array.from(new Set(rows.map((a) => a.autor_nome).filter((a): a is string => !!a)));
 
   const estatisticas = {
     total: rows.length,
