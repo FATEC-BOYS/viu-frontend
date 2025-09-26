@@ -1,13 +1,13 @@
-// app/l/[token]/viewer/FeedbackViewer.tsx
+// app/l/[token]/viewer/_components/FeedbackViewer.tsx
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState } from "react";
 import clsx from "clsx";
-import { saveFeedback } from "../_actions"; // server action abaixo
+import { saveFeedback, createGuestUser } from "../_actions";
 
 type Arte = {
   id: string;
-  nome: string; 
+  nome: string;
   arquivo: string; // URL preview
   largura_px?: number | null;
   altura_px?: number | null;
@@ -22,9 +22,16 @@ type Feedback = {
   posicao_y: number | null;
   posicao_x_abs: number | null;
   posicao_y_abs: number | null;
-  status: "ABERTO"|"EM_ANALISE"|"RESOLVIDO"|"ARQUIVADO";
+  status: "ABERTO" | "EM_ANALISE" | "RESOLVIDO" | "ARQUIVADO";
   criado_em: string;
   autor_id: string;
+};
+
+type Props = {
+  arte: Arte;
+  initialFeedbacks: Feedback[];
+  readOnly: boolean;
+  token: string;
 };
 
 export default function FeedbackViewer({
@@ -32,12 +39,7 @@ export default function FeedbackViewer({
   initialFeedbacks,
   readOnly,
   token,
-}: {
-  arte: Arte;
-  initialFeedbacks: Feedback[];
-  readOnly: boolean;
-  token: string;
-}) {
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [feedbacks, setFeedbacks] = useState(initialFeedbacks);
@@ -46,9 +48,8 @@ export default function FeedbackViewer({
   const canPin = !readOnly;
 
   function clientToImageCoords(e: React.MouseEvent) {
-    const wrap = wrapRef.current;
     const img = imgRef.current;
-    if (!wrap || !img) return null;
+    if (!img) return null;
 
     const rect = img.getBoundingClientRect();
     const xAbs = e.clientX - rect.left;
@@ -60,7 +61,6 @@ export default function FeedbackViewer({
     const xRel = rect.width > 0 ? clampedX / rect.width : 0;
     const yRel = rect.height > 0 ? clampedY / rect.height : 0;
 
-    // absolutos em px considerando o tamanho exibido (não o natural)
     return {
       rel: { x: Number(xRel.toFixed(6)), y: Number(yRel.toFixed(6)) },
       abs: { x: Math.round(clampedX), y: Math.round(clampedY) },
@@ -72,7 +72,25 @@ export default function FeedbackViewer({
     const coords = clientToImageCoords(e);
     if (!coords) return;
 
-    const conteudo = window.prompt("Descreva o feedback (objetivo, impacto e sugestão):");
+    // recupera ou cria cliente
+    let authorId: string | null = localStorage.getItem("viu-author-id");
+    if (!authorId) {
+      const nome = window.prompt("Digite seu nome:");
+      const email = window.prompt("Digite seu email:");
+      if (!nome || !email) return;
+
+      const newUser = await createGuestUser({ nome, email });
+      if (!newUser) return;
+
+      authorId = newUser.id;
+      localStorage.setItem("viu-author-id", authorId);
+    }
+
+    if (!authorId) return;
+
+    const conteudo = window.prompt(
+      "Descreva o feedback (objetivo, impacto e sugestão):"
+    );
     if (!conteudo) return;
 
     const payload = {
@@ -84,13 +102,13 @@ export default function FeedbackViewer({
       posicao_y: coords.rel.y,
       posicao_x_abs: coords.abs.x,
       posicao_y_abs: coords.abs.y,
+      authorId,
     };
 
     const created = await saveFeedback(payload);
     if (created) setFeedbacks((prev) => [created, ...prev]);
   }
 
-  // posição do pin: usa % para manter alinhado mesmo com zoom/resize
   function pinStyle(f: Feedback) {
     const left = (Number(f.posicao_x ?? 0) * 100).toFixed(4) + "%";
     const top = (Number(f.posicao_y ?? 0) * 100).toFixed(4) + "%";
@@ -104,10 +122,24 @@ export default function FeedbackViewer({
           Clique na arte para marcar um ponto e deixar feedback.
         </div>
         <div className="flex items-center gap-2">
-          <button className="px-2 py-1 border rounded" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>–</button>
-          <div className="text-sm w-10 text-center">{Math.round(zoom * 100)}%</div>
-          <button className="px-2 py-1 border rounded" onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
-          <button className="px-2 py-1 border rounded" onClick={() => setZoom(1)}>Fit</button>
+          <button
+            className="px-2 py-1 border rounded"
+            onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
+          >
+            –
+          </button>
+          <div className="text-sm w-10 text-center">
+            {Math.round(zoom * 100)}%
+          </div>
+          <button
+            className="px-2 py-1 border rounded"
+            onClick={() => setZoom((z) => Math.min(3, z + 0.1))}
+          >
+            +
+          </button>
+          <button className="px-2 py-1 border rounded" onClick={() => setZoom(1)}>
+            Fit
+          </button>
         </div>
       </div>
 
@@ -130,21 +162,23 @@ export default function FeedbackViewer({
           />
 
           {/* pins */}
-          {feedbacks.map((f, i) => (
-            (f.posicao_x != null && f.posicao_y != null) && (
-              <div
-                key={f.id}
-                className={clsx(
-                  "absolute z-10 -translate-x-1/2 -translate-y-full",
-                  "px-2 py-1 text-xs rounded-full bg-black/80 text-white"
-                )}
-                style={pinStyle(f)}
-                title={f.conteudo}
-              >
-                {feedbacks.length - i}
-              </div>
-            )
-          ))}
+          {feedbacks.map(
+            (f, i) =>
+              f.posicao_x != null &&
+              f.posicao_y != null && (
+                <div
+                  key={f.id}
+                  className={clsx(
+                    "absolute z-10 -translate-x-1/2 -translate-y-full",
+                    "px-2 py-1 text-xs rounded-full bg-black/80 text-white"
+                  )}
+                  style={pinStyle(f)}
+                  title={f.conteudo}
+                >
+                  {feedbacks.length - i}
+                </div>
+              )
+          )}
         </div>
       </div>
     </div>

@@ -4,6 +4,33 @@
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { randomUUID } from "crypto";
 
+/** Tipagem básica do usuário cliente */
+export type GuestUser = {
+  id: string;
+  nome: string;
+  email: string;
+  tipo: "CLIENTE";
+};
+
+export async function createGuestUser(
+  input: { nome: string; email: string }
+): Promise<GuestUser | null> {
+  const supabase = getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .insert({
+      nome: input.nome,
+      email: input.email,
+      tipo: "CLIENTE",
+    })
+    .select()
+    .single<GuestUser>();
+
+  if (error) return null;
+  return data;
+}
+
 export async function saveFeedback(input: {
   token: string;
   arteId: string;
@@ -13,6 +40,7 @@ export async function saveFeedback(input: {
   posicao_y: number;
   posicao_x_abs: number;
   posicao_y_abs: number;
+  authorId: string;
 }) {
   const supabase = getSupabaseServer();
 
@@ -25,23 +53,18 @@ export async function saveFeedback(input: {
   if (!link || link.somente_leitura) return null;
   if (link.expira_em && new Date(link.expira_em) < new Date()) return null;
 
-  const relX = Math.max(0, Math.min(1, Number(input.posicao_x)));
-  const relY = Math.max(0, Math.min(1, Number(input.posicao_y)));
-  const absX = Math.max(0, Math.round(Number(input.posicao_x_abs)));
-  const absY = Math.max(0, Math.round(Number(input.posicao_y_abs)));
-
   const { data, error } = await supabase
     .from("feedbacks")
     .insert({
       conteudo: String(input.conteudo ?? "").slice(0, 2000),
       tipo: "TEXTO",
       arquivo: null,
-      posicao_x: relX,
-      posicao_y: relY,
-      posicao_x_abs: absX,
-      posicao_y_abs: absY,
+      posicao_x: input.posicao_x,
+      posicao_y: input.posicao_y,
+      posicao_x_abs: input.posicao_x_abs,
+      posicao_y_abs: input.posicao_y_abs,
       arte_id: input.arteId,
-      autor_id: "00000000-0000-0000-0000-000000000000",
+      autor_id: input.authorId, // sempre real
       status: "ABERTO",
     })
     .select()
@@ -51,18 +74,15 @@ export async function saveFeedback(input: {
   return data;
 }
 
-/**
- * Server Actions NÃO suportam passar Blob/ArrayBuffer direto como argumento.
- * Use FormData com um File.
- */
 export async function saveAudioFeedback(formData: FormData) {
   const supabase = getSupabaseServer();
 
   const token = String(formData.get("token") ?? "");
   const arteId = String(formData.get("arteId") ?? "");
+  const authorId = String(formData.get("authorId") ?? ""); // 👈 obrigatório agora
   const file = formData.get("file") as File | null;
 
-  if (!token || !arteId || !file) return null;
+  if (!token || !arteId || !file || !authorId) return null;
 
   const { data: link } = await supabase
     .from("link_compartilhado")
@@ -73,7 +93,6 @@ export async function saveAudioFeedback(formData: FormData) {
   if (!link || link.somente_leitura) return null;
   if (link.expira_em && new Date(link.expira_em) < new Date()) return null;
 
-  // upload
   const filename = `${randomUUID()}.webm`;
   const { data: up, error: upErr } = await supabase.storage
     .from("uploads")
@@ -98,7 +117,7 @@ export async function saveAudioFeedback(formData: FormData) {
       posicao_x_abs: null,
       posicao_y_abs: null,
       arte_id: arteId,
-      autor_id: "00000000-0000-0000-0000-000000000000",
+      autor_id: authorId, // sempre real
       status: "ABERTO",
     })
     .select()
