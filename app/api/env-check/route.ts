@@ -1,16 +1,14 @@
-import type { NextRequest } from "next/server";
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   return new Response(
     JSON.stringify(
       {
         hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
         hasAnon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-        names: Object.keys(process.env).filter((k) => k.includes("SUPABASE")),
+        names: Object.keys(process.env).filter(k => k.includes("SUPABASE")),
       },
       null,
       2
