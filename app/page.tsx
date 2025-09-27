@@ -1,5 +1,5 @@
 // app/page.tsx
-'use client';
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -46,12 +46,12 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             {!isAuthed ? (
               <>
-                <Link href="/login">
-                  <Button variant="outline">Entrar</Button>
-                </Link>
-                <Link href="/cadastro">
-                  <Button>Criar Conta</Button>
-                </Link>
+                <Button variant="outline" asChild>
+                  <Link href="/login">Entrar</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/cadastro">Criar Conta</Link>
+                </Button>
               </>
             ) : (
               <>
@@ -70,7 +70,6 @@ export default function HomePage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-16">
         <div className="space-y-16">
-
           {/* Hero Section */}
           <section
             className="
@@ -99,11 +98,12 @@ export default function HomePage() {
                   alterações.
                 </p>
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                  <Link href={isAuthed ? "/dashboard" : "/cadastro"} className="inline-flex">
-                    <Button size="lg" className="w-full sm:w-auto bg-card text-foreground hover:bg-card/90">
+                  <Button size="lg" className="w-full sm:w-auto bg-card text-foreground hover:bg-card/90" asChild>
+                    <Link href={isAuthed ? "/dashboard" : "/cadastro"}>
                       {isAuthed ? "Abrir Dashboard" : "Começar agora"}
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
+
                   <Button
                     size="lg"
                     variant="secondary"
@@ -147,22 +147,13 @@ export default function HomePage() {
               </p>
             </div>
             <div className="grid md:grid-cols-3 gap-6">
-              <Feature
-                icon={<MessageSquareText className="size-5" />}
-                title="Feedback contextual"
-              >
+              <Feature icon={<MessageSquareText className="size-5" />} title="Feedback contextual">
                 Clientes comentam com texto ou gravam áudio diretamente na tela da arte.
               </Feature>
-              <Feature
-                icon={<Mic className="size-5" />}
-                title="Gravação de áudio integrada"
-              >
+              <Feature icon={<Mic className="size-5" />} title="Gravação de áudio integrada">
                 Capture instruções rápidas sem sair do navegador, com reprodução e download.
               </Feature>
-              <Feature
-                icon={<ShieldCheck className="size-5" />}
-                title="Controle de versões e aprovação"
-              >
+              <Feature icon={<ShieldCheck className="size-5" />} title="Controle de versões e aprovação">
                 Acompanhe status de cada versão e aprove alterações com segurança.
               </Feature>
             </div>
@@ -186,12 +177,12 @@ export default function HomePage() {
               </div>
               <ul className="grid gap-4 text-sm">
                 {[
-                  'Lista de projetos e artes por versão',
-                  'Tela de feedback com texto e áudio',
-                  'Status: Em análise, Revisão, Aprovado',
-                  'Links compartilháveis somente leitura',
-                  'Gestão completa de clientes e projetos',
-                  'Notificações em tempo real',
+                  "Lista de projetos e artes por versão",
+                  "Tela de feedback com texto e áudio",
+                  "Status: Em análise, Revisão, Aprovado",
+                  "Links compartilháveis somente leitura",
+                  "Gestão completa de clientes e projetos",
+                  "Notificações em tempo real",
                 ].map((t) => (
                   <li key={t} className="flex items-start gap-3">
                     <span className="mt-1 size-2 rounded-full bg-primary flex-shrink-0" />
@@ -236,16 +227,10 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Footer */}
-<<<<<<< HEAD
+      {/* Footer (corrigido, sem conflitos de merge) */}
       <footer className="border-t border-border bg-muted/30">
         <div className="container mx-auto px-4 py-12">
           <div className="grid md:grid-cols-4 gap-8">
-=======
-      <footer className="border-t bg-muted/30">
-       <div className="container mx-auto px-4 py-12">
-         {/*  <div className="grid md:grid-cols-4 gap-8">
->>>>>>> b323ccc (Ajusta página inicial)
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
@@ -311,13 +296,9 @@ export default function HomePage() {
                 )}
               </ul>
             </div>
-<<<<<<< HEAD
           </div>
+
           <div className="border-t border-border mt-8 pt-8 text-center text-sm text-muted-foreground">
-=======
-          </div> */}
-          <div className=" text-center text-sm text-muted-foreground">
->>>>>>> b323ccc (Ajusta página inicial)
             <p>&copy; 2025 VIU. Todos os direitos reservados.</p>
           </div>
         </div>
