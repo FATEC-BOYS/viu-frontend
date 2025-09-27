@@ -11,54 +11,45 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  FolderOpen, 
-  PlusCircle, 
-  Loader2, 
+import {
+  FolderOpen,
+  PlusCircle,
+  Loader2,
   CheckCircle,
   Clock,
   FileImage,
   MessageSquare,
   TrendingUp,
   Bell,
-  Filter
+  Filter,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
-// Tipos
 export type Arte = {
   id: string;
   nome: string;
   status: string;
   versao: number;
   criado_em: string;
-  projeto: {
-    nome: string;
-  } | null;
+  projeto: { nome: string } | null;
 };
 
 export type Projeto = {
   id: string;
   nome: string;
   status: string;
-  prazo: string;
-  cliente: {
-    nome: string;
-  } | null;
-  artes: Arte[];
+  prazo: string | null;
+  cliente: { nome: string } | null;
+  artes: Pick<Arte, 'id' | 'nome' | 'status' | 'versao'>[];
 };
 
 export type Feedback = {
   id: string;
   conteudo: string;
   criado_em: string;
-  autor: {
-    nome: string;
-  } | null;
-  arte: {
-    nome: string;
-  } | null;
+  autor: { nome: string } | null;
+  arte: { nome: string } | null;
 };
 
 export type Tarefa = {
@@ -66,14 +57,17 @@ export type Tarefa = {
   titulo: string;
   status: string;
   prioridade: string;
-  prazo: string;
-  projeto: {
-    nome: string;
-  } | null;
+  prazo: string | null;
+  projeto: { nome: string } | null;
 };
 
-// Componente de Card de Métrica
-function MetricCard({ title, value, subtitle, icon: Icon, trend }: {
+function MetricCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  trend,
+}: {
   title: string;
   value: string | number;
   subtitle: string;
@@ -90,7 +84,11 @@ function MetricCard({ title, value, subtitle, icon: Icon, trend }: {
         <div className="text-2xl font-bold">{value}</div>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
         {trend && (
-          <div className={`flex items-center space-x-1 text-xs ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
+          <div
+            className={`flex items-center space-x-1 text-xs ${
+              trend.isPositive ? 'text-green-600' : 'text-red-600'
+            }`}
+          >
             <TrendingUp className="h-3 w-3" />
             <span>{trend.value}</span>
           </div>
@@ -100,130 +98,178 @@ function MetricCard({ title, value, subtitle, icon: Icon, trend }: {
   );
 }
 
-// Componente de Status Badge
 function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
-    'EM_ANDAMENTO': { label: 'Em Andamento', variant: 'default' as const },
-    'CONCLUIDO': { label: 'Concluído', variant: 'default' as const },
-    'PAUSADO': { label: 'Pausado', variant: 'secondary' as const },
-    'EM_ANALISE': { label: 'Em Análise', variant: 'outline' as const },
-    'APROVADO': { label: 'Aprovado', variant: 'default' as const },
-    'REJEITADO': { label: 'Rejeitado', variant: 'destructive' as const },
-    'PENDENTE': { label: 'Pendente', variant: 'secondary' as const },
-  };
+    EM_ANDAMENTO: { label: 'Em Andamento', variant: 'default' as const },
+    CONCLUIDO: { label: 'Concluído', variant: 'default' as const },
+    PAUSADO: { label: 'Pausado', variant: 'secondary' as const },
+    EM_ANALISE: { label: 'Em Análise', variant: 'outline' as const },
+    APROVADO: { label: 'Aprovado', variant: 'default' as const },
+    REJEITADO: { label: 'Rejeitado', variant: 'destructive' as const },
+    PENDENTE: { label: 'Pendente', variant: 'secondary' as const },
+  } as const;
 
-  const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'outline' as const };
-  
+  const config =
+    statusConfig[status as keyof typeof statusConfig] || ({
+      label: status,
+      variant: 'outline',
+    } as const);
+
   return <Badge variant={config.variant}>{config.label}</Badge>;
 }
 
-// Componente Principal
 export default function DashboardPage() {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [artes, setArtes] = useState<Arte[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authIssue, setAuthIssue] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados para métricas
   const [metricas, setMetricas] = useState({
     totalProjetos: 0,
     projetosAtivos: 0,
     totalArtes: 0,
     artesAprovadas: 0,
     feedbacksPendentes: 0,
-    tarefasPendentes: 0
+    tarefasPendentes: 0,
   });
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+      setAuthIssue(null);
+
+      // 1) Exigir sessão autenticada (RLS bloqueia anon)
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+
+      if (userErr) {
+        console.error('Falha ao obter usuário:', userErr);
+      }
+      if (!user) {
+        setAuthIssue(
+          'Você precisa estar autenticado para ver o dashboard. Faça login e tente novamente.'
+        );
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Buscar projetos com cliente
-        const { data: projetosData, error: projetosError } = await supabase
-          .from('projetos')
-          .select(`
-            id,
-            nome,
-            status,
-            prazo,
-            cliente:cliente_id (nome),
-            artes (id, nome, status, versao)
-          `);
+        // 2) Buscar dados em paralelo
+        const [
+          projetosQuery,
+          artesQuery,
+          feedbacksQuery,
+          tarefasQuery,
+        ] = await Promise.all([
+          supabase
+            .from('projetos')
+            .select(
+              `
+              id,
+              nome,
+              status,
+              prazo,
+              cliente:cliente_id ( nome ),
+              artes ( id, nome, status, versao )
+            `
+            )
+            .throwOnError(),
+          supabase
+            .from('artes')
+            .select(
+              `
+              id,
+              nome,
+              status,
+              versao,
+              criado_em,
+              projeto:projeto_id ( nome )
+            `
+            )
+            .order('criado_em', { ascending: false })
+            .limit(6)
+            .throwOnError(),
+          supabase
+            .from('feedbacks')
+            .select(
+              `
+              id,
+              conteudo,
+              criado_em,
+              autor:autor_id ( nome ),
+              arte:arte_id ( nome )
+            `
+            )
+            .order('criado_em', { ascending: false })
+            .limit(5)
+            .throwOnError(),
+          supabase
+            .from('tarefas')
+            .select(
+              `
+              id,
+              titulo,
+              status,
+              prioridade,
+              prazo,
+              projeto:projeto_id ( nome )
+            `
+            )
+            .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
+            .order('prazo', { ascending: true, nullsFirst: false })
+            .limit(5)
+            .throwOnError(),
+        ]);
 
-        if (projetosError) throw projetosError;
+        const projetosData = (projetosQuery.data || []) as unknown as Projeto[];
+        const artesData = (artesQuery.data || []) as unknown as Arte[];
+        const feedbacksData =
+          (feedbacksQuery.data || []) as unknown as Feedback[];
+        const tarefasData = (tarefasQuery.data || []) as unknown as Tarefa[];
 
-        // Buscar artes recentes com projeto
-        const { data: artesData, error: artesError } = await supabase
-          .from('artes')
-          .select(`
-            id,
-            nome,
-            status,
-            versao,
-            criado_em,
-            projeto:projeto_id (nome)
-          `)
-          .order('criado_em', { ascending: false })
-          .limit(6);
+        setProjetos(projetosData);
+        setArtes(artesData);
+        setFeedbacks(feedbacksData);
+        setTarefas(tarefasData);
 
-        if (artesError) throw artesError;
+        // 3) Métricas consistentes com RLS
+        const totalArtes =
+          projetosData.reduce(
+            (acc, p) => acc + (Array.isArray(p.artes) ? p.artes.length : 0),
+            0
+          ) || 0;
 
-        // Buscar feedbacks recentes
-        const { data: feedbacksData, error: feedbacksError } = await supabase
-          .from('feedbacks')
-          .select(`
-            id,
-            conteudo,
-            criado_em,
-            autor:autor_id (nome),
-            arte:arte_id (nome)
-          `)
-          .order('criado_em', { ascending: false })
-          .limit(5);
-
-        if (feedbacksError) throw feedbacksError;
-
-        // Buscar tarefas pendentes
-        const { data: tarefasData, error: tarefasError } = await supabase
-          .from('tarefas')
-          .select(`
-            id,
-            titulo,
-            status,
-            prioridade,
-            prazo,
-            projeto:projeto_id (nome)
-          `)
-          .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
-          .order('prazo', { ascending: true })
-          .limit(5);
-
-        if (tarefasError) throw tarefasError;
-
-        // Definir dados com casting seguro
-        setProjetos((projetosData as unknown as Projeto[]) || []);
-        setArtes((artesData as unknown as Arte[]) || []);
-        setFeedbacks((feedbacksData as unknown as Feedback[]) || []);
-        setTarefas((tarefasData as unknown as Tarefa[]) || []);
-
-        // Calcular métricas
-        const totalArtes = projetosData?.reduce((acc, p) => acc + (p.artes?.length || 0), 0) || 0;
-        const artesAprovadas = projetosData?.reduce((acc, p) => 
-          acc + (p.artes?.filter(a => a.status === 'APROVADO').length || 0), 0) || 0;
+        const artesAprovadas =
+          projetosData.reduce(
+            (acc, p) =>
+              acc +
+              (Array.isArray(p.artes)
+                ? p.artes.filter((a) => a.status === 'APROVADO').length
+                : 0),
+            0
+          ) || 0;
 
         setMetricas({
-          totalProjetos: projetosData?.length || 0,
-          projetosAtivos: projetosData?.filter(p => p.status === 'EM_ANDAMENTO').length || 0,
+          totalProjetos: projetosData.length || 0,
+          projetosAtivos:
+            projetosData.filter((p) => p.status === 'EM_ANDAMENTO').length || 0,
           totalArtes,
           artesAprovadas,
-          feedbacksPendentes: feedbacksData?.length || 0,
-          tarefasPendentes: tarefasData?.length || 0
+          feedbacksPendentes: feedbacksData.length || 0,
+          tarefasPendentes: tarefasData.length || 0,
         });
-
-      } catch (error) {
-        console.error('Erro ao buscar dados do dashboard:', error);
-        setError('Não foi possível carregar os dados do dashboard.');
+      } catch (e: any) {
+        console.error('Erro ao buscar dados do dashboard:', e);
+        setError(
+          e?.message ??
+            'Não foi possível carregar os dados do dashboard (RLS).'
+        );
       } finally {
         setLoading(false);
       }
@@ -232,28 +278,40 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, []);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return '—';
+    try {
+      return new Date(dateString).toLocaleDateString('pt-BR');
+    } catch {
+      return '—';
+    }
   };
 
   const formatRelativeTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+    const diffInHours = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+    );
+
     if (diffInHours < 1) return 'Agora há pouco';
     if (diffInHours < 24) return `${diffInHours}h atrás`;
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) return `${diffInDays}d atrás`;
     return formatDate(dateString);
+    ;
   };
 
   const getPrioridadeColor = (prioridade: string) => {
     switch (prioridade) {
-      case 'ALTA': return 'text-red-600';
-      case 'MEDIA': return 'text-yellow-600';
-      case 'BAIXA': return 'text-green-600';
-      default: return 'text-gray-600';
+      case 'ALTA':
+        return 'text-red-600';
+      case 'MEDIA':
+        return 'text-yellow-600';
+      case 'BAIXA':
+        return 'text-green-600';
+      default:
+        return 'text-gray-600';
     }
   };
 
@@ -266,6 +324,21 @@ export default function DashboardPage() {
     );
   }
 
+  if (authIssue) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-sm">
+          <p className="text-sm text-muted-foreground">{authIssue}</p>
+          <div className="mt-4">
+            <Button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}>
+              Entrar com Google
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -273,6 +346,10 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const projetosEmAndamento = projetos.filter(
+    (p) => p.status === 'EM_ANDAMENTO'
+  );
 
   return (
     <div className="space-y-6 p-6">
@@ -303,14 +380,14 @@ export default function DashboardPage() {
           value={metricas.projetosAtivos}
           subtitle={`${metricas.totalProjetos} projetos no total`}
           icon={FolderOpen}
-          trend={{ value: "+2 este mês", isPositive: true }}
+          trend={{ value: '+2 este mês', isPositive: true }}
         />
         <MetricCard
           title="Artes Aprovadas"
           value={metricas.artesAprovadas}
           subtitle={`${metricas.totalArtes} artes no total`}
           icon={CheckCircle}
-          trend={{ value: "+5 esta semana", isPositive: true }}
+          trend={{ value: '+5 esta semana', isPositive: true }}
         />
         <MetricCard
           title="Feedbacks Recentes"
@@ -328,7 +405,6 @@ export default function DashboardPage() {
 
       {/* Grid Principal */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        
         {/* Projetos Recentes */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -341,8 +417,11 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {projetos.filter(p => p.status === 'EM_ANDAMENTO').slice(0, 4).map((projeto) => (
-              <div key={projeto.id} className="flex items-center justify-between p-3 border rounded-lg">
+            {projetosEmAndamento.slice(0, 4).map((projeto) => (
+              <div
+                key={projeto.id}
+                className="flex items-center justify-between p-3 border rounded-lg"
+              >
                 <div className="space-y-1">
                   <h4 className="font-medium">{projeto.nome}</h4>
                   <p className="text-sm text-muted-foreground">
@@ -360,15 +439,20 @@ export default function DashboardPage() {
                     Prazo: {formatDate(projeto.prazo)}
                   </p>
                   {projeto.artes && projeto.artes.length > 0 && (
-                    <Progress 
-                      value={(projeto.artes.filter(a => a.status === 'APROVADO').length / projeto.artes.length) * 100} 
+                    <Progress
+                      value={
+                        (projeto.artes.filter((a) => a.status === 'APROVADO')
+                          .length /
+                          projeto.artes.length) *
+                        100
+                      }
                       className="w-20 h-2"
                     />
                   )}
                 </div>
               </div>
             ))}
-            {projetos.filter(p => p.status === 'EM_ANDAMENTO').length === 0 && (
+            {projetosEmAndamento.length === 0 && (
               <p className="text-center text-muted-foreground py-4">
                 Nenhum projeto em andamento
               </p>
@@ -383,9 +467,7 @@ export default function DashboardPage() {
               <Clock className="h-5 w-5 mr-2" />
               Tarefas Urgentes
             </CardTitle>
-            <CardDescription>
-              Tarefas com prazos próximos
-            </CardDescription>
+            <CardDescription>Tarefas com prazos próximos</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {tarefas.map((tarefa) => (
@@ -397,7 +479,11 @@ export default function DashboardPage() {
                       {tarefa.projeto?.nome}
                     </p>
                   </div>
-                  <span className={`text-xs font-medium ${getPrioridadeColor(tarefa.prioridade)}`}>
+                  <span
+                    className={`text-xs font-medium ${getPrioridadeColor(
+                      tarefa.prioridade
+                    )}`}
+                  >
                     {tarefa.prioridade}
                   </span>
                 </div>
@@ -424,13 +510,14 @@ export default function DashboardPage() {
               <FileImage className="h-5 w-5 mr-2" />
               Artes Recentes
             </CardTitle>
-            <CardDescription>
-              Últimas artes criadas
-            </CardDescription>
+            <CardDescription>Últimas artes criadas</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {artes.map((arte) => (
-              <div key={arte.id} className="flex items-center justify-between">
+              <div
+                key={arte.id}
+                className="flex items-center justify-between"
+              >
                 <div className="space-y-1">
                   <h5 className="font-medium text-sm">{arte.nome}</h5>
                   <p className="text-xs text-muted-foreground">
@@ -460,9 +547,7 @@ export default function DashboardPage() {
               <Bell className="h-5 w-5 mr-2" />
               Atividade Recente
             </CardTitle>
-            <CardDescription>
-              Feedbacks e comentários recentes
-            </CardDescription>
+            <CardDescription>Feedbacks e comentários recentes</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {feedbacks.map((feedback) => (
@@ -475,7 +560,8 @@ export default function DashboardPage() {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between">
                     <h5 className="font-medium text-sm">
-                      {feedback.autor?.nome} comentou em &ldquo;{feedback.arte?.nome}&rdquo;
+                      {feedback.autor?.nome} comentou em &ldquo;
+                      {feedback.arte?.nome}&rdquo;
                     </h5>
                     <span className="text-xs text-muted-foreground">
                       {formatRelativeTime(feedback.criado_em)}
