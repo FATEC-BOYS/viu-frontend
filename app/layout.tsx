@@ -1,7 +1,8 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Providers from "../components/ui/providers";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,15 +11,12 @@ export const metadata: Metadata = {
   description: "Sistema de gestão de projetos de design",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-<html lang="pt-BR">
-  <body data-skin="viu-cyber">{children}</body>
-</html>
-
+    <html lang="pt-BR">
+      <body className={inter.className} data-skin="viu-cyber">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
+    </html>
   );
 }
