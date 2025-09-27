@@ -1,42 +1,27 @@
+// app/cadastro/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { getBaseUrl } from '@/lib/baseUrl';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Link from 'next/link';
 
 type TipoUsuario = 'DESIGNER' | 'CLIENTE';
 
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-      <path
-        fill="#FFC107"
-        d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.9 0-12.5-5.6-12.5-12.5S17.1 11 24 11c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 5.4 29.6 3.3 24 3.3 12.4 3.3 3 12.7 3 24.3S12.4 45.3 24 45.3c11.3 0 21-8.2 21-21 0-1.6-.2-3.1-.4-4.8z"
-      />
-      <path
-        fill="#FF3D00"
-        d="M6.3 14.7l6.6 4.9C14.8 16.5 19 14 24 14c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 7.4 29.6 5.3 24 5.3c-7.1 0-13.3 3.6-17 9.4z"
-      />
-      <path
-        fill="#4CAF50"
-        d="M24 43.3c5.2 0 9.6-1.7 12.8-4.7l-6-4.9C29.1 35.3 26.7 36 24 36c-5.3 0-9.7-3.4-11.4-8.1l-6.6 5C9.8 39.5 16.4 43.3 24 43.3z"
-      />
-      <path
-        fill="#1976D2"
-        d="M45 24.3c0-1.3-.1-2.6-.4-3.8H24v8h11.3c-.7 3.4-2.8 6.2-5.8 8.1l6 4.9C39.9 38.9 45 32.4 45 24.3z"
-      />
+      <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.9 0-12.5-5.6-12.5-12.5S17.1 11 24 11c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 5.4 29.6 3.3 24 3.3 12.4 3.3 3 12.7 3 24.3S12.4 45.3 24 45.3c11.3 0 21-8.2 21-21 0-1.6-.2-3.1-.4-4.8z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.9C14.8 16.5 19 14 24 14c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 7.4 29.6 5.3 24 5.3c-7.1 0-13.3 3.6-17 9.4z"/>
+      <path fill="#4CAF50" d="M24 43.3c5.2 0 9.6-1.7 12.8-4.7l-6-4.9C29.1 35.3 26.7 36 24 36c-5.3 0-9.7-3.4-11.4-8.1l-6.6 5C9.8 39.5 16.4 43.3 24 43.3z"/>
+      <path fill="#1976D2" d="M45 24.3c0-1.3-.1-2.6-.4-3.8H24v8h11.3c-.7 3.4-2.8 6.2-5.8 8.1l6 4.9C39.9 38.9 45 32.4 45 24.3z"/>
     </svg>
   );
 }
@@ -54,14 +39,20 @@ export default function CadastroPage() {
     setSending(true);
     setMsg(null);
 
+    if (password.length < 8) {
+      setMsg('A senha deve ter pelo menos 8 caracteres.');
+      setSending(false);
+      return;
+    }
+
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const emailRedirectTo = `${getBaseUrl()}/auth/callback`;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${origin}/callback`,
-          data: { tipo }, // guarda o tipo no metadata
+          emailRedirectTo,
+          data: { tipo }, // salva no user_metadata
         },
       });
 
@@ -70,13 +61,14 @@ export default function CadastroPage() {
         return;
       }
 
-      if (data.user && !data.user.confirmed_at) {
+      // Se precisar confirmar email:
+      if (data?.user && !data.user.confirmed_at) {
         setMsg('Conta criada! Verifique seu e-mail e clique no link de confirmação.');
         return;
       }
 
-      setMsg('Conta criada com sucesso! Redirecionando...');
-      router.push('/callback');
+      // Sessão criada (dependendo das configs de confirmação) → vai pro callback
+      router.push('/auth/callback');
     } catch (err) {
       console.error('Cadastro - exception:', err);
       setMsg('Erro inesperado ao cadastrar.');
@@ -89,8 +81,7 @@ export default function CadastroPage() {
     try {
       setSending(true);
       setMsg(null);
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectTo = `${origin}/callback?tipo=${tipo}`;
+      const redirectTo = `${getBaseUrl()}/auth/callback?tipo=${tipo}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },
@@ -105,11 +96,20 @@ export default function CadastroPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader>
+      <Card className="w-full max-w-md card">
+        <CardHeader className="text-center space-y-2">
+          {/* Voltar */}
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              ← Voltar
+            </Button>
+            <div className="opacity-0 pointer-events-none select-none">←</div>
+          </div>
+
           <CardTitle className="text-2xl">Criar conta</CardTitle>
           <CardDescription>Use e-mail e senha ou entre com Google.</CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleCadastro} className="space-y-4">
             <div className="space-y-2">
@@ -125,6 +125,7 @@ export default function CadastroPage() {
                 disabled={sending}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <Input
@@ -133,11 +134,12 @@ export default function CadastroPage() {
                 autoComplete="new-password"
                 placeholder="••••••••"
                 required
-                minLength={6}
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={sending}
               />
+              <p className="text-xs text-muted-foreground">Mínimo de 8 caracteres.</p>
             </div>
 
             {/* Tipo de usuário */}
@@ -146,7 +148,7 @@ export default function CadastroPage() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  className={`border rounded p-2 ${tipo === 'DESIGNER' ? 'ring-2' : ''}`}
+                  className={`border rounded p-2 ${tipo === 'DESIGNER' ? 'ring-2 ring-primary' : ''}`}
                   onClick={() => setTipo('DESIGNER')}
                   disabled={sending}
                 >
@@ -154,7 +156,7 @@ export default function CadastroPage() {
                 </button>
                 <button
                   type="button"
-                  className={`border rounded p-2 ${tipo === 'CLIENTE' ? 'ring-2' : ''}`}
+                  className={`border rounded p-2 ${tipo === 'CLIENTE' ? 'ring-2 ring-primary' : ''}`}
                   onClick={() => setTipo('CLIENTE')}
                   disabled={sending}
                 >
@@ -167,7 +169,7 @@ export default function CadastroPage() {
             </div>
 
             {msg && (
-              <p className="text-sm text-center text-destructive" aria-live="polite">
+              <p className="text-sm text-center text-muted-foreground" aria-live="polite">
                 {msg}
               </p>
             )}
@@ -194,14 +196,12 @@ export default function CadastroPage() {
             </Button>
           </form>
         </CardContent>
+
         <CardFooter className="flex justify-center text-sm">
           <p>
             Já tem uma conta?{' '}
-            <Link
-              href="/login"
-              className="font-semibold text-primary hover:underline"
-            >
-              Voltar para o login
+            <Link href="/login" className="font-semibold text-primary hover:underline">
+              Entrar
             </Link>
           </p>
         </CardFooter>
