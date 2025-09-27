@@ -237,9 +237,15 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
+<<<<<<< HEAD
       <footer className="border-t border-border bg-muted/30">
         <div className="container mx-auto px-4 py-12">
           <div className="grid md:grid-cols-4 gap-8">
+=======
+      <footer className="border-t bg-muted/30">
+       <div className="container mx-auto px-4 py-12">
+         {/*  <div className="grid md:grid-cols-4 gap-8">
+>>>>>>> b323ccc (Ajusta página inicial)
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
@@ -305,8 +311,13 @@ export default function HomePage() {
                 )}
               </ul>
             </div>
+<<<<<<< HEAD
           </div>
           <div className="border-t border-border mt-8 pt-8 text-center text-sm text-muted-foreground">
+=======
+          </div> */}
+          <div className=" text-center text-sm text-muted-foreground">
+>>>>>>> b323ccc (Ajusta página inicial)
             <p>&copy; 2025 VIU. Todos os direitos reservados.</p>
           </div>
         </div>
