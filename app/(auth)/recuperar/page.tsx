@@ -2,12 +2,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { getBaseUrl } from '@/lib/baseUrl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Link from 'next/link';
 
 export default function RecuperarPage() {
   const [email, setEmail] = useState('');
@@ -20,15 +21,15 @@ export default function RecuperarPage() {
     setMsg(null);
 
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectTo = `${origin}/callback?next=/reset`; // volta pro seu callback e depois /reset
+      const redirectTo = `${getBaseUrl()}/auth/callback?type=recovery&next=/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
       if (error) {
-        setMsg(`Não foi possível enviar o e-mail: ${error.message}`);
-        return;
+        console.error('resetPasswordForEmail:', error);
+        setMsg('Não foi possível enviar o e-mail de recuperação.');
+      } else {
+        setMsg('Se este e-mail existir, você receberá um link para redefinir a senha.');
       }
-      setMsg('Se este e-mail existir, você receberá um link para redefinir a senha.');
     } catch (err) {
       console.error(err);
       setMsg('Ocorreu um erro ao solicitar a recuperação.');
@@ -39,7 +40,7 @@ export default function RecuperarPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md card">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Esqueci minha senha</CardTitle>
           <CardDescription>Informe seu e-mail para receber o link de redefinição.</CardDescription>
@@ -60,7 +61,11 @@ export default function RecuperarPage() {
               />
             </div>
 
-            {msg && <p className="text-sm text-center text-muted-foreground" aria-live="polite">{msg}</p>}
+            {msg && (
+              <p className="text-sm text-center text-muted-foreground" aria-live="polite">
+                {msg}
+              </p>
+            )}
 
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? 'Enviando...' : 'Enviar link de recuperação'}
