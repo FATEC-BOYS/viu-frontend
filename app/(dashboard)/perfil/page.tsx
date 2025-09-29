@@ -4,58 +4,31 @@ import { useState, useEffect } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import {
-  User,
-  Mail,
-  Phone,
-  Calendar,
-  Camera,
-  Edit,
-  Save,
-  X,
-  Loader2,
-  Shield,
-  Bell,
-  Eye,
-  Lock,
-  Trash2,
-  Download,
-  Upload,
-  BarChart3,
-  Award,
-  TrendingUp,
-  Clock,
-  CheckCircle2
+  User as UserIcon,
+  Calendar, Camera, Edit, Save, X, Loader2,
+  Shield, Bell, Lock, Trash2, Download,
+  BarChart3, Award, TrendingUp, Clock, CheckCircle2,
 } from 'lucide-react';
 
-// Tipos baseados no schema
+// Tipos conforme schema do VIU
 interface UsuarioPerfil {
   id: string;
   email: string;
   nome: string;
   telefone: string | null;
   avatar: string | null;
-  tipo: string;
+  tipo: 'DESIGNER' | 'CLIENTE';
   ativo: boolean;
   criado_em: string;
   atualizado_em: string;
@@ -63,35 +36,53 @@ interface UsuarioPerfil {
 
 interface EstatisticasUsuario {
   totalProjetos: number;
-  projetosAtivos: number;
-  projetosConcluidos: number;
+  projetosAtivos: number;     // EM_ANDAMENTO
+  projetosConcluidos: number; // CONCLUIDO
   totalArtes: number;
-  artesAprovadas: number;
+  artesAprovadas: number;     // APROVADO
   totalFeedbacks: number;
   totalTarefas: number;
-  tarefasConcluidas: number;
+  tarefasConcluidas: number;  // CONCLUIDA
+}
+
+// Upload de avatar
+async function uploadAvatar(file: File, usuarioId: string) {
+  const ext = file.name.split('.').pop() || 'jpg';
+  const path = `avatars/${usuarioId}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+  if (upErr) throw upErr;
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl; // salva URL pública em usuarios.avatar
 }
 
 // Componente de Upload de Avatar
-function AvatarUpload({ avatar, nome, onAvatarChange }: {
+function AvatarUpload({
+  avatar,
+  nome,
+  onAvatarChange,
+}: {
   avatar: string | null;
   nome: string;
   onAvatarChange: (file: File | null) => void;
 }) {
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (name: string) =>
+    name
       .split(' ')
-      .map(n => n[0])
+      .filter(Boolean)
+      .map((n) => n[0]?.toUpperCase())
       .join('')
-      .toUpperCase()
-      .substring(0, 2);
-  };
+      .slice(0, 2);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      onAvatarChange(file);
-    }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    onAvatarChange(file);
+    // limpa input para permitir reupload do mesmo arquivo
+    e.currentTarget.value = '';
   };
 
   return (
@@ -118,8 +109,10 @@ function AvatarUpload({ avatar, nome, onAvatarChange }: {
   );
 }
 
-// Componente de Card de Estatísticas
-function StatCard({ title, value, subtitle, icon: Icon, trend }: {
+// Card de estatística
+function StatCard({
+  title, value, subtitle, icon: Icon, trend,
+}: {
   title: string;
   value: number;
   subtitle: string;
@@ -138,9 +131,11 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: {
           <Icon className="h-8 w-8 text-muted-foreground" />
         </div>
         {trend && (
-          <div className={`flex items-center mt-2 text-xs ${
-            trend.isPositive ? 'text-green-600' : 'text-red-600'
-          }`}>
+          <div
+            className={`flex items-center mt-2 text-xs ${
+              trend.isPositive ? 'text-green-600' : 'text-red-600'
+            }`}
+          >
             <TrendingUp className="h-3 w-3 mr-1" />
             {trend.value}
           </div>
@@ -150,7 +145,6 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: {
   );
 }
 
-// Componente Principal
 export default function PerfilPage() {
   const [usuario, setUsuario] = useState<UsuarioPerfil | null>(null);
   const [estatisticas, setEstatisticas] = useState<EstatisticasUsuario | null>(null);
@@ -159,7 +153,7 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados do formulário
+  // Form
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -167,7 +161,7 @@ export default function PerfilPage() {
     avatar: null as File | null,
   });
 
-  // Estados de configurações
+  // Config locais (não persistidos no schema)
   const [configuracoes, setConfiguracoes] = useState({
     notificacoesPush: true,
     notificacoesEmail: true,
@@ -175,85 +169,137 @@ export default function PerfilPage() {
     tema: 'claro' as string,
   });
 
-  // Buscar dados do usuário
+  // Helpers de contagem com head:true
+  const countHead = async (
+    table: string,
+    filters: (q: any) => any
+  ): Promise<number> => {
+    let query = supabase.from(table).select('*', { count: 'exact', head: true });
+    query = filters(query);
+    const { count, error: err } = await query;
+    if (err) throw err;
+    return count ?? 0;
+  };
+
   useEffect(() => {
-    const fetchUsuario = async () => {
+    const fetchAll = async () => {
       try {
-        // Simular busca do usuário atual (você implementará com auth real)
-        const { data: userData, error: userError } = await supabase
+        // 1) user auth -> usuario_id
+        const { data: auth } = await supabase.auth.getUser();
+        const authUserId = auth.user?.id;
+        if (!authUserId) throw new Error('Usuário não autenticado');
+
+        const { data: mapRow, error: mapErr } = await supabase
+          .from('usuario_auth')
+          .select('usuario_id')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+
+        if (mapErr) throw mapErr;
+        if (!mapRow?.usuario_id) throw new Error('Mapa usuario_auth não encontrado');
+
+        const usuarioId = mapRow.usuario_id as string;
+
+        // 2) perfil
+        const { data: userRow, error: userErr } = await supabase
           .from('usuarios')
           .select('*')
-          .eq('email', 'ana.silva@design.com') // Substituir pela sessão atual
+          .eq('id', usuarioId)
           .single();
 
-        if (userError) throw userError;
+        if (userErr) throw userErr;
 
-        setUsuario(userData);
+        const u: UsuarioPerfil = userRow;
+        setUsuario(u);
         setFormData({
-          nome: userData.nome,
-          email: userData.email,
-          telefone: userData.telefone || '',
+          nome: u.nome,
+          email: u.email,
+          telefone: u.telefone || '',
           avatar: null,
         });
 
-        // Buscar estatísticas
-        const [projetos, artes, feedbacks, tarefas] = await Promise.all([
-          supabase.from('projetos').select('id, status').eq('designer_id', userData.id),
-          supabase.from('artes').select('id, status').eq('autor_id', userData.id),
-          supabase.from('feedbacks').select('id').eq('autor_id', userData.id),
-          supabase.from('tarefas').select('id, status').eq('responsavel_id', userData.id),
+        // 3) estatísticas (contagens)
+        const [
+          totalProjetos,
+          projetosAtivos,
+          projetosConcluidos,
+          totalArtes,
+          artesAprovadas,
+          totalFeedbacks,
+          totalTarefas,
+          tarefasConcluidas,
+        ] = await Promise.all([
+          countHead('projetos', (q) => q.eq('designer_id', usuarioId)),
+          countHead('projetos', (q) => q.eq('designer_id', usuarioId).eq('status', 'EM_ANDAMENTO')),
+          countHead('projetos', (q) => q.eq('designer_id', usuarioId).eq('status', 'CONCLUIDO')),
+          countHead('artes', (q) => q.eq('autor_id', usuarioId)),
+          countHead('artes', (q) => q.eq('autor_id', usuarioId).eq('status', 'APROVADO')),
+          countHead('feedbacks', (q) => q.eq('autor_id', usuarioId)),
+          countHead('tarefas', (q) => q.eq('responsavel_id', usuarioId)),
+          countHead('tarefas', (q) => q.eq('responsavel_id', usuarioId).eq('status', 'CONCLUIDA')),
         ]);
 
-        const stats: EstatisticasUsuario = {
-          totalProjetos: projetos.data?.length || 0,
-          projetosAtivos: projetos.data?.filter(p => p.status === 'EM_ANDAMENTO').length || 0,
-          projetosConcluidos: projetos.data?.filter(p => p.status === 'CONCLUIDO').length || 0,
-          totalArtes: artes.data?.length || 0,
-          artesAprovadas: artes.data?.filter(a => a.status === 'APROVADO').length || 0,
-          totalFeedbacks: feedbacks.data?.length || 0,
-          totalTarefas: tarefas.data?.length || 0,
-          tarefasConcluidas: tarefas.data?.filter(t => t.status === 'CONCLUIDA').length || 0,
-        };
-
-        setEstatisticas(stats);
-
-      } catch (error) {
-        console.error('Erro ao carregar perfil:', error);
-        setError('Não foi possível carregar os dados do perfil.');
+        setEstatisticas({
+          totalProjetos,
+          projetosAtivos,
+          projetosConcluidos,
+          totalArtes,
+          artesAprovadas,
+          totalFeedbacks,
+          totalTarefas,
+          tarefasConcluidas,
+        });
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || 'Falha ao carregar o perfil');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUsuario();
+    fetchAll();
   }, []);
 
   const handleSave = async () => {
     if (!usuario) return;
 
     setSaving(true);
+    setError(null);
+
     try {
-      const { error } = await supabase
+      let avatarUrl = usuario.avatar;
+
+      // Se o usuário escolheu um novo arquivo, sobe para o bucket e atualiza URL
+      if (formData.avatar) {
+        avatarUrl = await uploadAvatar(formData.avatar, usuario.id);
+      }
+
+      const { error: updErr } = await supabase
         .from('usuarios')
         .update({
           nome: formData.nome,
           telefone: formData.telefone || null,
+          avatar: avatarUrl,
           atualizado_em: new Date().toISOString(),
         })
         .eq('id', usuario.id);
 
-      if (error) throw error;
+      if (updErr) throw updErr;
 
-      setUsuario(prev => prev ? {
-        ...prev,
-        nome: formData.nome,
-        telefone: formData.telefone || null,
-        atualizado_em: new Date().toISOString(),
-      } : null);
-
+      setUsuario((prev) =>
+        prev
+          ? {
+              ...prev,
+              nome: formData.nome,
+              telefone: formData.telefone || null,
+              avatar: avatarUrl,
+              atualizado_em: new Date().toISOString(),
+            }
+          : prev
+      );
       setEditMode(false);
-    } catch (error) {
-      console.error('Erro ao salvar perfil:', error);
+    } catch (e: any) {
+      console.error(e);
       setError('Não foi possível salvar as alterações.');
     } finally {
       setSaving(false);
@@ -272,9 +318,8 @@ export default function PerfilPage() {
     setEditMode(false);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
+  const formatDate = (s: string) =>
+    new Date(s).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
   if (loading) {
     return (
@@ -288,7 +333,9 @@ export default function PerfilPage() {
   if (error || !usuario || !estatisticas) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center text-destructive">{error || 'Erro ao carregar perfil'}</div>
+        <div className="text-center text-destructive">
+          {error || 'Erro ao carregar perfil'}
+        </div>
       </div>
     );
   }
@@ -311,16 +358,14 @@ export default function PerfilPage() {
 
       {/* Grid Principal */}
       <div className="grid gap-6 lg:grid-cols-3">
-        
-        {/* Coluna da Esquerda - Informações Pessoais */}
+        {/* Coluna Esquerda */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* Card de Informações Básicas */}
+          {/* Informações Básicas */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
+                  <UserIcon className="h-5 w-5" />
                   Informações Pessoais
                 </CardTitle>
                 {!editMode ? (
@@ -347,10 +392,10 @@ export default function PerfilPage() {
             <CardContent className="space-y-6">
               {/* Avatar e Nome */}
               <div className="flex items-center gap-6">
-                <AvatarUpload 
-                  avatar={usuario.avatar} 
+                <AvatarUpload
+                  avatar={usuario.avatar}
                   nome={usuario.nome}
-                  onAvatarChange={(file) => setFormData(prev => ({ ...prev, avatar: file }))}
+                  onAvatarChange={(file) => setFormData((p) => ({ ...p, avatar: file }))}
                 />
                 <div className="space-y-1">
                   <h2 className="text-xl font-semibold">{usuario.nome}</h2>
@@ -371,25 +416,20 @@ export default function PerfilPage() {
                   <Input
                     id="nome"
                     value={formData.nome}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, nome: e.target.value }))}
                     disabled={!editMode}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    disabled // Email não pode ser editado
-                  />
+                  <Input id="email" type="email" value={formData.email} disabled />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="telefone">Telefone</Label>
                   <Input
                     id="telefone"
                     value={formData.telefone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                    onChange={(e) => setFormData((p) => ({ ...p, telefone: e.target.value }))}
                     disabled={!editMode}
                     placeholder="(11) 99999-9999"
                   />
@@ -397,8 +437,8 @@ export default function PerfilPage() {
                 <div className="space-y-2">
                   <Label>Status da Conta</Label>
                   <div className="flex items-center gap-2">
-                    <Badge variant={usuario.ativo ? "default" : "secondary"}>
-                      {usuario.ativo ? "Ativa" : "Inativa"}
+                    <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
+                      {usuario.ativo ? 'Ativa' : 'Inativa'}
                     </Badge>
                   </div>
                 </div>
@@ -406,7 +446,7 @@ export default function PerfilPage() {
             </CardContent>
           </Card>
 
-          {/* Card de Configurações */}
+          {/* Configurações (estado local) */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -429,22 +469,20 @@ export default function PerfilPage() {
                       </div>
                       <Switch
                         checked={configuracoes.notificacoesPush}
-                        onCheckedChange={(checked) => 
-                          setConfiguracoes(prev => ({ ...prev, notificacoesPush: checked }))
+                        onCheckedChange={(checked) =>
+                          setConfiguracoes((p) => ({ ...p, notificacoesPush: checked }))
                         }
                       />
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium">Notificações por Email</p>
-                        <p className="text-sm text-muted-foreground">
-                          Receba resumos por email
-                        </p>
+                        <p className="text-sm text-muted-foreground">Receba resumos por email</p>
                       </div>
                       <Switch
                         checked={configuracoes.notificacoesEmail}
-                        onCheckedChange={(checked) => 
-                          setConfiguracoes(prev => ({ ...prev, notificacoesEmail: checked }))
+                        onCheckedChange={(checked) =>
+                          setConfiguracoes((p) => ({ ...p, notificacoesEmail: checked }))
                         }
                       />
                     </div>
@@ -459,10 +497,10 @@ export default function PerfilPage() {
                   <div className="space-y-3">
                     <div>
                       <Label>Visibilidade do Perfil</Label>
-                      <Select 
+                      <Select
                         value={configuracoes.visibilidadePerfil}
-                        onValueChange={(value) => 
-                          setConfiguracoes(prev => ({ ...prev, visibilidadePerfil: value }))
+                        onValueChange={(value) =>
+                          setConfiguracoes((p) => ({ ...p, visibilidadePerfil: value }))
                         }
                       >
                         <SelectTrigger className="mt-1">
@@ -482,10 +520,9 @@ export default function PerfilPage() {
           </Card>
         </div>
 
-        {/* Coluna da Direita - Estatísticas */}
+        {/* Coluna Direita */}
         <div className="space-y-6">
-          
-          {/* Estatísticas Gerais */}
+          {/* Estatísticas */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -498,9 +535,9 @@ export default function PerfilPage() {
                 <StatCard
                   title="Projetos"
                   value={estatisticas.totalProjetos}
-                  subtitle={`${estatisticas.projetosAtivos} ativos`}
+                  subtitle={`${estatisticas.projetosAtivos} em andamento • ${estatisticas.projetosConcluidos} concluídos`}
                   icon={Award}
-                  trend={{ value: "+2 este mês", isPositive: true }}
+                  trend={{ value: '+2 este mês', isPositive: true }}
                 />
                 <StatCard
                   title="Artes"
@@ -518,7 +555,7 @@ export default function PerfilPage() {
             </CardContent>
           </Card>
 
-          {/* Ações da Conta */}
+          {/* Segurança / Ações */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
