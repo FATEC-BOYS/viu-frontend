@@ -1,4 +1,3 @@
-// app/l/[token]/_actions.ts
 "use server";
 
 import { getSupabaseServer } from "@/lib/supabaseServer";

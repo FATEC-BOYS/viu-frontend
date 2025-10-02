@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import clsx from "clsx";
-import { createGuestUser, saveFeedback } from "../_actions";
+import { createGuestUser, saveFeedback } from "./_actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";

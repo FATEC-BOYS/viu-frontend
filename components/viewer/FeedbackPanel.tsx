@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { saveAudioFeedback, updateFeedbackStatus } from "../_actions";
+import { saveAudioFeedback, updateFeedbackStatus } from "./_actions";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

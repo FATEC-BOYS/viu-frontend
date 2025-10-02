@@ -1,55 +1,49 @@
 // app/l/[token]/page.tsx
-import { notFound } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-import FeedbackViewer from "./viewer/_components/FeedbackViewer";
-import FeedbackPanel from "./viewer/_components/FeedbackPanel";
+import 'server-only';
+import { notFound } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import FeedbackViewer from '../../../components/viewer/FeedbackViewer';
+import FeedbackPanel from '../../../components/viewer/FeedbackPanel';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 type Props = { params: { token: string } };
-type SharedLink = {
-  id: string; token: string; somente_leitura: boolean;
-  expira_em: string | null; arte_id: string; projeto_id: string | null;
-};
 
 export default async function PublicLinkPage({ params }: Props) {
+  // ✅ Usa APENAS a ANON KEY (essas envs você já tem)
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { auth: { persistSession: false } }
   );
 
-  const nowIso = new Date().toISOString();
-  const { data: link } = await supabase
-    .from("link_compartilhado")
-    .select("id, token, somente_leitura, expira_em, arte_id, projeto_id")
-    .eq("token", params.token)
-    .or(`expira_em.is.null,expira_em.gt.${nowIso}`)
-    .maybeSingle<SharedLink>();
-  if (!link) return notFound();
+  // 1) Resolve o link via RPC (bypass RLS controlado)
+  const { data: link, error: linkErr } = await supabase
+    .rpc('consume_short_link', { p_token: params.token });
 
-  const { data: arte } = await supabase
-    .from("artes")
-    .select("id, nome, largura_px, altura_px, versao, status, arquivo, tipo")
-    .eq("id", link.arte_id)
-    .single();
-  if (!arte) return notFound();
+  if (linkErr || !link) return notFound();
 
-  // Se arte.arquivo for PATH do Storage, gere a URL aqui.
-  // Se já for uma URL pública, deixamos como está.
+  // 2) Carrega a arte via RPC pública
+  const { data: arte, error: arteErr } = await supabase
+    .rpc('get_public_arte_by_id', { p_arte_id: link.arte_id });
+
+  if (arteErr || !arte) return notFound();
+
+  // 3) Se o campo arquivo for path do storage, gere URL pública
   let previewUrl = arte.arquivo ?? null;
-  if (previewUrl && !previewUrl.startsWith("http")) {
-    const { data } = await supabase.storage.from("uploads").getPublicUrl(previewUrl);
+  if (previewUrl && typeof previewUrl === 'string' && !previewUrl.startsWith('http')) {
+    const { data } = await supabase.storage.from('uploads').getPublicUrl(previewUrl);
     previewUrl = data.publicUrl;
   }
   const arteForClient = { ...arte, arquivo: previewUrl };
 
-  const { data: feedbacks } = await supabase
-    .from("feedbacks")
-    .select("id, conteudo, tipo, arquivo, posicao_x, posicao_y, posicao_x_abs, posicao_y_abs, status, criado_em, autor_id")
-    .eq("arte_id", arte.id)
-    .order("criado_em", { ascending: false });
+  // 4) (Opcional) feedbacks públicos
+  const { data: feedbacks, error: fbErr } = await supabase
+    .rpc('get_public_feedbacks_by_arte', { p_arte_id: arte.id });
+  // Se der erro, só segue sem feedbacks
+  const initialFeedbacks = fbErr || !feedbacks ? [] : feedbacks;
 
   const readOnly = !!link.somente_leitura;
 
@@ -63,14 +57,14 @@ export default async function PublicLinkPage({ params }: Props) {
               {arte.nome} <span className="text-muted-foreground">— v{arte.versao}</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Clique na arte para marcar um ponto e deixar um comentário elegante ✨
+              Clique na arte para marcar um ponto e deixar um comentário ✨
             </p>
           </div>
         </header>
 
         <FeedbackViewer
           arte={arteForClient}
-          initialFeedbacks={feedbacks || []}
+          initialFeedbacks={initialFeedbacks}
           readOnly={readOnly}
           token={params.token}
         />
@@ -78,7 +72,7 @@ export default async function PublicLinkPage({ params }: Props) {
 
       <FeedbackPanel
         arteId={arte.id}
-        initialFeedbacks={feedbacks || []}
+        initialFeedbacks={initialFeedbacks}
         readOnly={readOnly}
         token={params.token}
       />

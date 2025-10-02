@@ -4,7 +4,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export type UserProfile = {
   id: string;
@@ -32,34 +32,55 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const params = useSearchParams();
+  const safeMode = params.get('safe') === '1';
 
   useEffect(() => {
+    let alive = true;
+
     const init = async () => {
-      const { data: { session }, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) {
-        console.error('Erro ao obter sessão:', sessErr);
-        setLoading(false);
-        return;
-      }
-      setSession(session || null);
-      setUser(session?.user ?? null);
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!alive) return;
 
-      if (session?.user) {
-        await ensureProfile(session.user);
-      }
+        if (error) {
+          console.error('Erro ao obter sessão:', error);
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        } else {
+          const sess = data?.session ?? null;
+          setSession(sess);
+          setUser(sess?.user ?? null);
 
-      setLoading(false);
+          if (sess?.user && !safeMode) {
+            ensureProfile(sess.user).catch((e) =>
+              console.warn('ensureProfile falhou (ignorado):', e)
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Init auth falhou:', e);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      } finally {
+        if (alive) setLoading(false);
+      }
     };
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!alive) return;
       setSession(newSession);
       const u = newSession?.user ?? null;
       setUser(u);
 
-      if (u) {
-        await ensureProfile(u);
+      if (u && !safeMode) {
+        ensureProfile(u).catch((e) =>
+          console.warn('ensureProfile (onAuthStateChange) falhou (ignorado):', e)
+        );
       } else {
         setProfile(null);
       }
@@ -67,58 +88,75 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
 
     return () => {
+      alive = false;
       listener?.subscription.unsubscribe();
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeMode]);
 
   const ensureProfile = async (u: User) => {
-    // 1) Tenta obter
-    const { data: existing, error: selErr } = await supabase
-      .from('usuarios')
-      .select('id, nome, email, avatar, tipo')
-      .eq('id', u.id)
-      .maybeSingle();
+    try {
+      const { data: existing, error: selErr } = await supabase
+        .from('usuarios')
+        .select('id, nome, email, avatar, tipo')
+        .eq('id', u.id)
+        .maybeSingle();
 
-    if (selErr) {
-      console.error('Erro ao buscar perfil:', selErr);
-    }
+      if (selErr) {
+        console.warn('Erro ao buscar perfil (tolerado):', selErr);
+      }
 
-    if (existing) {
-      setProfile(existing as UserProfile);
-      return;
-    }
+      if (existing) {
+        setProfile(existing as UserProfile);
+        return;
+      }
 
-    // 2) Não existe -> cria (RLS: id == auth.uid())
-    const fallbackNome = u.user_metadata?.name ?? u.email?.split('@')[0] ?? 'Usuário';
-    const fallbackEmail = u.email ?? null;
+      const fallbackNome =
+        (u.user_metadata as any)?.name ?? u.email?.split('@')[0] ?? 'Usuário';
+      const fallbackEmail = u.email ?? null;
 
-    const { data: inserted, error: insErr } = await supabase
-      .from('usuarios')
-      .insert([
-        {
-          id: u.id,
-          nome: fallbackNome,
-          email: fallbackEmail,
-          avatar: u.user_metadata?.avatar_url ?? null,
-          // ajuste se quiser defaultar por role de convite:
-          tipo: 'DESIGNER',
-        },
-      ])
-      .select('id, nome, email, avatar, tipo')
-      .single();
+      const { data: inserted, error: insErr } = await supabase
+        .from('usuarios')
+        .insert([
+          {
+            id: u.id,
+            nome: fallbackNome,
+            email: fallbackEmail,
+            avatar: (u.user_metadata as any)?.avatar_url ?? null,
+            tipo: 'DESIGNER',
+          },
+        ])
+        .select('id, nome, email, avatar, tipo')
+        .single();
 
-    if (insErr) {
-      console.error('Erro ao criar perfil:', insErr);
-      // Em caso de erro, não derruba a sessão; só não seta profile.
+      if (insErr) {
+        console.warn('Erro ao criar perfil (tolerado):', insErr);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(inserted as UserProfile);
+    } catch (e) {
+      console.warn('ensureProfile exceção (tolerada):', e);
       setProfile(null);
-      return;
     }
-
-    setProfile(inserted as UserProfile);
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('signOut supabase falhou (segue mesmo assim):', e);
+    }
+
+    try {
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith('sb-')) localStorage.removeItem(k);
+      });
+      sessionStorage.clear();
+      indexedDB.deleteDatabase('Supabase');
+    } catch {}
+
     setSession(null);
     setUser(null);
     setProfile(null);
@@ -129,7 +167,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }
