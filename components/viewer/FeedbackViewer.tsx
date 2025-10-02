@@ -12,7 +12,8 @@ import { toast } from "sonner";
 type Arte = {
   id: string;
   nome: string;
-  arquivo: string;
+  // agora aceita vazio/null para compatibilizar com o viewer público
+  arquivo?: string | null;
   largura_px?: number | null;
   altura_px?: number | null;
 };
@@ -47,6 +48,9 @@ export default function FeedbackViewer({
   const [feedbacks, setFeedbacks] = useState(initialFeedbacks);
   const [zoom, setZoom] = useState(1);
 
+  // controla se a imagem carregou; se não, mostra placeholder
+  const [imageOk, setImageOk] = useState<boolean>(!!arte.arquivo);
+
   // composer
   const [open, setOpen] = useState(false);
   const [composer, setComposer] = useState({
@@ -58,18 +62,22 @@ export default function FeedbackViewer({
   });
   const [guest, setGuest] = useState({ nome: "", email: "" });
 
-  const canPin = !readOnly;
+  const canPin = !readOnly && imageOk && !!arte.arquivo;
 
   function toImageCoords(e: React.MouseEvent) {
     const img = imgRef.current;
     if (!img) return null;
     const rect = img.getBoundingClientRect();
+    // evita divisão por zero/NaN
+    if (rect.width <= 0 || rect.height <= 0) return null;
+
     const xAbs = e.clientX - rect.left;
     const yAbs = e.clientY - rect.top;
     const cx = Math.max(0, Math.min(rect.width, xAbs));
     const cy = Math.max(0, Math.min(rect.height, yAbs));
-    const xRel = rect.width > 0 ? cx / rect.width : 0;
-    const yRel = rect.height > 0 ? cy / rect.height : 0;
+    const xRel = cx / rect.width;
+    const yRel = cy / rect.height;
+
     return {
       rel: { x: Number(xRel.toFixed(6)), y: Number(yRel.toFixed(6)) },
       abs: { x: Math.round(cx), y: Math.round(cy) },
@@ -98,7 +106,6 @@ export default function FeedbackViewer({
     const left = (Number(f.posicao_x ?? 0) * 100).toFixed(4) + "%";
     const top = (Number(f.posicao_y ?? 0) * 100).toFixed(4) + "%";
     return { left, top, transform: "translate(-50%, -100%)" };
-    // usando % para acompanhar zoom/resize
   }
 
   async function handleImageClick(e: React.MouseEvent) {
@@ -144,7 +151,9 @@ export default function FeedbackViewer({
     <div className="border rounded-2xl p-3 bg-white">
       <div className="flex items-center justify-between mb-3 gap-3">
         <div className="text-sm text-muted-foreground">
-          Clique na arte para marcar um ponto e comentar.
+          {imageOk && arte.arquivo
+            ? "Clique na arte para marcar um ponto e comentar."
+            : "Nenhum preview disponível desta arte."}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>–</Button>
@@ -159,30 +168,39 @@ export default function FeedbackViewer({
         className="relative mx-auto max-h-[70vh] overflow-auto bg-neutral-50 rounded-xl flex items-center justify-center p-3"
       >
         <div className="relative" style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}>
-          <img
-            ref={imgRef}
-            src={arte.arquivo}
-            alt={arte.nome}
-            className="max-w-[min(80vw,960px)] h-auto rounded-lg shadow"
-            onClick={handleImageClick}
-            draggable={false}
-          />
-
-          {feedbacks.map((f, i) =>
-            f.posicao_x != null && f.posicao_y != null ? (
-              <div
-                key={f.id}
-                className={clsx(
-                  "absolute z-10 -translate-x-1/2 -translate-y-full",
-                  "px-2 py-1 text-xs rounded-full bg-black/80 text-white shadow"
-                )}
-                style={pinStyle(f)}
-                title={f.conteudo}
-              >
-                {feedbacks.length - i}
-              </div>
-            ) : null
+          {imageOk && arte.arquivo ? (
+            <img
+              ref={imgRef}
+              src={arte.arquivo}
+              alt={arte.nome}
+              className="max-w-[min(80vw,960px)] h-auto rounded-lg shadow"
+              onClick={handleImageClick}
+              onError={() => setImageOk(false)}
+              draggable={false}
+            />
+          ) : (
+            <div className="w-[min(80vw,960px)] h-[360px] grid place-items-center rounded-lg border bg-white text-sm text-muted-foreground">
+              Sem preview disponível
+            </div>
           )}
+
+          {/* Pins */}
+          {imageOk &&
+            feedbacks.map((f, i) =>
+              f.posicao_x != null && f.posicao_y != null ? (
+                <div
+                  key={f.id}
+                  className={clsx(
+                    "absolute z-10 -translate-x-1/2 -translate-y-full",
+                    "px-2 py-1 text-xs rounded-full bg-black/80 text-white shadow"
+                  )}
+                  style={pinStyle(f)}
+                  title={f.conteudo}
+                >
+                  {feedbacks.length - i}
+                </div>
+              ) : null
+            )}
         </div>
       </div>
 

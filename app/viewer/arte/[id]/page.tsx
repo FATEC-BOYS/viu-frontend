@@ -19,7 +19,7 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
 
   const supabase = getSupabaseServer();
 
-  // 1) link
+  // 1) Valida link compartilhado
   const { data: link } = await supabase
     .from('link_compartilhado')
     .select('id, tipo, arte_id, expira_em, somente_leitura, can_comment, can_download')
@@ -30,33 +30,52 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
   if (link.expira_em && new Date(link.expira_em) < new Date()) return notFound();
   if (link.tipo !== 'ARTE' || link.arte_id !== params.id) return notFound();
 
-  // 2) arte
+  // 2) Busca a arte
   const { data: arte } = await supabase
     .from('artes')
-    .select('id, nome, arquivo, largura_px, altura_px, versao, status, tipo')
+    .select('id, nome, arquivo, preview_path, largura_px, altura_px, versao, status, tipo')
     .eq('id', params.id)
     .maybeSingle();
 
   if (!arte) return notFound();
 
-  // 3) URL pública se for path
-  let previewUrl = arte.arquivo ?? null;
-  if (previewUrl && typeof previewUrl === 'string' && !previewUrl.startsWith('http')) {
-    const { data } = await supabase.storage.from('uploads').getPublicUrl(previewUrl);
-    previewUrl = data.publicUrl;
-  }
-  const arteForClient = { ...arte, arquivo: previewUrl };
+  // 3) Define URL de exibição:
+  //    - se houver preview_path, usa public URL do bucket 'previews'
+  //    - senão, assina o original no bucket 'artes' por 6h
+  let previewUrl: string | null = null;
 
-  // 4) feedbacks
+  if (arte.preview_path) {
+    // tolera salvar com ou sem "previews/" no início
+    const key = arte.preview_path.replace(/^previews\//, '');
+    const { data } = await supabase.storage.from('previews').getPublicUrl(key);
+    previewUrl = data.publicUrl ?? null;
+  } else if (
+    arte.arquivo &&
+    typeof arte.arquivo === 'string' &&
+    !arte.arquivo.startsWith('http')
+  ) {
+    const { data } = await supabase.storage
+      .from('artes') // originais privados ficam aqui
+      .createSignedUrl(arte.arquivo, 60 * 60 * 6);
+    previewUrl = data?.signedUrl ?? null;
+  } else {
+    previewUrl = (arte.arquivo as string) ?? null;
+  }
+
+  const arteForClient = { ...arte, arquivo: previewUrl ?? '' };
+
+  // 4) Feedbacks da arte
   const { data: feedbacks } = await supabase
     .from('feedbacks')
-    .select('id, conteudo, tipo, arquivo, posicao_x, posicao_y, posicao_x_abs, posicao_y_abs, status, criado_em, autor_id, arte_versao_id')
+    .select(
+      'id, conteudo, tipo, arquivo, posicao_x, posicao_y, posicao_x_abs, posicao_y_abs, status, criado_em, autor_id, arte_versao_id'
+    )
     .eq('arte_id', arte.id)
     .order('criado_em', { ascending: false });
 
   const initialFeedbacks = feedbacks ?? [];
 
-  // ⚠️ Se can_comment for false, trava a UI de comentário mesmo que somente_leitura seja false
+  // 5) Controle de edição: trava comentários se link é somente leitura OU can_comment = false
   const readOnly = !!(link.somente_leitura || !link.can_comment);
 
   return (

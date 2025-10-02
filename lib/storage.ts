@@ -1,39 +1,29 @@
+// lib/storage.ts
 import { supabase } from "@/lib/supabaseClient";
 
-const THUMB_BUCKET = "thumbnails";
-const ARTE_BUCKET = "artes";
+export const BUCKET_ORIGINAIS = "artes";     // privado
+export const BUCKET_PREVIEWS  = "previews";  // público
+export const BUCKET_AUDIOS    = "audios";    // privado (no seu projeto está privado)
 
-/** tenta thumbnail; se não, cai no original */
-export async function getArtePreviewUrls(
-  arquivoPath: string,
-  expiresInSeconds = 60 // padrão: 1 min
-) {
-  // tenta thumb (usa o mesmo path do arte, mas em outro bucket)
-  const thumb = await supabase.storage
-    .from(THUMB_BUCKET)
-    .createSignedUrl(arquivoPath, expiresInSeconds);
-  if (!thumb.error && thumb.data?.signedUrl) {
-    return { previewUrl: thumb.data.signedUrl, downloadUrl: thumb.data.signedUrl };
-  }
-
-  // fallback: original
-  const orig = await supabase.storage
-    .from(ARTE_BUCKET)
-    .createSignedUrl(arquivoPath, expiresInSeconds);
-  if (!orig.error && orig.data?.signedUrl) {
-    return { previewUrl: orig.data.signedUrl, downloadUrl: orig.data.signedUrl };
-  }
-
-  return { previewUrl: null, downloadUrl: null };
+export async function publicPreviewUrl(previewPath: string | null) {
+  if (!previewPath) return null;
+  const key = previewPath.replace(/^previews\//, "");
+  const { data } = supabase.storage.from(BUCKET_PREVIEWS).getPublicUrl(key);
+  return data.publicUrl ?? null;
 }
 
-export async function getArteDownloadUrl(
-  arquivoPath: string,
-  expiresInSeconds = 60 // padrão: 1 min
-) {
+export async function signedOriginalUrl(originalPath: string, expires = 3600) {
   const { data, error } = await supabase.storage
-    .from(ARTE_BUCKET)
-    .createSignedUrl(arquivoPath, expiresInSeconds);
-  if (error) throw error;
+    .from(BUCKET_ORIGINAIS)
+    .createSignedUrl(originalPath, expires);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
+export async function signedAudioUrl(audioPath: string, expires = 3600) {
+  const { data, error } = await supabase.storage
+    .from(BUCKET_AUDIOS)
+    .createSignedUrl(audioPath, expires);
+  if (error) return null;
   return data?.signedUrl ?? null;
 }
