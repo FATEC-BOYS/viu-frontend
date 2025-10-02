@@ -4,7 +4,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 export type UserProfile = {
   id: string;
@@ -31,9 +31,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [safeMode, setSafeMode] = useState(false); // lido via window (sem Suspense)
   const router = useRouter();
-  const params = useSearchParams();
-  const safeMode = params.get('safe') === '1';
+
+  // Lê ?safe=1 apenas no cliente (evita Suspense no 404/layout)
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setSafeMode(sp.get('safe') === '1');
+    } catch {
+      setSafeMode(false);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -53,6 +62,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setSession(sess);
           setUser(sess?.user ?? null);
 
+          // Em links públicos (sem sessão), isso nem roda; não quebra os viewers.
           if (sess?.user && !safeMode) {
             ensureProfile(sess.user).catch((e) =>
               console.warn('ensureProfile falhou (ignorado):', e)
@@ -84,6 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         setProfile(null);
       }
+      // nunca deixe a UI presa em loading
       setLoading(false);
     });
 
@@ -91,11 +102,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       alive = false;
       listener?.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // safeMode controla apenas se buscamos/criamos perfil
   }, [safeMode]);
 
   const ensureProfile = async (u: User) => {
     try {
+      // tenta obter perfil
       const { data: existing, error: selErr } = await supabase
         .from('usuarios')
         .select('id, nome, email, avatar, tipo')
@@ -111,6 +123,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
+      // cria perfil básico (tolerante a falhas/RLS)
       const fallbackNome =
         (u.user_metadata as any)?.name ?? u.email?.split('@')[0] ?? 'Usuário';
       const fallbackEmail = u.email ?? null;
@@ -149,6 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.warn('signOut supabase falhou (segue mesmo assim):', e);
     }
 
+    // limpa storages (garante logout manual)
     try {
       Object.keys(localStorage).forEach((k) => {
         if (k.startsWith('sb-')) localStorage.removeItem(k);
@@ -165,11 +179,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextType = { session, user, profile, signOut, loading };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = (): AuthContextType => {
