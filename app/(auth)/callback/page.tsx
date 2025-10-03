@@ -5,9 +5,6 @@ import { useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 type Tipo = 'DESIGNER' | 'CLIENTE';
 
 function safeNext(path: string | null): string | null {
@@ -20,7 +17,7 @@ function safeNext(path: string | null): string | null {
 export default function AuthCallbackPage() {
   const router = useRouter();
   const search = useSearchParams();
-  const ranRef = useRef(false);
+  const ranRef = useRef(false); // evita duplicar no StrictMode
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -30,7 +27,7 @@ export default function AuthCallbackPage() {
       try {
         const token_hash = search.get('token_hash'); // magic link / OTP
         const typeParam  = search.get('type');       // 'magiclink' | 'email' | ...
-        const code       = search.get('code');       // OAuth PKCE
+        const code       = search.get('code');       // OAuth (PKCE)
         const nextParam  = safeNext(search.get('next'));
         const tipoFromQuery = (search.get('tipo') as Tipo | null) ?? null;
 
@@ -70,30 +67,29 @@ export default function AuthCallbackPage() {
         const user = session.user;
 
         // 4) Normaliza metadados e upsert em "usuarios"
-        //    (idempotente; só atualiza se faltar algo)
         const meta = (user.user_metadata ?? {}) as Record<string, any>;
         const tipo: Tipo =
           tipoFromQuery ?? (meta.tipo as Tipo | undefined) ?? 'DESIGNER';
 
-        // nome preferindo chaves comuns do Supabase/OAuth
         const nome: string =
           meta.name ??
           meta.full_name ??
           meta.fullName ??
           meta.fullname ??
-          user.user_metadata?.user_name ??
+          meta.user_name ??
           (user.email ? user.email.split('@')[0] : 'Usuário');
 
-        // avatar vinda do OAuth (google usa "picture")
         const avatar_url: string | null =
           meta.avatar_url ?? meta.picture ?? null;
 
-        // se mudou/veio `tipo` pela query, persiste no metadata
+        // Atualiza user_metadata se faltando/alterado
         const mustUpdateMetadata =
-          meta.tipo !== tipo || meta.name !== nome || (avatar_url && meta.avatar_url !== avatar_url);
+          meta.tipo !== tipo ||
+          meta.name !== nome ||
+          (avatar_url && meta.avatar_url !== avatar_url);
 
         if (mustUpdateMetadata) {
-          await supabase.auth.updateUser({
+          const { error: upMetaErr } = await supabase.auth.updateUser({
             data: {
               ...meta,
               tipo,
@@ -101,19 +97,29 @@ export default function AuthCallbackPage() {
               ...(avatar_url ? { avatar_url } : {}),
             },
           });
+          if (upMetaErr) {
+            console.warn('updateUser metadata warning:', upMetaErr.message);
+          }
         }
 
-        // upsert na sua tabela "usuarios"
-        await supabase.from('usuarios').upsert(
-          {
-            id: user.id,
-            email: user.email,
-            nome,
-            tipo,
-            avatar_url: avatar_url ?? null,
-          },
-          { onConflict: 'id' }
-        );
+        // Upsert na tabela `usuarios` (idempotente)
+        const { error: upsertErr } = await supabase
+          .from('usuarios')
+          .upsert(
+            {
+              id: user.id,
+              email: user.email,
+              nome,
+              tipo,
+              avatar_url: avatar_url ?? null,
+            },
+            { onConflict: 'id' }
+          );
+
+        if (upsertErr) {
+          // não bloqueia o login; só loga
+          console.warn('usuarios upsert warning:', upsertErr.message);
+        }
 
         // 5) Decide destino
         const fallback = tipo === 'CLIENTE' ? '/links' : '/dashboard';
