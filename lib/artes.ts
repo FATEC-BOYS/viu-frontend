@@ -147,11 +147,16 @@ export async function listArtesOverview({
   q = q.range(from, to);
 
   // 5) Execução
-  const { data, error, count } = await q;
-  if (error) {
-    console.error("listArtesOverview select error", error);
-    throw error;
-  }
+const { data, error, count } = await q;
+if (error) {
+  console.error("listArtesOverview select error", {
+    message: (error as any)?.message,
+    details: (error as any)?.details,
+    hint: (error as any)?.hint,
+    code: (error as any)?.code,
+  });
+  return { data: [], count: 0 }; // <- evita 500
+}
 
   const artes = (data ?? []) as any[];
   const ids = artes.map((a) => a.id) as string[];
