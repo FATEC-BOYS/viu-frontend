@@ -189,7 +189,7 @@ function ArteCard({
   async function handleDownload() {
     try {
       const url = await getArteDownloadUrl(arte.arquivo);
-      window.open(url, "_blank");
+      if (url) window.open(url, "_blank");
     } catch {
       // TODO: toast de erro
     }
@@ -406,12 +406,16 @@ function ArtesPageInner() {
   ]);
 
   // Facetas dinâmicas (com base no resultado atual)
-  const projetos = Array.from(new Set(rows.map((a) => a.projeto_nome).filter((p): p is string => !!p))).map(
-    (nome, idx) => ({ id: String(idx), nome }),
-  );
+  const projetos = Array.from(
+    new Set(rows.map((a) => a.projeto_nome).filter((p): p is string => !!p)),
+  ).map((nome, idx) => ({ id: String(idx), nome }));
   const tipos = Array.from(new Set(rows.map((a) => a.tipo)));
-  const clientes = Array.from(new Set(rows.map((a) => a.cliente_nome).filter((c): c is string => !!c)));
-  const autores = Array.from(new Set(rows.map((a) => a.autor_nome).filter((a): a is string => !!a)));
+  const clientes = Array.from(
+    new Set(rows.map((a) => a.cliente_nome).filter((c): c is string => !!c)),
+  );
+  const autores = Array.from(
+    new Set(rows.map((a) => a.autor_nome).filter((a): a is string => !!a)),
+  );
 
   const estatisticas = {
     total: rows.length,

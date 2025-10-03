@@ -23,18 +23,22 @@ export type ArteOverview = {
   criado_em: string;
   atualizado_em: string;
 
-  // joins (podem vir null se RLS bloquear)
-  projeto?: { id: string; nome: string; cliente?: { id: string; nome: string } | null } | null;
+  // joins (virão apenas quando RLS permitir)
+  projeto?: {
+    id: string;
+    nome: string;
+    cliente?: { id: string; nome: string } | null;
+  } | null;
   autor?: { id: string; nome: string } | null;
 
-  // ---- campos achatados p/ conveniência na página ----
+  // campos "achatados" para a página
   projeto_nome?: string | null;
   cliente_nome?: string | null;
   autor_nome?: string | null;
 
-  // ---- métricas rápidas para a lista ----
-  feedbacks_count?: number;             // total de feedbacks vinculados
-  tem_aprovacao_aprovada?: boolean;     // existe alguma aprovação "APROVADO"
+  // métricas rápidas para a lista
+  feedbacks_count?: number;         // total de feedbacks vinculados
+  tem_aprovacao_aprovada?: boolean; // existe alguma aprovação "APROVADO"
 };
 
 export type ArteDetail = {
@@ -53,7 +57,11 @@ export type ArteDetail = {
   largura_px?: number | null;
   altura_px?: number | null;
 
-  projeto?: { id: string; nome: string; cliente?: { id: string; nome: string } | null } | null;
+  projeto?: {
+    id: string;
+    nome: string;
+    cliente?: { id: string; nome: string } | null;
+  } | null;
   autor?: { id: string; nome: string; avatar?: string | null } | null;
 
   feedbacks?: Array<any>;
@@ -91,27 +99,31 @@ export async function listArtesOverview({
   q: searchTerm,
   status,
   tipo,
-  projeto: projetoFilter, // nomes: filtrar no client
+  projeto: projetoFilter,
   cliente: clienteFilter,
   autor: autorFilter,
   orderBy = "criado_em",
   page = 1,
   pageSize = 24,
 }: ListArtesParams = {}): Promise<{ data: ArteOverview[]; count: number }> {
-  // 1) SELECT base com joins corretos (ajuste os nomes das FKs se forem diferentes no seu banco)
-  let q = supabase
-    .from("artes")
-    .select(
-      `
-      id, nome, descricao, status, versao, tipo, tamanho, projeto_id, autor_id, arquivo, criado_em, atualizado_em,
-      projeto:projetos!artes_projeto_id_fkey (
-        id, nome,
-        cliente:usuarios!projetos_cliente_id_fkey ( id, nome )
-      ),
-      autor:usuarios!artes_autor_id_fkey ( id, nome )
-    `,
-      { count: "exact" }
-    );
+  // 1) SELECT base respeitando RLS: use !inner nos relacionamentos
+  //    Assim, só vem arte/projeto/cliente/autor que você PODE ler.
+ let q = supabase
+  .from("artes")
+  .select(
+    `
+    id, nome, descricao, status, versao, tipo, tamanho,
+    projeto_id, autor_id, arquivo, criado_em, atualizado_em,
+
+    projeto:projetos!artes_projeto_id_fkey!inner (
+      id, nome,
+      cliente:usuarios!projetos_cliente_id_fkey!inner ( id, nome )
+    ),
+
+    autor:usuarios!artes_autor_id_fkey!inner ( id, nome )
+  `,
+    { count: "exact" }
+  );
 
   // 2) Filtros suportados no backend
   if (searchTerm && searchTerm.trim()) {
@@ -121,6 +133,7 @@ export async function listArtesOverview({
   if (tipo && tipo !== "todos") q = q.eq("tipo", tipo);
 
   // 3) Ordenação suportada no backend
+  //    Obs.: "projeto" não é suportado aqui (campo de join); se vier, caímos no default.
   const allowedOrder = new Set(["criado_em", "nome", "versao", "tamanho"]);
   if (allowedOrder.has(orderBy)) {
     q = q.order(orderBy as any, { ascending: false });
@@ -133,7 +146,7 @@ export async function listArtesOverview({
   const to = from + pageSize - 1;
   q = q.range(from, to);
 
-  // 5) Execução do select
+  // 5) Execução
   const { data, error, count } = await q;
   if (error) {
     console.error("listArtesOverview select error", error);
@@ -178,7 +191,7 @@ export async function listArtesOverview({
     tem_aprovacao_aprovada: aprovadosSet.has(a.id),
   }));
 
-  // 8) Filtros por NOME (projeto/cliente/autor) — no client ou aqui depois do fetch
+  // 8) Filtros por NOME (projeto/cliente/autor) — client-side (pós-fetch)
   if (projetoFilter && projetoFilter !== "todos") {
     const pf = projetoFilter.toLowerCase();
     items = items.filter((a) => (a.projeto_nome || "").toLowerCase() === pf);
@@ -192,12 +205,11 @@ export async function listArtesOverview({
     items = items.filter((a) => (a.autor_nome || "").toLowerCase() === af);
   }
 
-  // 9) Se filtrou por nome acima, o count muda para o exibido
+  // 9) Count efetivo (após filtros de nome)
   const effectiveCount = items.length;
 
   return { data: items, count: effectiveCount ?? count ?? 0 };
 }
-
 
 /** ---------- DETALHE ---------- */
 export async function getArteDetail(arteId: string): Promise<ArteDetail | null> {
@@ -237,8 +249,12 @@ export async function updateArteMetadata(
 }
 
 /** ---------- EXCLUSÃO ---------- */
-export async function deleteArteById(arteId: string, p0?: { storageMode: string; }) {
-  const { data: arte } = await supabase.from("artes").select("arquivo").eq("id", arteId).single();
+export async function deleteArteById(arteId: string, p0?: { storageMode: string }) {
+  const { data: arte } = await supabase
+    .from("artes")
+    .select("arquivo")
+    .eq("id", arteId)
+    .single();
 
   // Dependentes (ajuste se tiver CASCADE ou policies)
   await supabase.from("arte_arquivos").delete().eq("arte_id", arteId);
@@ -254,7 +270,9 @@ export async function deleteArteById(arteId: string, p0?: { storageMode: string;
     try {
       const bucket = "artes";
       await supabase.storage.from(bucket).remove([arte.arquivo]);
-    } catch {/* ignore */}
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -346,4 +364,3 @@ export async function listVersoes(arteId: string): Promise<VersaoGroup[]> {
 
   return Array.from(groups.values()).sort((a, b) => b.versao - a.versao);
 }
-
