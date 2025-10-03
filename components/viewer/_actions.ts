@@ -1,38 +1,31 @@
 "use server";
 
 import { getSupabaseServer } from "@/lib/supabaseServer";
-export const runtime = "nodejs";
-
 import { randomUUID } from "crypto";
 import mime from "mime";
-import { BUCKET_ORIGINAIS, BUCKET_PREVIEWS } from "@/lib/storage";
+import {
+  BUCKET_ORIGINAIS,
+  BUCKET_PREVIEWS,
+} from "@/lib/storage";
 
-/** ========= lazy import do sharp (com cache) ========= */
-let _sharp: any | null = null;
+/** carrega sharp dinamicamente (evita erro em runtime/bundle) */
 async function getSharp() {
-  if (_sharp) return _sharp;
-  try {
-    // dynamic import garante que só carrega no runtime Node (e não no build/edge)
-    _sharp = (await import("sharp")).default;
-    return _sharp;
-  } catch {
-    // sem sharp? seguimos sem gerar preview/metadata
-    return null;
-  }
+  const mod = await import("sharp");
+  // @ts-ignore
+  return mod.default ?? mod;
 }
 
-/** util: extrai mime/ext com fallback */
+/** util: extrai mime/ extensão com fallback */
 function guessMimeAndExt(file: File) {
   const ct = file.type || mime.getType(file.name) || "application/octet-stream";
   const ext = mime.getExtension(ct) || file.name.split(".").pop() || "bin";
   return { contentType: ct, ext: ext.toLowerCase() };
 }
 
-/** util: metadados de imagem (largura/altura); retorna null se não for imagem ou sem sharp */
+/** util: metadados de imagem (largura/altura) com sharp; retorna null se não for imagem */
 async function probeImage(buffer: Buffer): Promise<{ w: number; h: number } | null> {
   try {
     const sharp = await getSharp();
-    if (!sharp) return null;
     const meta = await sharp(buffer).metadata();
     if (meta.width && meta.height) return { w: meta.width, h: meta.height };
     return null;
@@ -41,10 +34,9 @@ async function probeImage(buffer: Buffer): Promise<{ w: number; h: number } | nu
   }
 }
 
-/** gera preview 1280px (jpg) — se não houver sharp, retorna null */
+/** gera preview 1280px (jpg) — retorna buffer e contentType */
 async function makePreview(buffer: Buffer) {
   const sharp = await getSharp();
-  if (!sharp) return null;
   const out = await sharp(buffer)
     .resize({ width: 1280, withoutEnlargement: true })
     .jpeg({ quality: 80 })
@@ -71,8 +63,8 @@ export async function createArteWithPreview(input: {
 
   // 2) paths
   const base = `${id}/v1`;
-  const originalPath = `${base}/original.${ext}`;     // bucket 'artes'
-  const previewPath  = `${id}/v1/preview_1280.jpg`;   // bucket 'previews'
+  const originalPath = `${base}/original.${ext}`;             // no bucket 'artes'
+  const previewPath  = `${id}/v1/preview_1280.jpg`;           // no bucket 'previews'
 
   // 3) upload do original (privado)
   const upOrig = await supa.storage.from(BUCKET_ORIGINAIS).upload(originalPath, buf, {
@@ -81,17 +73,17 @@ export async function createArteWithPreview(input: {
   });
   if (upOrig.error) throw upOrig.error;
 
-  // 4) gera e sobe preview (se for imagem e tiver sharp)
+  // 4) gera e sobe preview (se for imagem)
   let didPreview = false;
   const maybeImg = contentType.startsWith("image/");
   if (maybeImg) {
     const pv = await makePreview(buf);
-    if (pv) {
-      const upPrev = await supa.storage.from(BUCKET_PREVIEWS).upload(previewPath, pv.buf, {
-        contentType: pv.contentType,
-        upsert: true,
-      });
-      if (!upPrev.error) didPreview = true;
+    const upPrev = await supa.storage.from(BUCKET_PREVIEWS).upload(previewPath, pv.buf, {
+      contentType: pv.contentType,
+      upsert: true,
+    });
+    if (!upPrev.error) {
+      didPreview = true;
     }
   }
 
@@ -105,7 +97,7 @@ export async function createArteWithPreview(input: {
         nome: input.nome,
         descricao: null,
         arquivo: originalPath,           // path
-        tipo: input.tipo || contentType, // pode ser categoria ou mime
+        tipo: input.tipo || contentType, // seu campo 'tipo' na tabela
         tamanho: buf.length,
         versao: 1,
         status: "EM_ANALISE",
@@ -135,7 +127,7 @@ export async function createArteWithPreview(input: {
     if (insVersErr) throw insVersErr;
 
     // arquivos (FONTE + PREVIEW)
-    const rows: any[] = [
+    const rows = [
       {
         arte_id: id,
         versao: 1,
@@ -153,7 +145,7 @@ export async function createArteWithPreview(input: {
         arte_id: id,
         versao: 1,
         kind: "PREVIEW",
-        arquivo: previewPath,
+        arquivo: previewPath, // no bucket 'previews'
         mime: "image/jpeg",
         tamanho: null,
         largura_px: null,
@@ -162,7 +154,7 @@ export async function createArteWithPreview(input: {
       } as any);
     }
 
-    const { error: insFilesErr } = await supa.from("arte_arquivos").insert(rows);
+    const { error: insFilesErr } = await supa.from("arte_arquivos").insert(rows as any[]);
     if (insFilesErr) throw insFilesErr;
 
     return { arte, versao, files: rows };
@@ -174,7 +166,7 @@ export async function createArteWithPreview(input: {
   }
 }
 
-/** Nova versão de uma arte existente */
+/** Nova versão de uma arte existente: sobe novo original e gera preview, incrementa versao */
 export async function addArteVersion(input: {
   arte_id: string;
   file: File;
@@ -182,7 +174,7 @@ export async function addArteVersion(input: {
 }) {
   const supa = getSupabaseServer();
 
-  // arte atual
+  // pega arte atual p/ saber versao
   const { data: current, error: getErr } = await supa
     .from("artes")
     .select("id, versao, status_atual")
@@ -208,17 +200,15 @@ export async function addArteVersion(input: {
   });
   if (upOrig.error) throw upOrig.error;
 
-  // preview (se imagem & sharp ok)
+  // preview se for imagem
   let didPreview = false;
   if (contentType.startsWith("image/")) {
     const pv = await makePreview(buf);
-    if (pv) {
-      const upPrev = await supa.storage.from(BUCKET_PREVIEWS).upload(previewPath, pv.buf, {
-        contentType: pv.contentType,
-        upsert: true,
-      });
-      if (!upPrev.error) didPreview = true;
-    }
+    const upPrev = await supa.storage.from(BUCKET_PREVIEWS).upload(previewPath, pv.buf, {
+      contentType: pv.contentType,
+      upsert: true,
+    });
+    if (!upPrev.error) didPreview = true;
   }
 
   try {
@@ -236,7 +226,7 @@ export async function addArteVersion(input: {
     if (versErr) throw versErr;
 
     // arte_arquivos
-    const rows: any[] = [
+    const rows = [
       {
         arte_id: input.arte_id,
         versao: nextVersion,
@@ -262,7 +252,7 @@ export async function addArteVersion(input: {
         arte_versao_id: versao.id,
       } as any);
     }
-    const { error: filesErr } = await supa.from("arte_arquivos").insert(rows);
+    const { error: filesErr } = await supa.from("arte_arquivos").insert(rows as any[]);
     if (filesErr) throw filesErr;
 
     // atualiza arte
@@ -306,7 +296,7 @@ export async function addArteAttachment(input: {
   if (!art) throw new Error("Arte não encontrada");
   const versao = art.versao ?? 1;
 
-  // arte_versao atual
+  // pega arte_versao atual
   const { data: v } = await supa
     .from("arte_versoes")
     .select("id")
@@ -358,12 +348,13 @@ export async function addArteAttachment(input: {
   }
 }
 
-/** -------- FEEDBACK GUEST & SAVE -------- */
+// --- FEEDBACK GUEST & SAVE --------------------------------------------------
 
+/** Cria (ou reaproveita) um convidado por e-mail e retorna { id } */
 export async function createGuestUser(input: { nome: string; email: string }) {
   const supabase = getSupabaseServer();
 
-  // reaproveita pelo e-mail p/ não estourar UNIQUE
+  // tenta reaproveitar pelo e-mail para não estourar UNIQUE
   const { data: existing } = await supabase
     .from("usuarios")
     .select("id")
@@ -377,7 +368,7 @@ export async function createGuestUser(input: { nome: string; email: string }) {
     .insert({
       nome: input.nome,
       email: input.email,
-      tipo: "CLIENTE",
+      tipo: "CLIENTE", // convidado/cliente
     })
     .select("id")
     .single();
@@ -395,7 +386,7 @@ export async function saveFeedback(input: {
   token: string;
   arteId: string;
   conteudo: string;
-  tipo: "TEXTO";
+  tipo: "TEXTO"; // (áudio é outra action)
   posicao_x: number;
   posicao_y: number;
   posicao_x_abs: number;
@@ -404,7 +395,7 @@ export async function saveFeedback(input: {
 }) {
   const supabase = getSupabaseServer();
 
-  // valida link
+  // valida link: existe, não expirou, é de ARTE, bate o arteId, pode comentar
   const { data: link } = await supabase
     .from("link_compartilhado")
     .select("id, tipo, arte_id, expira_em, somente_leitura, can_comment")
@@ -412,7 +403,15 @@ export async function saveFeedback(input: {
     .maybeSingle();
 
   const expired = link?.expira_em && new Date(link.expira_em) < new Date();
-  if (!link || expired || link.tipo !== "ARTE" || link.arte_id !== input.arteId || link.somente_leitura || link.can_comment === false) {
+
+  if (
+    !link ||
+    expired ||
+    link.tipo !== "ARTE" ||
+    link.arte_id !== input.arteId ||
+    link.somente_leitura ||
+    link.can_comment === false
+  ) {
     return null;
   }
 
@@ -427,7 +426,7 @@ export async function saveFeedback(input: {
       posicao_y: input.posicao_y,
       posicao_x_abs: input.posicao_x_abs,
       posicao_y_abs: input.posicao_y_abs,
-      autor_id: input.authorId,
+      autor_id: input.authorId, // id real do convidado/usuário
       status: "ABERTO",
     })
     .select("*")
@@ -441,9 +440,9 @@ export async function saveFeedback(input: {
   return data;
 }
 
-const AUDIO_BUCKET = "audios";
+const AUDIO_BUCKET = "audios"; // ajuste se o bucket tiver outro nome
 
-/** Upload de áudio de feedback (guest link). */
+/** Upload de áudio de feedback (guest link). Salva path no DB e retorna o row com URL assinada p/ tocar imediatamente. */
 export async function saveAudioFeedback(formData: FormData) {
   const supabase = getSupabaseServer();
 
@@ -462,11 +461,18 @@ export async function saveAudioFeedback(formData: FormData) {
     .maybeSingle();
 
   const expired = link?.expira_em && new Date(link.expira_em) < new Date();
-  if (!link || expired || link.tipo !== "ARTE" || link.arte_id !== arteId || link.somente_leitura || link.can_comment === false) {
+  if (
+    !link ||
+    expired ||
+    link.tipo !== "ARTE" ||
+    link.arte_id !== arteId ||
+    link.somente_leitura ||
+    link.can_comment === false
+  ) {
     return null;
   }
 
-  // upload p/ bucket privado
+  // upload p/ bucket privado de áudios
   const buf = Buffer.from(await file.arrayBuffer());
   const ext = "webm";
   const name = `${randomUUID()}.${ext}`;
@@ -475,9 +481,10 @@ export async function saveAudioFeedback(formData: FormData) {
   const up = await supabase.storage
     .from(AUDIO_BUCKET)
     .upload(path, buf, { contentType: file.type || "audio/webm", upsert: false });
+
   if (up.error) return null;
 
-  // guarda path no DB
+  // guarda somente o path no DB (bucket é privado)
   const { data, error } = await supabase
     .from("feedbacks")
     .insert({
@@ -485,7 +492,7 @@ export async function saveAudioFeedback(formData: FormData) {
       autor_id: authorId,
       tipo: "AUDIO",
       conteudo: "Áudio",
-      arquivo: path, // path (bucket privado)
+      arquivo: path,           // ⚠️ path, não URL
       posicao_x: null,
       posicao_y: null,
       posicao_x_abs: null,
@@ -497,11 +504,12 @@ export async function saveAudioFeedback(formData: FormData) {
 
   if (error || !data) return null;
 
-  // URL assinada para player
+  // gera URL assinada só para retorno (player no cliente)
   const signed = await supabase.storage
     .from(AUDIO_BUCKET)
     .createSignedUrl(path, 60 * 60); // 1h
 
+  // devolve o row com arquivo já consumível no <audio>
   return { ...data, arquivo: signed.data?.signedUrl ?? null };
 }
 
