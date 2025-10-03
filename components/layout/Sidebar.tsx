@@ -1,7 +1,7 @@
 // components/layout/Sidebar.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -12,29 +12,32 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
-  BarChart3, Clock, Settings, User, Link as LinkIcon, Plus, Upload,
-  ChevronDown, ChevronRight
+  BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
-// pequeno hook para garantir que só aplicamos classes dinâmicas após montar
+// --- helpers ---------------------------------------------------------------
+
 function useMounted() {
   const [m, setM] = useState(false);
   useEffect(() => setM(true), []);
   return m;
 }
 
+type MaybeNumber = number | null | undefined;
+
 interface Contadores {
-  tarefasPendentes: number;
-  feedbacksPendentes: number;
-  notificacoesNaoLidas: number;
-  projetsVencendo: number;
+  tarefasPendentes: MaybeNumber;
+  feedbacksPendentes: MaybeNumber;
+  notificacoesNaoLidas: MaybeNumber;
+  projetsVencendo: MaybeNumber;
 }
+
 interface NavItem {
   title: string;
   href: string;
   icon: LucideIcon;
-  badge?: number;
+  badge?: MaybeNumber;
   disabled?: boolean;
 }
 interface NavSection {
@@ -43,38 +46,78 @@ interface NavSection {
   collapsible?: boolean;
 }
 
+// mostra badge só quando há valor definido e > 0
+function renderBadge(value: MaybeNumber) {
+  if (typeof value !== 'number' || value <= 0) return null;
+  return (
+    <Badge variant="secondary" className="h-5 min-w-[20px] text-xs px-1.5">
+      {value > 99 ? '99+' : value}
+    </Badge>
+  );
+}
+
+// --- componente ------------------------------------------------------------
+
 export function Sidebar() {
   const pathname = usePathname();
   const mounted = useMounted();
 
   const [contadores, setContadores] = useState<Contadores>({
-    tarefasPendentes: 0,
-    feedbacksPendentes: 0,
-    notificacoesNaoLidas: 0,
-    projetsVencendo: 0
+    tarefasPendentes: undefined,
+    feedbacksPendentes: undefined,
+    notificacoesNaoLidas: undefined,
+    projetsVencendo: undefined
   });
-  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
 
+  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
+  const fetchingRef = useRef(false);
+
+  // evita hydration: só pintamos "ativo" após montar
+  const isActive = (href: string) => {
+    if (!mounted) return false;
+    if (href === '/dashboard') {
+      return pathname === '/dashboard' || pathname === '/';
+    }
+    return pathname.startsWith(href);
+  };
+
+  // busca contadores “reais”
   useEffect(() => {
-    const fetchContadores = async () => {
+    let alive = true;
+
+    async function fetchContadores() {
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
       try {
+        // garante sessão (importante p/ RLS e row-level filters)
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData?.user?.id;
+
+        // se tiver RLS por usuário e quiser filtrar por ele, ajuste aqui.
+        // exemplo: .eq('responsavel_id', userId)
+
+        // Tarefas PENDENTE/EM_ANDAMENTO
         const { count: tarefasPendentes } = await supabase
           .from('tarefas')
           .select('*', { count: 'exact', head: true })
           .in('status', ['PENDENTE', 'EM_ANDAMENTO']);
 
+        // Feedbacks últimos 7 dias
         const dataLimite = new Date();
         dataLimite.setDate(dataLimite.getDate() - 7);
         const { count: feedbacksPendentes } = await supabase
           .from('feedbacks')
           .select('*', { count: 'exact', head: true })
-          .gte('criado_em', dataLimite.toISOString());
+          .gte('criado_em', dataLimite.toISOString())
+          .in('status', ['ABERTO', 'EM_ANALISE']);
 
+        // Notificações não lidas
         const { count: notificacoesNaoLidas } = await supabase
           .from('notificacoes')
           .select('*', { count: 'exact', head: true })
           .eq('lida', false);
 
+        // Projetos em andamento com prazo nos próximos 7 dias
         const dataFutura = new Date();
         dataFutura.setDate(dataFutura.getDate() + 7);
         const { count: projetsVencendo } = await supabase
@@ -83,38 +126,61 @@ export function Sidebar() {
           .eq('status', 'EM_ANDAMENTO')
           .lte('prazo', dataFutura.toISOString());
 
-        setContadores({
-          tarefasPendentes: tarefasPendentes || 0,
-          feedbacksPendentes: feedbacksPendentes || 0,
-          notificacoesNaoLidas: notificacoesNaoLidas || 0,
-          projetsVencendo: projetsVencendo || 0
-        });
-      } catch (error) {
-        console.error('Erro ao buscar contadores:', error);
-      }
-    };
+        if (!alive) return;
 
+        setContadores({
+          tarefasPendentes: tarefasPendentes ?? 0,
+          feedbacksPendentes: feedbacksPendentes ?? 0,
+          notificacoesNaoLidas: notificacoesNaoLidas ?? 0,
+          projetsVencendo: projetsVencendo ?? 0
+        });
+      } catch (err) {
+        console.error('Erro ao buscar contadores:', err);
+        if (!alive) return;
+        // mantém undefined para não quebrar hidratação com valores divergentes
+        setContadores((prev) => ({ ...prev }));
+      } finally {
+        fetchingRef.current = false;
+      }
+    }
+
+    // primeira carga + polling
     fetchContadores();
     const interval = setInterval(fetchContadores, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    // realtime: escuta mudanças relevantes e revalida
+    const chan = supabase
+      .channel('sidebar-counters')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, fetchContadores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'feedbacks' }, fetchContadores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificacoes' }, fetchContadores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projetos' }, fetchContadores)
+      .subscribe();
+
+    return () => {
+      alive = false;
+      clearInterval(interval);
+      supabase.removeChannel(chan);
+    };
   }, []);
 
-  const navigationSections: NavSection[] = [
+  // sections memoizadas pra evitar recalcular em cada render
+  const navigationSections: NavSection[] = useMemo(() => ([
     {
       title: 'Principal',
       items: [
         { title: 'Dashboard', href: '/dashboard', icon: Home },
-        { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo || undefined },
+        { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo },
         { title: 'Artes', href: '/artes', icon: FileImage },
-        { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes || undefined }
+        { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes }
       ]
     },
     {
       title: 'Gestão',
       items: [
         { title: 'Clientes', href: '/clientes', icon: Users },
-        { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes || undefined },
-        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas || undefined }
+        { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
+        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas }
       ]
     },
     {
@@ -134,19 +200,15 @@ export function Sidebar() {
         { title: 'Configurações', href: '/configuracoes', icon: Settings }
       ]
     }
-  ];
+  ]), [
+    contadores.tarefasPendentes,
+    contadores.feedbacksPendentes,
+    contadores.notificacoesNaoLidas,
+    contadores.projetsVencendo
+  ]);
 
   const toggleSection = (sectionTitle: string) => {
     setSectionsCollapsed(prev => ({ ...prev, [sectionTitle]: !prev[sectionTitle] }));
-  };
-
-  // <<< mudança principal: só consideramos "ativo" DEPOIS de mounted >>>
-  const isActive = (href: string) => {
-    if (!mounted) return false;
-    if (href === '/dashboard') {
-      return pathname === '/dashboard' || pathname === '/';
-    }
-    return pathname.startsWith(href);
   };
 
   return (
@@ -156,18 +218,6 @@ export function Sidebar() {
         <h2 className="text-lg font-semibold">VIU</h2>
         <p className="text-sm text-muted-foreground">Gestão de Projetos</p>
       </div>
-
-      {/* Ações Rápidas
-      <div className="px-4 space-y-2">
-        <Button className="w-full justify-start" size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Projeto
-        </Button>
-        <Button variant="outline" className="w-full justify-start" size="sm">
-          <Upload className="mr-2 h-4 w-4" />
-          Upload Arte
-        </Button>
-      </div> */}
 
       <Separator className="my-4" />
 
@@ -187,7 +237,7 @@ export function Sidebar() {
                   {section.collapsible && (
                     <Button
                       variant="ghost"
-                      size="icon"            
+                      size="icon"
                       className="h-6 w-6"
                       onClick={() => toggleSection(section.title)}
                       aria-label={isCollapsed ? "Expandir seção" : "Recolher seção"}
@@ -216,18 +266,13 @@ export function Sidebar() {
                             active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
                             item.disabled && "pointer-events-none opacity-50"
                           )}
-                          // evita warning visual isolado caso algo ainda mude após mount
                           suppressHydrationWarning
                         >
                           <div className="flex items-center">
                             <Icon className="mr-3 h-4 w-4" />
                             {item.title}
                           </div>
-                          {item.badge && item.badge > 0 && (
-                            <Badge variant="secondary" className="h-5 min-w-[20px] text-xs px-1.5">
-                              {item.badge > 99 ? '99+' : item.badge}
-                            </Badge>
-                          )}
+                          {renderBadge(item.badge)}
                         </Link>
                       );
                     })}
@@ -239,17 +284,39 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
 
-      <div className="p-4 border-t">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-            <User className="h-4 w-4 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Designer</p>
-            <p className="text-xs text-muted-foreground truncate">
-              designer@studio.com
-            </p>
-          </div>
+      {/* Rodapé (usuario) */}
+      <SidebarUser />
+    </div>
+  );
+}
+
+// footer isolado (pode futuramente ler usuário real)
+function SidebarUser() {
+  const [email, setEmail] = useState<string>('—');
+  const [nome, setNome] = useState<string>('—');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data?.user;
+      if (!alive) return;
+      setEmail(u?.email ?? '—');
+      // Se você tiver tabela de perfis/usuarios, pode buscar o nome aqui.
+      setNome((u?.user_metadata as any)?.name ?? 'Usuário');
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  return (
+    <div className="p-4 border-t">
+      <div className="flex items-center space-x-3">
+        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+          <User className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{nome}</p>
+          <p className="text-xs text-muted-foreground truncate">{email}</p>
         </div>
       </div>
     </div>
