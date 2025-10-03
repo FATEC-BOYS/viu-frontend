@@ -449,7 +449,7 @@ export default function CadastroPage() {
     try {
       setSending(true);
       setMsg(null);
-      const redirectTo = `${getBaseUrl()}/auth/callback?tipo=${encodeURIComponent(tipo ?? "DESIGNER")}`;
+      const redirectTo = `${getBaseUrl()}/callback?tipo=${encodeURIComponent(tipo ?? "DESIGNER")}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo },
@@ -472,7 +472,7 @@ export default function CadastroPage() {
       setSending(true);
       setMsg(null);
 
-      const emailRedirectTo = `${getBaseUrl()}/auth/callback`;
+      const emailRedirectTo = `${getBaseUrl()}/callback`;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -512,7 +512,7 @@ export default function CadastroPage() {
         return;
       }
 
-      router.replace("/auth/callback");
+      router.replace("/callback");
     } catch (err) {
       console.error("Cadastro - exception:", err);
       setMsg("Erro inesperado ao cadastrar.");
