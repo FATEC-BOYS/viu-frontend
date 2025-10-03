@@ -12,17 +12,15 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
   FolderOpen,
-  PlusCircle,
-  Loader2,
   CheckCircle,
   Clock,
-  FileImage,
   MessageSquare,
   TrendingUp,
   Bell,
-  Filter,
+  X as CloseIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { getBaseUrl } from '@/lib/baseUrl';
 
@@ -42,20 +40,8 @@ export type Projeto = {
   nome: string;
   status: string;
   prazo: string | null;
-  cliente: { nome: string } | null; // via usuarios (policy anti-recursão aplicada)
+  cliente: { nome: string } | null;
   artes: ArteHeaderLite[];
-};
-
-export type ArteRecente = {
-  id: string;              // id da arte_versao
-  versao: number;
-  status: string;
-  criado_em: string;
-  arte: {
-    id: string;
-    nome: string;
-    projeto: { nome: string } | null;
-  } | null;
 };
 
 export type Feedback = {
@@ -143,7 +129,6 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function DashboardPage() {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
-  const [artesRecentes, setArtesRecentes] = useState<ArteRecente[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,13 +144,15 @@ export default function DashboardPage() {
     tarefasPendentes: 0,
   });
 
+  // controle do banner de atividade recente (notificação rápida)
+  const [showActivityBanner, setShowActivityBanner] = useState(true);
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       setError(null);
       setAuthIssue(null);
 
-      // 1) Sessão obrigatória (RLS bloqueia anon)
       const {
         data: { user },
         error: userErr,
@@ -180,99 +167,68 @@ export default function DashboardPage() {
       }
 
       try {
-        // 2) Consultas em paralelo (ajustadas ao novo modelo)
-        const [projetosQ, artesVersoesQ, feedbacksQ, tarefasQ] =
-          await Promise.all([
-            // Projetos + cliente + artes (cabeçalho) com status_atual/versao_atual
-            supabase
-              .from('projetos')
-              .select(
-                `
+        const [projetosQ, feedbacksQ, tarefasQ] = await Promise.all([
+          supabase
+            .from('projetos')
+            .select(
+              `
+              id,
+              nome,
+              status,
+              prazo,
+              cliente:cliente_id ( nome ),
+              artes (
                 id,
                 nome,
-                status,
-                prazo,
-                cliente:cliente_id ( nome ),
-                artes (
-                  id,
-                  nome,
-                  status_atual,
-                  versao_atual
-                )
-              `
+                status_atual,
+                versao_atual
               )
-              .throwOnError(),
-
-            // Artes recentes → arte_versoes + arte (pra nome/projeto)
-            supabase
-              .from('arte_versoes')
-              .select(
-                `
-                id,
+            `
+            )
+            .throwOnError(),
+          supabase
+            .from('feedbacks')
+            .select(
+              `
+              id,
+              conteudo,
+              criado_em,
+              autor:autor_id ( nome ),
+              arte_versao:arte_versao_id (
                 versao,
-                status,
-                criado_em,
-                arte:arte_id (
-                  id,
-                  nome,
-                  projeto:projeto_id ( nome )
-                )
-              `
+                arte:arte_id ( nome )
               )
-              .order('criado_em', { ascending: false })
-              .limit(6)
-              .throwOnError(),
-
-            // Feedbacks recentes → por versão, pega autor e nome da arte
-            supabase
-              .from('feedbacks')
-              .select(
-                `
-                id,
-                conteudo,
-                criado_em,
-                autor:autor_id ( nome ),
-                arte_versao:arte_versao_id (
-                  versao,
-                  arte:arte_id ( nome )
-                )
+            `
+            )
+            .order('criado_em', { ascending: false })
+            .limit(6)
+            .throwOnError(),
+          supabase
+            .from('tarefas')
+            .select(
               `
-              )
-              .order('criado_em', { ascending: false })
-              .limit(5)
-              .throwOnError(),
-
-            // Tarefas pendentes/andamento
-            supabase
-              .from('tarefas')
-              .select(
-                `
-                id,
-                titulo,
-                status,
-                prioridade,
-                prazo,
-                projeto:projeto_id ( nome )
-              `
-              )
-              .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
-              .order('prazo', { ascending: true, nullsFirst: false })
-              .limit(5)
-              .throwOnError(),
-          ]);
+              id,
+              titulo,
+              status,
+              prioridade,
+              prazo,
+              projeto:projeto_id ( nome )
+            `
+            )
+            .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
+            .order('prazo', { ascending: true, nullsFirst: false })
+            .limit(5)
+            .throwOnError(),
+        ]);
 
         const projetosData = (projetosQ.data || []) as unknown as Projeto[];
-        const artesRecData =
-          (artesVersoesQ.data || []) as unknown as ArteRecente[];
         const feedbacksData = (feedbacksQ.data || []) as unknown as Feedback[];
         const tarefasData = (tarefasQ.data || []) as unknown as Tarefa[];
 
         setProjetos(projetosData);
-        setArtesRecentes(artesRecData);
         setFeedbacks(feedbacksData);
         setTarefas(tarefasData);
 
-        // 3) Métricas (com base em cabeçalho de artes)
         const totalArtes =
           projetosData.reduce(
             (acc, p) => acc + (Array.isArray(p.artes) ? p.artes.length : 0),
@@ -296,6 +252,9 @@ export default function DashboardPage() {
           feedbacksRecentes: feedbacksData.length || 0,
           tarefasPendentes: tarefasData.length || 0,
         });
+
+        // mostra o banner apenas se houver feedbacks
+        setShowActivityBanner(feedbacksData.length > 0);
       } catch (e: any) {
         console.error('Erro ao buscar dados do dashboard:', e);
         setError(
@@ -356,8 +315,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        <p className="ml-2">Carregando dashboard...</p>
+        <span className="sr-only">Carregando...</span>
       </div>
     );
   }
@@ -402,7 +360,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header com ações */}
+      {/* Header com ações enxutas */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -410,17 +368,70 @@ export default function DashboardPage() {
             Visão geral dos seus projetos e atividades
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4 mr-2" />
-            Filtros
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm">
+            <Link href="/projetos">Ver projetos</Link>
           </Button>
-          <Button size="sm">
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Novo Projeto
+          <Button asChild size="sm" variant="outline">
+            <Link href="/prazos">Ver calendário</Link>
           </Button>
         </div>
       </div>
+
+      {/* Banner de Atividade Recente (notificação rápida, dismissible) */}
+      {showActivityBanner && feedbacks.length > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">Atividade recente</CardTitle>
+              </div>
+              <button
+                aria-label="Fechar atividade recente"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setShowActivityBanner(false)}
+              >
+                <CloseIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <CardDescription>
+              Feedbacks e comentários mais recentes
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {feedbacks.slice(0, 3).map((fb) => (
+              <div key={fb.id} className="flex gap-3">
+                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">
+                      {fb.autor?.nome || 'Alguém'} comentou em “
+                      {fb.arte_versao?.arte?.nome || 'Arte'}” (v
+                      {fb.arte_versao?.versao})
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      {formatRelativeTime(fb.criado_em)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {fb.conteudo}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {feedbacks.length > 3 && (
+              <div className="pt-2">
+                <Button asChild variant="link" className="px-0">
+                  <Link href="/feedbacks">Ver tudo</Link>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cards de Métricas */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -452,9 +463,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Grid Principal */}
+      {/* Grid Principal (sem Artes Recentes) */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Projetos Recentes */}
+        {/* Projetos em Andamento */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -506,6 +517,11 @@ export default function DashboardPage() {
                 Nenhum projeto em andamento
               </p>
             )}
+            <div className="pt-2">
+              <Button asChild variant="link" className="px-0">
+                <Link href="/projetos">Ver todos os projetos</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -549,82 +565,11 @@ export default function DashboardPage() {
                 Nenhuma tarefa pendente
               </p>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Artes Recentes (por versão) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileImage className="h-5 w-5 mr-2" />
-              Artes Recentes
-            </CardTitle>
-            <CardDescription>Últimas versões criadas</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {artesRecentes.map((av) => (
-              <div key={av.id} className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <h5 className="font-medium text-sm">{av.arte?.nome}</h5>
-                  <p className="text-xs text-muted-foreground">
-                    {av.arte?.projeto?.nome} • v{av.versao}
-                  </p>
-                </div>
-                <div className="text-right space-y-1">
-                  <StatusBadge status={av.status} />
-                  <p className="text-xs text-muted-foreground">
-                    {formatRelativeTime(av.criado_em)}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {artesRecentes.length === 0 && (
-              <p className="text-center text-muted-foreground py-4 text-sm">
-                Nenhuma arte encontrada
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Atividade Recente */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Bell className="h-5 w-5 mr-2" />
-              Atividade Recente
-            </CardTitle>
-            <CardDescription>Feedbacks e comentários recentes</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {feedbacks.map((fb) => (
-              <div key={fb.id} className="flex space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                  </div>
-                </div>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h5 className="font-medium text-sm">
-                      {fb.autor?.nome} comentou em &ldquo;
-                      {fb.arte_versao?.arte?.nome}
-                      &rdquo; (v{fb.arte_versao?.versao})
-                    </h5>
-                    <span className="text-xs text-muted-foreground">
-                      {formatRelativeTime(fb.criado_em)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {fb.conteudo}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {feedbacks.length === 0 && (
-              <p className="text-center text-muted-foreground py-4">
-                Nenhuma atividade recente
-              </p>
-            )}
+            <div className="pt-2">
+              <Button asChild variant="link" className="px-0">
+                <Link href="/prazos">Abrir calendário</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
