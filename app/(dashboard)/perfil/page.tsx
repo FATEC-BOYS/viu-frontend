@@ -81,7 +81,6 @@ function AvatarUpload({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     onAvatarChange(file);
-    // limpa input para permitir reupload do mesmo arquivo
     e.currentTarget.value = '';
   };
 
@@ -184,32 +183,59 @@ export default function PerfilPage() {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        // 1) user auth -> usuario_id
+        // 1) pega usuário autenticado
         const { data: auth } = await supabase.auth.getUser();
-        const authUserId = auth.user?.id;
-        if (!authUserId) throw new Error('Usuário não autenticado');
+        const authUser = auth.user;
+        if (!authUser) throw new Error('Usuário não autenticado');
 
-        const { data: mapRow, error: mapErr } = await supabase
-          .from('usuario_auth')
-          .select('usuario_id')
-          .eq('auth_user_id', authUserId)
-          .maybeSingle();
+        const usuarioId = authUser.id;
 
-        if (mapErr) throw mapErr;
-        if (!mapRow?.usuario_id) throw new Error('Mapa usuario_auth não encontrado');
-
-        const usuarioId = mapRow.usuario_id as string;
-
-        // 2) perfil
-        const { data: userRow, error: userErr } = await supabase
+        // 2) tenta buscar perfil; se não existir ainda, cria com dados básicos
+        let { data: userRow, error: userErr, status } = await supabase
           .from('usuarios')
           .select('*')
           .eq('id', usuarioId)
-          .single();
+          .maybeSingle();
 
-        if (userErr) throw userErr;
+        if (userErr && status !== 406) throw userErr;
 
-        const u: UsuarioPerfil = userRow;
+        if (!userRow) {
+          const meta = (authUser.user_metadata ?? {}) as Record<string, any>;
+          const nome: string =
+            meta.name ??
+            meta.full_name ??
+            meta.fullName ??
+            meta.fullname ??
+            meta.user_name ??
+            (authUser.email ? authUser.email.split('@')[0] : 'Usuário');
+
+          const avatar: string | null =
+            meta.avatar_url ?? meta.picture ?? null;
+
+          const tipo: 'DESIGNER' | 'CLIENTE' =
+            (meta.tipo as any) ?? 'DESIGNER';
+
+          const { data: upserted, error: upErr } = await supabase
+            .from('usuarios')
+            .upsert(
+              {
+                id: usuarioId,
+                email: authUser.email!,
+                nome,
+                tipo,
+                avatar: avatar ?? null,
+                ativo: true,
+              },
+              { onConflict: 'id' }
+            )
+            .select()
+            .single();
+
+          if (upErr) throw upErr;
+          userRow = upserted as UsuarioPerfil;
+        }
+
+        const u: UsuarioPerfil = userRow as UsuarioPerfil;
         setUsuario(u);
         setFormData({
           nome: u.nome,
@@ -218,7 +244,7 @@ export default function PerfilPage() {
           avatar: null,
         });
 
-        // 3) estatísticas (contagens)
+        // 3) estatísticas (contagens) – filtradas por usuarioId; requer RLS correta
         const [
           totalProjetos,
           projetosAtivos,

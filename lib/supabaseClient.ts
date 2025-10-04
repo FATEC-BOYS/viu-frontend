@@ -1,6 +1,8 @@
-// lib/supabaseClient.ts (se ainda não tiver)
-import { createClient } from "@supabase/supabase-js";
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+'use client';
+
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// Se você tem tipos gerados pelo supabase:
+// import type { Database } from '@/lib/database.types';
+// export const supabase = createClientComponentClient<Database>();
+
+export const supabase = createClientComponentClient();

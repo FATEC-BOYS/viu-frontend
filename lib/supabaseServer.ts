@@ -1,4 +1,3 @@
-// lib/supabaseServer.ts
 import { createClient } from "@supabase/supabase-js";
 export function getSupabaseServer() {
   if (typeof window !== "undefined") throw new Error("server only");

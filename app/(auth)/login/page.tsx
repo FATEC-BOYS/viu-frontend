@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +29,9 @@ function GoogleIcon() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const search = useSearchParams();
+  const nextParam = search.get('next'); // opcional: /login?next=/algum-lugar
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
@@ -48,7 +51,8 @@ export default function LoginPage() {
       }
 
       if (data.session) {
-        router.push('/dashboard');
+        // redireciona respeitando o next se existir
+        router.push(nextParam || '/dashboard');
       } else {
         setMsg('Não foi possível iniciar sessão. Tente novamente.');
       }
@@ -65,10 +69,16 @@ export default function LoginPage() {
       setSending(true);
       setMsg(null);
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectTo = `${origin}/callback`;
+      const redirectTo = nextParam
+        ? `${origin}/callback?next=${encodeURIComponent(nextParam)}`
+        : `${origin}/callback`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo },
+        options: {
+          redirectTo,
+          // scopes: 'email profile', // opcional
+        },
       });
       if (error) setMsg(`Erro ao redirecionar: ${error.message}`);
     } catch (err) {
@@ -82,7 +92,6 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-2">
-          {/* Voltar */}
           <div className="flex items-center justify-between">
             <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
               ← Voltar

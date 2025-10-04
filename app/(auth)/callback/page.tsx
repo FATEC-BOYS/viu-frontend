@@ -17,7 +17,7 @@ function safeNext(path: string | null): string | null {
 export default function AuthCallbackPage() {
   const router = useRouter();
   const search = useSearchParams();
-  const ranRef = useRef(false); // evita duplicar no StrictMode
+  const ranRef = useRef(false); // evita rodar 2x em StrictMode
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -44,15 +44,17 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 2) OAuth: troca code pela sessão
+        // 2) OAuth (PKCE): só troca o code se ainda não houver sessão
         if (code) {
-          const { error: exErr } = await supabase.auth.exchangeCodeForSession(
-            window.location.href
-          );
-          if (exErr) {
-            console.error('exchangeCodeForSession error:', exErr);
-            router.replace('/login?error=oauth_exchange_failed');
-            return;
+          const { data: pre } = await supabase.auth.getSession();
+          if (!pre?.session) {
+            const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+            if (exErr) {
+              console.error('exchangeCodeForSession error:', exErr);
+              const msg = encodeURIComponent('Falha ao concluir login. Por favor, tente novamente na mesma aba.');
+              router.replace(`/login?error=oauth_exchange_failed&message=${msg}`);
+              return;
+            }
           }
         }
 
@@ -66,7 +68,7 @@ export default function AuthCallbackPage() {
 
         const user = session.user;
 
-        // 4) Normaliza metadados e upsert em "usuarios"
+        // 4) Normaliza metadados
         const meta = (user.user_metadata ?? {}) as Record<string, any>;
         const tipo: Tipo =
           tipoFromQuery ?? (meta.tipo as Tipo | undefined) ?? 'DESIGNER';
@@ -79,14 +81,14 @@ export default function AuthCallbackPage() {
           meta.user_name ??
           (user.email ? user.email.split('@')[0] : 'Usuário');
 
-        const avatar_url: string | null =
-          meta.avatar_url ?? meta.picture ?? null;
+        const avatar: string | null =
+          meta.avatar_url ?? meta.picture ?? null; // sua coluna na tabela chama "avatar"
 
-        // Atualiza user_metadata se faltando/alterado
+        // (Opcional) Atualiza user_metadata se mudou
         const mustUpdateMetadata =
           meta.tipo !== tipo ||
           meta.name !== nome ||
-          (avatar_url && meta.avatar_url !== avatar_url);
+          (avatar && meta.avatar_url !== avatar);
 
         if (mustUpdateMetadata) {
           const { error: upMetaErr } = await supabase.auth.updateUser({
@@ -94,34 +96,48 @@ export default function AuthCallbackPage() {
               ...meta,
               tipo,
               name: nome,
-              ...(avatar_url ? { avatar_url } : {}),
+              ...(avatar ? { avatar_url: avatar } : {}),
             },
           });
-          if (upMetaErr) {
-            console.warn('updateUser metadata warning:', upMetaErr.message);
+          if (upMetaErr) console.warn('updateUser metadata warning:', upMetaErr.message);
+        }
+
+        // 5) Upsert em `usuarios` (idempotente)
+        {
+          const { error: upsertErr } = await supabase
+            .from('usuarios')
+            .upsert(
+              {
+                id: user.id,                 // == auth.uid()
+                email: user.email!,
+                nome,
+                tipo,
+                avatar: avatar ?? null,      // coluna correta
+                ativo: true,
+              },
+              { onConflict: 'id' }
+            );
+
+          if (upsertErr) {
+            // Não bloqueia o fluxo; apenas loga
+            console.warn('usuarios upsert warning:', upsertErr.message);
           }
         }
 
-        // Upsert na tabela `usuarios` (idempotente)
-        const { error: upsertErr } = await supabase
-          .from('usuarios')
-          .upsert(
-            {
-              id: user.id,
-              email: user.email,
-              nome,
-              tipo,
-              avatar_url: avatar_url ?? null,
-            },
-            { onConflict: 'id' }
-          );
-
-        if (upsertErr) {
-          // não bloqueia o login; só loga
-          console.warn('usuarios upsert warning:', upsertErr.message);
+        // 6) Garante vínculo em `usuario_auth` (auth_user_id -> usuario_id)
+        {
+          const { error: linkErr } = await supabase
+            .from('usuario_auth')
+            .upsert(
+              { auth_user_id: user.id, usuario_id: user.id },
+              { onConflict: 'auth_user_id' }
+            );
+          if (linkErr) {
+            console.warn('usuario_auth upsert warning:', linkErr.message);
+          }
         }
 
-        // 5) Decide destino
+        // 7) Destino final
         const fallback = tipo === 'CLIENTE' ? '/links' : '/dashboard';
         router.replace(nextParam || fallback);
       } catch (e) {

@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner';
 
 /* =========================
-   Tipos (view achatada)
+   Tipos
    ========================= */
 
 type FeedbackTipo = 'TEXTO' | 'AUDIO';
@@ -30,7 +30,6 @@ interface FeedbackRow {
   arquivo: string | null;
   criado_em: string;
 
-  // da view v_feedbacks_ui
   arte_id: string;
   arte_nome: string;
   projeto_id: string;
@@ -41,7 +40,6 @@ interface FeedbackRow {
   autor_nome: string;
   autor_tipo: AutorTipo;
 
-  // estes podem existir na view; marque como opcionais
   posicao_x?: number | null;
   posicao_y?: number | null;
 }
@@ -91,7 +89,7 @@ function AudioInline({ src }: { src: string }) {
 }
 
 /* =========================
-   Card de Feedback
+   Card de Feedback (com URL assinada p/ áudio privado)
    ========================= */
 
 function FeedbackCard({
@@ -108,6 +106,29 @@ function FeedbackCard({
   const hasPosition = fb.posicao_x != null && fb.posicao_y != null;
   const formatDate = (s: string) =>
     new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function signIfNeeded() {
+      if (!fb.arquivo || fb.tipo !== 'AUDIO') { setAudioUrl(null); return; }
+
+      // se já vier URL completa
+      if (/^https?:\/\//i.test(fb.arquivo)) { setAudioUrl(fb.arquivo); return; }
+
+      // path no Storage privado: assinar (ajuste 'artes' para seu bucket)
+      const { data, error } = await supabase.storage
+        .from('artes')
+        .createSignedUrl(fb.arquivo, 600);
+
+      if (active) setAudioUrl(error ? null : data?.signedUrl ?? null);
+    }
+
+    signIfNeeded();
+    return () => { active = false; };
+  }, [fb.arquivo, fb.tipo]);
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -145,7 +166,7 @@ function FeedbackCard({
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{fb.conteudo}</p>
             </div>
           )}
-          {fb.arquivo && fb.tipo === 'AUDIO' && <AudioInline src={fb.arquivo} />}
+          {audioUrl && fb.tipo === 'AUDIO' && <AudioInline src={audioUrl} />}
           {hasPosition && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -207,28 +228,44 @@ export default function FeedbacksPage() {
   const [statusFilter, setStatusFilter] = useState<'todos' | FeedbackStatus>('todos');
   const [sortBy, setSortBy] = useState<'criado_em' | 'arte' | 'projeto' | 'autor'>('criado_em');
 
+  // Debounce simples pro search (300ms)
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(h);
+  }, [searchTerm]);
+
   // Lista de projetos (derivada dos dados)
   const projetos = useMemo(() => {
     return Array.from(new Set(rows.map(r => r.projeto_nome))).sort();
   }, [rows]);
 
   /* =========================
-     Fetch (com paginação)
+     Fetch via RPC segura (com erros detalhados)
      ========================= */
 
-  async function fetchPage(from: number, to: number) {
-    const q = supabase
-      .from('v_feedbacks_ui')
-      .select('*')
-      .order('criado_em', { ascending: false })
-      .range(from, to);
+  async function fetchPage(from: number, _to: number) {
+    const limit = PAGE_SIZE;
+    const offset = from;
 
-    if (statusFilter !== 'todos') q.eq('status', statusFilter);
-    if (tipoFilter !== 'todos') q.eq('tipo', tipoFilter);
+    const { data, error } = await supabase.rpc('feedbacks_ui_page', {
+      p_status: statusFilter === 'todos' ? null : statusFilter,
+      p_tipo:   tipoFilter   === 'todos' ? null : tipoFilter,
+      p_limit:  limit,
+      p_offset: offset,
+      p_search: debouncedSearch.trim() ? debouncedSearch.trim() : null,
+    });
 
-    const { data, error } = await q;
-    if (error) throw error;
-    return (data ?? []) as FeedbackRow[];
+    if (error) {
+      const msg = [error.message, error.details, error.hint, error.code].filter(Boolean).join(' | ');
+      throw new Error(msg || 'RPC feedbacks_ui_page falhou');
+    }
+
+    if (!Array.isArray(data)) {
+      throw new Error('RPC feedbacks_ui_page retornou formato inesperado');
+    }
+
+    return data as FeedbackRow[];
   }
 
   // Primeira carga e quando filtros server-side mudam
@@ -236,23 +273,35 @@ export default function FeedbacksPage() {
     (async () => {
       try {
         setLoading(true);
+
+        // ✅ garante que há sessão antes de buscar
+        const { data: sess } = await supabase.auth.getSession();
+        if (!sess?.session?.user) {
+          setError('Faça login para ver os feedbacks.');
+          setRows([]);
+          setHasMore(false);
+          return;
+        }
+
         const page = await fetchPage(0, PAGE_SIZE - 1);
         setRows(page);
         setHasMore(page.length === PAGE_SIZE);
-      } catch (e) {
-        console.error(e);
-        setError('Não foi possível carregar os feedbacks.');
+      } catch (e: any) {
+        const msg = e?.message || JSON.stringify(e) || 'Erro desconhecido';
+        console.error('feedbacks: load error ->', msg);
+        setError('Não foi possível carregar os feedbacks. ' + msg);
       } finally {
         setLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, tipoFilter]);
+  }, [statusFilter, tipoFilter, debouncedSearch]);
 
   // Refiltrar/ordenar client-side
   const filteredOrdered = useMemo(() => {
     let arr = [...rows];
 
+    // busca complementar no client (ok manter mesmo com p_search)
     if (searchTerm) {
       const st = searchTerm.toLowerCase();
       arr = arr.filter((f) =>
@@ -289,16 +338,16 @@ export default function FeedbacksPage() {
       const page = await fetchPage(rows.length, rows.length + PAGE_SIZE - 1);
       setRows(prev => [...prev, ...page]);
       setHasMore(page.length === PAGE_SIZE);
-    } catch (e) {
-      console.error(e);
-      toast.error('Falha ao carregar mais feedbacks.');
+    } catch (e: any) {
+      const msg = e?.message || JSON.stringify(e) || 'Erro desconhecido';
+      console.error('feedbacks: loadMore error ->', msg);
+      toast.error('Falha ao carregar mais feedbacks. ' + msg);
     } finally {
       setLoadingMore(false);
     }
   };
 
   const handleVerNaArte = (fb: FeedbackRow) => {
-    // Se tiver deep-link de posição: /artes/[id]?x=...&y=...
     const url = (fb.posicao_x != null && fb.posicao_y != null)
       ? `/artes/${fb.arte_id}?x=${Math.round(fb.posicao_x!)}&y=${Math.round(fb.posicao_y!)}`
       : `/artes/${fb.arte_id}`;
@@ -344,9 +393,10 @@ export default function FeedbacksPage() {
       if (rpcError) throw rpcError;
 
       toast.success('Tarefa criada a partir do feedback!');
-    } catch (e) {
-      console.error(e);
-      toast.error('Falha ao criar tarefa a partir do feedback.');
+    } catch (e: any) {
+      const msg = e?.message || JSON.stringify(e) || 'Erro desconhecido';
+      console.error('feedbacks: criar tarefa error ->', msg);
+      toast.error('Falha ao criar tarefa a partir do feedback. ' + msg);
     }
   };
 
