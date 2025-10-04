@@ -1,6 +1,6 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,7 @@ export default function ProjetosPage() {
     try {
       const { rows } = await listProjetos({ search: searchTerm, status: statusFilter, orderBy, ascending, limit: 100, offset: 0 });
       setRows(rows);
+      setError(null);
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar projetos");
     } finally {
@@ -312,8 +313,22 @@ export default function ProjetosPage() {
         </TabsContent>
 
         <TabsContent value="board" className="mt-0">
-          {/* DnD: a mudança de status é feita via onDrop nativo (no “minhocão” original você já tratava no contexto) */}
-          <BoardView projects={filtered} />
+          <BoardView
+            projects={filtered}
+            onMove={async (projectId, from, to) => {
+              if (from === to) return;
+              // otimista no estado local
+              setRows(prev => prev.map(p => p.id === projectId ? { ...p, status: to } : p));
+
+              try {
+                await updateProjeto(projectId, { status: to }); // ajuste a assinatura em lib se precisar Partial
+              } catch (e) {
+                toast.error("Não consegui mover, desfazendo…");
+                // rollback
+                setRows(prev => prev.map(p => p.id === projectId ? { ...p, status: from } : p));
+              }
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-0">
