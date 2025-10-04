@@ -1,596 +1,308 @@
-// app/(dashboard)/tarefas/page.tsx
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Plus,
-  Search,
-  Calendar,
-  User,
-  FolderOpen,
-  Loader2,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  Circle,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Plus, LayoutGrid, Kanban as KanbanIcon, CalendarDays, Loader2 } from "lucide-react";
+import { FiltersBar } from "@/components/tarefas/FiltersBar";
+import { GridSkeleton } from "@/components/tarefas/skeletons";
+import { TaskCard, type Tarefa } from "@/components/tarefas/TaskCard";
+import { TaskSheet } from "@/components/tarefas/TaskSheet";
+import { KanbanBoard } from "@/components/tarefas/Kanban";
+import { MiniCalendar } from "@/components/tarefas/MiniCalendar";
+import { prioridadeOrder, statusOrder } from "@/lib/tarefas";
 
-/* ===================== Tipos ===================== */
-
-interface Tarefa {
-  id: string;
-  titulo: string;
-  descricao: string | null;
-  status: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA' | string;
-  prioridade: 'ALTA' | 'MEDIA' | 'BAIXA' | string;
-  prazo: string | null; // ISO
-  criado_em: string; // ISO
-  atualizado_em: string; // ISO
-  projeto: {
-    nome: string;
-    cliente: { nome: string };
-  } | null;
-  responsavel: { id: string; nome: string };
+/* ========== helpers de data (padronizadas com o MiniCalendar) ========== */
+function localDateKeyFromISO(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  d.setHours(12, 0, 0, 0); // meio-dia local pra evitar off-by-one/DST
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
-
-type SortKey = 'prazo' | 'prioridade' | 'titulo' | 'status' | 'criado_em';
-
-/* ===== Tipos auxiliares para shape cru do Supabase (sem any) ===== */
-
-type MaybeArray<T> = T | T[] | null | undefined;
-
-interface RawUsuario {
-  id?: unknown;
-  nome?: unknown;
+function localDateKeyFromDate(dIn: Date) {
+  const d = new Date(dIn);
+  d.setHours(12, 0, 0, 0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
-interface RawCliente {
-  nome?: unknown;
+function buildDotsByDay(list: Tarefa[]) {
+  const map: Record<string, number> = {};
+  for (const t of list) {
+    const key = localDateKeyFromISO(t.prazo);
+    if (!key) continue;
+    map[key] = (map[key] ?? 0) + 1;
+  }
+  return map;
 }
-interface RawProjeto {
-  nome?: unknown;
-  cliente?: MaybeArray<RawCliente>;
-}
-interface RawTarefaRow {
-  id?: unknown;
-  titulo?: unknown;
-  descricao?: unknown;
-  status?: unknown;
-  prioridade?: unknown;
-  prazo?: unknown;
-  criado_em?: unknown;
-  atualizado_em?: unknown;
-  projeto?: MaybeArray<RawProjeto>;
-  responsavel?: MaybeArray<RawUsuario>;
-}
+/* ===================================================================== */
 
-/* helper para normalizar singleton que pode vir como array */
-const toOne = <T,>(val: MaybeArray<T>): T | null => {
-  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
-  return (val ?? null) as T | null;
-};
-
-/* ===================== Badges ===================== */
-
-function StatusBadge({ status }: { status: string }) {
-  const statusConfig = {
-    PENDENTE: {
-      label: 'Pendente',
-      variant: 'secondary' as const,
-      icon: Circle,
-      color: 'text-yellow-600',
-    },
-    EM_ANDAMENTO: {
-      label: 'Em Andamento',
-      variant: 'default' as const,
-      icon: Clock,
-      color: 'text-blue-600',
-    },
-    CONCLUIDA: {
-      label: 'Concluída',
-      variant: 'default' as const,
-      icon: CheckCircle2,
-      color: 'text-green-600',
-    },
-    CANCELADA: {
-      label: 'Cancelada',
-      variant: 'outline' as const,
-      icon: AlertTriangle,
-      color: 'text-gray-600',
-    },
-  };
-
-  const config =
-    statusConfig[status as keyof typeof statusConfig] ??
-    ({
-      label: status,
-      variant: 'outline' as const,
-      icon: Circle,
-      color: 'text-gray-600',
-    } as const);
-
-  const Icon = config.icon;
-  return (
-    <Badge variant={config.variant} className="flex items-center gap-1">
-      <Icon className="h-3 w-3" />
-      {config.label}
-    </Badge>
-  );
-}
-
-function PrioridadeBadge({ prioridade }: { prioridade: string }) {
-  const prioridadeConfig = {
-    ALTA: {
-      label: 'Alta',
-      icon: ArrowUp,
-      color: 'bg-red-100 text-red-800 border-red-200',
-    },
-    MEDIA: {
-      label: 'Média',
-      icon: Minus,
-      color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    },
-    BAIXA: {
-      label: 'Baixa',
-      icon: ArrowDown,
-      color: 'bg-green-100 text-green-800 border-green-200',
-    },
-  };
-
-  const config =
-    prioridadeConfig[prioridade as keyof typeof prioridadeConfig] ??
-    ({
-      label: prioridade,
-      icon: Minus,
-      color: 'bg-gray-100 text-gray-800 border-gray-200',
-    } as const);
-
-  const Icon = config.icon;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}
-    >
-      <Icon className="h-3 w-3" />
-      {config.label}
-    </span>
-  );
-}
-
-/* ===================== Card ===================== */
-
-function TarefaCard({ tarefa }: { tarefa: Tarefa }) {
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Sem prazo';
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
-
-  const getDaysUntilDeadline = (dateString: string | null) => {
-    if (!dateString) return null;
-    const deadline = new Date(dateString);
-    const today = new Date();
-    const diffTime = deadline.getTime() - today.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  const daysUntilDeadline = getDaysUntilDeadline(tarefa.prazo);
-  const isOverdue = daysUntilDeadline !== null && daysUntilDeadline < 0;
-  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0;
-
-  const getStatusColor = () => {
-    if (tarefa.status === 'CONCLUIDA') return 'border-l-green-500';
-    if (isOverdue) return 'border-l-red-500';
-    if (isUrgent) return 'border-l-yellow-500';
-    return 'border-l-gray-300';
-  };
-
-  return (
-    <Card className={`hover:shadow-md transition-shadow cursor-pointer border-l-4 ${getStatusColor()}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1 flex-1">
-            <CardTitle className="text-lg">{tarefa.titulo}</CardTitle>
-            {tarefa.projeto && (
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <FolderOpen className="h-3 w-3" />
-                  {tarefa.projeto.nome}
-                </p>
-                <p className="text-xs text-muted-foreground">Cliente: {tarefa.projeto.cliente.nome}</p>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <StatusBadge status={tarefa.status} />
-            <PrioridadeBadge prioridade={tarefa.prioridade} />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {tarefa.descricao && (
-          <p className="text-sm text-muted-foreground line-clamp-3">{tarefa.descricao}</p>
-        )}
-
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <User className="h-3 w-3" />
-              Responsável
-            </div>
-            <p className="font-medium">{tarefa.responsavel.nome}</p>
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              Prazo
-            </div>
-            <p className={`font-medium ${isOverdue ? 'text-red-600' : isUrgent ? 'text-yellow-600' : ''}`}>
-              {formatDate(tarefa.prazo)}
-              {isOverdue && ` (${Math.abs(daysUntilDeadline!)} dias atrasado)`}
-              {isUrgent && !isOverdue && ` (${daysUntilDeadline} dias)`}
-            </p>
-          </div>
-        </div>
-
-        {(isOverdue || isUrgent) && (
-          <div
-            className={`flex items-center gap-2 p-2 rounded-md ${
-              isOverdue ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'
-            }`}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            <span className="text-sm font-medium">{isOverdue ? 'Tarefa atrasada' : 'Prazo próximo'}</span>
-          </div>
-        )}
-
-        <div className="pt-2 border-t text-xs text-muted-foreground">
-          Criada em {new Date(tarefa.criado_em).toLocaleDateString('pt-BR')}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ===================== Página ===================== */
+type Raw = any;
+type Mode = "cards" | "board" | "calendar";
 
 export default function TarefasPage() {
+  // data
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [filteredTarefas, setFilteredTarefas] = useState<Tarefa[]>([]);
+  const [filtered, setFiltered] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [prioridadeFilter, setPrioridadeFilter] = useState<string>('todos');
-  const [responsavelFilter, setResponsavelFilter] = useState<string>('todos'); // guarda o ID do responsável
-  const [sortBy, setSortBy] = useState<SortKey>('prazo');
+  // ui
+  const [mode, setMode] = useState<Mode>("cards");
+  const [calendarDate, setCalendarDate] = useState(new Date());
 
-  // Lista de responsáveis (para filtro)
+  // sheet
+  const [openSheet, setOpenSheet] = useState(false);
+  const [active, setActive] = useState<Tarefa | null>(null);
+  const openTask = (t: Tarefa) => { setActive(t); setOpenSheet(true); };
+
+  // filtros
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("todos");
+  const [prioridade, setPrioridade] = useState("todos");
+  const [responsavel, setResponsavel] = useState("todos");
+  const [sortBy, setSortBy] = useState("prazo");
+
+  // responsáveis (chip)
   const [responsaveis, setResponsaveis] = useState<Array<{ id: string; nome: string }>>([]);
 
+  // carregar
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("tarefas")
+        .select(`
+          id, titulo, descricao, status, prioridade, prazo, criado_em, atualizado_em,
+          projeto:projeto_id ( nome, cliente:cliente_id (nome) ),
+          responsavel:responsavel_id (id, nome)
+        `)
+        .order("criado_em", { ascending: false });
+
+      if (error) throw error;
+
+      const rows: Tarefa[] = (data ?? []).map((r: Raw) => ({
+        id: String(r.id ?? ""),
+        titulo: String(r.titulo ?? ""),
+        descricao: r.descricao ?? null,
+        status: String(r.status ?? ""),
+        prioridade: String(r.prioridade ?? ""),
+        prazo: r.prazo ?? null,
+        criado_em: String(r.criado_em ?? ""),
+        atualizado_em: String(r.atualizado_em ?? ""),
+        projeto: r.projeto
+          ? { nome: String(r.projeto.nome ?? ""), cliente: { nome: String(r.projeto?.cliente?.nome ?? "") } }
+          : null,
+        responsavel: { id: String(r.responsavel?.id ?? ""), nome: String(r.responsavel?.nome ?? "") },
+      }));
+
+      setTarefas(rows);
+
+      const uniq = new Map<string, { id: string; nome: string }>();
+      rows.forEach(t => { if (t.responsavel.id && !uniq.has(t.responsavel.id)) uniq.set(t.responsavel.id, t.responsavel); });
+      setResponsaveis(Array.from(uniq.values()));
+      setError(null);
+    } catch (e) {
+      setError("Ops! Deu ruim carregando suas tarefas. Tenta de novo em alguns segundos 😬");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { reload(); }, []);
+
+  // filtra + ordena (client-side, igual projetos)
   useEffect(() => {
-    const fetchTarefas = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('tarefas')
-          .select(`
-            id,
-            titulo,
-            descricao,
-            status,
-            prioridade,
-            prazo,
-            criado_em,
-            atualizado_em,
-            projeto:projeto_id (
-              nome,
-              cliente:cliente_id (nome)
-            ),
-            responsavel:responsavel_id (id, nome)
-          `)
-          .order('criado_em', { ascending: false });
+    let res = [...tarefas];
+    const q = search.trim().toLowerCase();
 
-        if (error) throw error;
-
-        const raw = (data ?? []) as RawTarefaRow[];
-
-        // normaliza & tipa
-        const rows: Tarefa[] = raw.map((r) => {
-          const projeto = toOne<RawProjeto>(r.projeto);
-          const cliente = toOne<RawCliente>(projeto?.cliente ?? null);
-          const resp = toOne<RawUsuario>(r.responsavel);
-
-          return {
-            id: String(r.id ?? ''),
-            titulo: String(r.titulo ?? ''),
-            descricao: r.descricao == null ? null : String(r.descricao),
-            status: String(r.status ?? '') as Tarefa['status'],
-            prioridade: String(r.prioridade ?? '') as Tarefa['prioridade'],
-            prazo: r.prazo == null ? null : String(r.prazo),
-            criado_em: String(r.criado_em ?? ''),
-            atualizado_em: String(r.atualizado_em ?? ''),
-            projeto: projeto
-              ? {
-                  nome: String(projeto.nome ?? ''),
-                  cliente: { nome: String(cliente?.nome ?? '') },
-                }
-              : null,
-            responsavel: { id: String(resp?.id ?? ''), nome: String(resp?.nome ?? '') },
-          };
-        });
-
-        setTarefas(rows);
-
-        // Responsáveis únicos (usa ID para evitar colisão de nomes)
-        const uniqueById = new Map<string, { id: string; nome: string }>();
-        rows.forEach((t) => {
-          if (t.responsavel.id && !uniqueById.has(t.responsavel.id)) {
-            uniqueById.set(t.responsavel.id, { id: t.responsavel.id, nome: t.responsavel.nome });
-          }
-        });
-        setResponsaveis(Array.from(uniqueById.values()));
-      } catch {
-        setError('Não foi possível carregar as tarefas.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTarefas();
-  }, []);
-
-  // Aplicar filtros e ordenação
-  useEffect(() => {
-    let filtered = tarefas;
-
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      filtered = filtered.filter((tarefa) => {
-        const hitTitulo = tarefa.titulo.toLowerCase().includes(q);
-        const hitDesc = tarefa.descricao ? tarefa.descricao.toLowerCase().includes(q) : false;
-        const hitProjeto = tarefa.projeto ? tarefa.projeto.nome.toLowerCase().includes(q) : false;
-        const hitResp = tarefa.responsavel.nome.toLowerCase().includes(q);
-        return hitTitulo || hitDesc || hitProjeto || hitResp;
-      });
+    if (q) {
+      res = res.filter((t) =>
+        t.titulo.toLowerCase().includes(q) ||
+        (t.descricao ? t.descricao.toLowerCase().includes(q) : false) ||
+        (t.projeto ? t.projeto.nome.toLowerCase().includes(q) : false) ||
+        t.responsavel.nome.toLowerCase().includes(q)
+      );
     }
+    if (status !== "todos") res = res.filter((t) => t.status === status);
+    if (prioridade !== "todos") res = res.filter((t) => t.prioridade === prioridade);
+    if (responsavel !== "todos") res = res.filter((t) => t.responsavel.id === responsavel);
 
-    if (statusFilter !== 'todos') {
-      filtered = filtered.filter((t) => t.status === statusFilter);
-    }
-
-    if (prioridadeFilter !== 'todos') {
-      filtered = filtered.filter((t) => t.prioridade === prioridadeFilter);
-    }
-
-    if (responsavelFilter !== 'todos') {
-      filtered = filtered.filter((t) => t.responsavel.id === responsavelFilter);
-    }
-
-    const ordered = [...filtered].sort((a, b) => {
+    res.sort((a, b) => {
       switch (sortBy) {
-        case 'prazo': {
-          const aTime = a.prazo ? new Date(a.prazo).getTime() : Infinity;
-          const bTime = b.prazo ? new Date(b.prazo).getTime() : Infinity;
-          return aTime - bTime;
+        case "prazo": {
+          const at = a.prazo ? +new Date(a.prazo) : Infinity;
+          const bt = b.prazo ? +new Date(b.prazo) : Infinity;
+          return at - bt;
         }
-        case 'prioridade': {
-          const order = { ALTA: 3, MEDIA: 2, BAIXA: 1 } as const;
-          const aVal = order[a.prioridade as keyof typeof order] ?? 0;
-          const bVal = order[b.prioridade as keyof typeof order] ?? 0;
-          return bVal - aVal; // maior prioridade primeiro
-        }
-        case 'titulo':
-          return a.titulo.localeCompare(b.titulo);
-        case 'status': {
-          const order = { PENDENTE: 1, EM_ANDAMENTO: 2, CONCLUIDA: 3, CANCELADA: 4 } as const;
-          const aVal = order[a.status as keyof typeof order] ?? 0;
-          const bVal = order[b.status as keyof typeof order] ?? 0;
-          return aVal - bVal;
-        }
-        case 'criado_em':
-          return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
-        default:
-          return 0;
+        case "prioridade": return (prioridadeOrder[b.prioridade] ?? 0) - (prioridadeOrder[a.prioridade] ?? 0);
+        case "titulo": return a.titulo.localeCompare(b.titulo);
+        case "status": return (statusOrder[a.status] ?? 0) - (statusOrder[b.status] ?? 0);
+        case "criado_em": default: return +new Date(b.criado_em) - +new Date(a.criado_em);
       }
     });
 
-    setFilteredTarefas(ordered);
-  }, [tarefas, searchTerm, statusFilter, prioridadeFilter, responsavelFilter, sortBy]);
+    setFiltered(res);
+  }, [tarefas, search, status, prioridade, responsavel, sortBy]);
 
+  // estatísticas simples (para badge/título)
+  const stats = useMemo(() => ({
+    total: tarefas.length,
+  }), [tarefas]);
+
+  // kanban groups (das filtradas)
+  const kanbanGroups = useMemo(() => {
+    const g: Record<string, Tarefa[]> = { PENDENTE: [], EM_ANDAMENTO: [], CONCLUIDA: [], CANCELADA: [] };
+    filtered.forEach((t) => (g[t.status] ?? (g[t.status] = [])).push(t));
+    return g;
+  }, [filtered]);
+
+  // dots do calendário (todas as tarefas)
+  const dotsByDay = useMemo(() => buildDotsByDay(tarefas), [tarefas]);
+
+  // loading / erro no mesmo padrão dos projetos
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
+      <div className="flex flex-col gap-3 items-center justify-center h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="ml-2">Carregando tarefas...</p>
+        <p className="text-sm text-muted-foreground">Arrumando a mesa…</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-6xl mt-6">
+          {Array.from({ length: 6 }).map((_, i) => <GridSkeleton key={i} />)}
+        </div>
       </div>
     );
   }
-
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center text-destructive">{error}</div>
+      <div className="flex items-center justify-center h-[50vh] text-center">
+        <div>
+          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
+          <p className="text-muted-foreground mb-6">Que tal recarregar? (se persistir, me chama).</p>
+          <Button onClick={reload}>Recarregar</Button>
+        </div>
       </div>
     );
   }
 
-  const estatisticas = {
-    total: tarefas.length,
-    pendentes: tarefas.filter((t) => t.status === 'PENDENTE').length,
-    emAndamento: tarefas.filter((t) => t.status === 'EM_ANDAMENTO').length,
-    concluidas: tarefas.filter((t) => t.status === 'CONCLUIDA').length,
-    atrasadas: tarefas.filter((t) => {
-      if (!t.prazo) return false;
-      const deadline = new Date(t.prazo);
-      const today = new Date();
-      return deadline < today && t.status !== 'CONCLUIDA';
-    }).length,
-  };
+  const empty = filtered.length === 0;
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tarefas</h1>
-          <p className="text-muted-foreground">Gerencie todas as tarefas dos seus projetos</p>
-        </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Tarefa
-        </Button>
-      </div>
-
-      {/* Estatísticas */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{estatisticas.total}</div>
-            <p className="text-sm text-muted-foreground">Total de Tarefas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-yellow-600">{estatisticas.pendentes}</div>
-            <p className="text-sm text-muted-foreground">Pendentes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{estatisticas.emAndamento}</div>
-            <p className="text-sm text-muted-foreground">Em Andamento</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{estatisticas.concluidas}</div>
-            <p className="text-sm text-muted-foreground">Concluídas</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{estatisticas.atrasadas}</div>
-            <p className="text-sm text-muted-foreground">Atrasadas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por tarefa, projeto ou responsável..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+      {/* Header (mesma diagramação dos projetos) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Tarefas ✦</h1>
+          <Badge variant="secondary" className="h-6">{stats.total} tarefas</Badge>
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="PENDENTE">Pendente</SelectItem>
-            <SelectItem value="EM_ANDAMENTO">Em Andamento</SelectItem>
-            <SelectItem value="CONCLUIDA">Concluída</SelectItem>
-            <SelectItem value="CANCELADA">Cancelada</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={prioridadeFilter} onValueChange={setPrioridadeFilter}>
-          <SelectTrigger className="w-[130px]">
-            <SelectValue placeholder="Prioridade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todas</SelectItem>
-            <SelectItem value="ALTA">Alta</SelectItem>
-            <SelectItem value="MEDIA">Média</SelectItem>
-            <SelectItem value="BAIXA">Baixa</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={responsavelFilter} onValueChange={setResponsavelFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Responsável" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            {responsaveis.map((r) => (
-              <SelectItem key={r.id} value={r.id}>
-                {r.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Ordenar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="prazo">Prazo</SelectItem>
-            <SelectItem value="prioridade">Prioridade</SelectItem>
-            <SelectItem value="titulo">Título</SelectItem>
-            <SelectItem value="status">Status</SelectItem>
-            <SelectItem value="criado_em">Mais Recente</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+            <TabsList>
+              <TabsTrigger value="cards"><LayoutGrid className="mr-2 h-4 w-4" /> Cards</TabsTrigger>
+              <TabsTrigger value="board"><KanbanIcon className="mr-2 h-4 w-4" /> Board</TabsTrigger>
+              <TabsTrigger value="calendar"><CalendarDays className="mr-2 h-4 w-4" /> Calendário</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button onClick={() => {/* abrir criador de tarefa */}} title="Criar tarefa — bora tirar do papel?">
+            <Plus className="h-4 w-4 mr-2" /> Nova
+          </Button>
+        </div>
       </div>
 
-      {/* Grid de Tarefas */}
-      {filteredTarefas.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredTarefas.map((tarefa) => (
-            <TarefaCard key={tarefa.id} tarefa={tarefa} />
-          ))}
-        </div>
-      ) : (
-        <Card className="p-12">
-          <div className="text-center">
-            <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma tarefa encontrada</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchTerm ||
-              statusFilter !== 'todos' ||
-              prioridadeFilter !== 'todos' ||
-              responsavelFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.'
-                : 'Comece criando sua primeira tarefa.'}
-            </p>
-            {!searchTerm &&
-              statusFilter === 'todos' &&
-              prioridadeFilter === 'todos' &&
-              responsavelFilter === 'todos' && (
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Criar Primeira Tarefa
+      {/* Filtros (equivalente ao FilterChips) */}
+      <FiltersBar
+        search={search} setSearch={setSearch}
+        status={status} setStatus={setStatus}
+        prioridade={prioridade} setPrioridade={setPrioridade}
+        responsavel={responsavel} setResponsavel={setResponsavel}
+        sortBy={sortBy} setSortBy={setSortBy}
+        responsaveis={responsaveis}
+      />
+
+      {/* Conteúdo por modo */}
+      <Tabs value={mode}>
+        {/* Cards */}
+        <TabsContent value="cards" className="mt-0">
+          {empty ? (
+            <div className="p-10 text-center">
+              <h3 className="text-lg font-semibold mb-2">
+                {search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos"
+                  ? "Não achei nada por aqui 🐈‍⬛" : "Suas tarefas aparecerão aqui"}
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos"
+                  ? "Tente outro termo, limpe os filtros ou crie uma nova tarefa."
+                  : "Crie sua primeira tarefa — rapidinho!"}
+              </p>
+              {!(search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos") && (
+                <Button onClick={() => {/* abrir criador de tarefa */}}>
+                  <Plus className="h-4 w-4 mr-2" /> Criar tarefa
                 </Button>
               )}
-          </div>
-        </Card>
-      )}
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((t) => (
+                <TaskCard key={t.id} tarefa={t} onOpen={openTask} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Board (Kanban) */}
+        <TabsContent value="board" className="mt-0">
+          <KanbanBoard
+            groups={kanbanGroups}
+            onOpen={openTask}
+            onMove={async (taskId, from, to) => {
+              if (from === to) return;
+              // otimista
+              setTarefas((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: to } : t)));
+              try {
+                const { error } = await supabase
+                  .from("tarefas")
+                  .update({ status: to, atualizado_em: new Date().toISOString() })
+                  .eq("id", taskId);
+                if (error) throw error;
+              } catch {
+                // rollback
+                setTarefas((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: from } : t)));
+              }
+            }}
+          />
+        </TabsContent>
+
+        {/* Calendário */}
+        <TabsContent value="calendar" className="mt-0">
+          <MiniCalendar
+            date={calendarDate}
+            onChange={setCalendarDate}
+            dotsByDay={dotsByDay}
+            dateKey={localDateKeyFromDate}
+            rightSlot={(() => {
+              const key = localDateKeyFromDate(calendarDate);
+              const items = filtered.filter((t) => localDateKeyFromISO(t.prazo) === key);
+              return items.length ? (
+                items.map((t) => (
+                  <button key={t.id} onClick={() => openTask(t)} className="block text-left hover:underline">
+                    {t.titulo}
+                  </button>
+                ))
+              ) : (
+                <div className="text-muted-foreground">Dia livre 😎</div>
+              );
+            })()}
+          />
+        </TabsContent>
+      </Tabs>
+
+      {/* Painel lateral */}
+      <TaskSheet open={openSheet} onOpenChange={setOpenSheet} tarefa={active} />
     </div>
   );
 }
