@@ -188,7 +188,7 @@ export function Sidebar() {
       collapsible: true,
       items: [
         { title: 'Status do sistema', href: '/status', icon: BarChart3 },
-        { title: 'Prazos', href: '/relatorios/prazos', icon: Clock }
+        { title: 'Prazos', href: '/prazos', icon: Clock }
       ]
     },
     {
