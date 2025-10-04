@@ -4,517 +4,570 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Loader2, Calendar, DollarSign, Users, Palette, ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
-import ProjetoModal from "@/components/projetos/ProjetoModal";
+import { Loader2 } from "lucide-react";
+
+// Lib base
 import {
-  type Projeto,
-  type ProjetoInput,
   getProjeto,
-  updateProjeto,
-  deleteProjeto,
-  formatBRLFromCents,
+  getProjetoAlertas,
+  type Projeto,
+  type ProximoPasso as LibProximoPasso,
+  type ProximoPassoKind,
+  type TarefasKanban,   // ← tipo da LIB (MicroKanban usa esse)
+  type TarefaCard,      // ← cards das colunas (LIB)
 } from "@/lib/projects";
-import { supabase } from "@/lib/supabaseClient";
 
-/** Tipos locais para listas associadas */
-type ArteRow = {
-  id: string;
-  nome: string;
-  descricao: string | null;
-  tipo: string;
-  versao: number;
-  status: string;
-  criado_em: string;
-  autor: { id: string; nome: string } | null;
+// Shell
+import ProjetoHeader from "@/components/projetos/ProjetoHeader";
+import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
+import ProjetoAlertBanner from "@/components/projetos/ProjetoAlertBanner";
+
+// ====== VISÃO GERAL ======
+import ResumoCards from "@/components/projetos/overview/ResumoCards";
+import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
+import MicroKanban from "@/components/projetos/overview/MicroKanban";
+import CTAContextual from "@/components/projetos/overview/CTAContextual";
+import OverviewSkeleton from "@/components/projetos/overview/OverviewSkeleton";
+
+// ====== ARTES ======
+import ArtesToolbar from "@/components/projetos/artes/ArtesToolbar";
+import ArtesDenseList from "@/components/projetos/artes/ArtesDenseList";
+import ArteQuickPeekDrawer from "@/components/projetos/artes/ArteQuickPeekDrawer";
+import ArtesSkeleton from "@/components/projetos/artes/ArtesSkeleton";
+import type {
+  ArteFilters as UIArteFilters,
+  ArteStatus,
+} from "@/components/projetos/artes/ArtesToolbar";
+import type { ArteListItem as UIArteListItem } from "@/components/projetos/artes/ArtesDenseList";
+
+// ====== APROVAÇÃO ======
+import AprovacaoPanel from "@/components/projetos/aprovacao/AprovacaoPanel";
+import AprovacaoSkeleton from "@/components/projetos/aprovacao/AprovacaoSkeleton";
+import type { AprovacaoPainel as UIPainel } from "@/components/projetos/aprovacao/AprovacaoPanel";
+
+// ====== ATIVIDADE ======
+import AtividadeFeed from "@/components/projetos/activity/AtividadeFeed";
+import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
+
+/* =====================================================================================
+ * Fetch helper defensivo
+ * ===================================================================================== */
+async function j<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
+  try {
+    const r = await fetch(url, init);
+    if (!r.ok) return fallback;
+    const data = await r.json();
+    return (data ?? fallback) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/* =====================================================================================
+ * Tipos de UI (compatíveis com os componentes)
+ * ===================================================================================== */
+
+// CTA do botão principal (tipo local — o componente não exporta type)
+type EstadoCTA = "CRIAR_ARTE" | "PEDIR_APROVACAO" | "CONCLUIR";
+
+// Resumo para ResumoCards (shape do componente)
+type ProjetoResumoUI = {
+  artesAprovadas: number;
+  artesPendentes: number;
+  artesRejeitadas: number;
+  artesTotal: number;
+  prazoProjeto?: string | null;
+  proximaRevisao?: string | null;
+  orcamentoCentavos?: number | null;
+  sparkline?: Array<{ date: string; value: number }>;
+  pessoas?: {
+    owner?: string;
+    designers: number;
+    clientes: number;
+    aprovadores: number;
+    observadores?: number;
+  };
+  estado?: EstadoCTA;
 };
 
-type TarefaRow = {
-  id: string;
-  titulo: string;
-  descricao: string | null;
-  status: "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDA" | "CANCELADA";
-  prioridade: "ALTA" | "MEDIA" | "BAIXA";
-  prazo: string | null;
-  criado_em: string;
-  responsavel: { id: string; nome: string } | null;
-};
+// Arte filters e rows — usar tipos da toolbar/list
+type ArteFilters = UIArteFilters;
+type ArteListItem = UIArteListItem;
 
-type AprovacaoRow = {
-  id: string;
-  status: string; // PENDENTE/APROVADO/REJEITADO (depende do teu fluxo)
-  comentario: string | null;
-  criado_em: string;
-  aprovador: { id: string; nome: string } | null;
-  arte: { id: string; nome: string } | null;
-};
+// Aprovação — o componente espera raiz com `regra` e `items`
+type AprovacaoPainel = UIPainel;
 
-/** Initial para o modal */
-type ProjetoInitial = {
-  id: string;
-  nome: string;
-  descricao?: string | null;
-  status: "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
-  orcamento: number;          // centavos
-  prazo?: string | null;      // ISO | null
-  cliente_id?: string | null;
-};
-
-const PAGE_SIZE = 10;
-
-export default function ProjetoDetalhesPage() {
+/* =====================================================================================
+ * Página
+ * ===================================================================================== */
+export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
-  // Projeto
+  // Boot
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
+  const [alertas, setAlertas] = useState<{
+    prazosSemana: number; aprovacaoTravada: number; semAprovador: boolean;
+  } | null>(null);
 
-  // Artes
-  const [artes, setArtes] = useState<ArteRow[]>([]);
-  const [artesTotal, setArtesTotal] = useState(0);
-  const [artesLoading, setArtesLoading] = useState(false);
-  const [artesFrom, setArtesFrom] = useState(0);
+  // Aba atual
+  const [tab, setTab] = useState<ProjetoTabKey>("overview");
 
-  // Tarefas
-  const [tarefas, setTarefas] = useState<TarefaRow[]>([]);
-  const [tarefasTotal, setTarefasTotal] = useState(0);
-  const [tarefasLoading, setTarefasLoading] = useState(false);
-  const [tarefasFrom, setTarefasFrom] = useState(0);
-
-  // Aprovações
-  const [aprovacoes, setAprovacoes] = useState<AprovacaoRow[]>([]);
-  const [aprovTotal, setAprovTotal] = useState(0);
-  const [aprovLoading, setAprovLoading] = useState(false);
-  const [aprovFrom, setAprovFrom] = useState(0);
-
-  // Modal
-  const [openModal, setOpenModal] = useState(false);
-
-  /* ====== LOAD PROJECT ====== */
-  async function loadProjeto() {
-    setLoading(true);
-    setError(null);
-    try {
-      const p = await getProjeto(id);
-      setProjeto(p);
-    } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar projeto");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  /* ====== LOAD ARTES ====== */
-  async function loadArtes({ append }: { append: boolean }) {
-    if (!id) return;
-    setArtesLoading(true);
-    try {
-      const start = append ? artesFrom : 0;
-      const end = start + PAGE_SIZE - 1;
-
-      const { data, error, count } = await supabase
-        .from("artes")
-        .select(
-          `
-            id, nome, descricao, tipo, versao, status, criado_em,
-            autor:autor_id ( id, nome )
-          `,
-          { count: "exact" }
-        )
-        .eq("projeto_id", id)
-        .order("criado_em", { ascending: false })
-        .range(start, end);
-
-      if (error) throw error;
-
-      setArtes((prev) => (append ? [...prev, ...(data as any[])] : ((data as any[]) ?? [])));
-      setArtesTotal(count ?? 0);
-      setArtesFrom(end + 1);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao carregar artes");
-    } finally {
-      setArtesLoading(false);
-    }
-  }
-
-  /* ====== LOAD TAREFAS ====== */
-  async function loadTarefas({ append }: { append: boolean }) {
-    if (!id) return;
-    setTarefasLoading(true);
-    try {
-      const start = append ? tarefasFrom : 0;
-      const end = start + PAGE_SIZE - 1;
-
-      const { data, error, count } = await supabase
-        .from("tarefas")
-        .select(
-          `
-            id, titulo, descricao, status, prioridade, prazo, criado_em,
-            responsavel:responsavel_id ( id, nome )
-          `,
-          { count: "exact" }
-        )
-        .eq("projeto_id", id)
-        .order("criado_em", { ascending: false })
-        .range(start, end);
-
-      if (error) throw error;
-
-      setTarefas((prev) => (append ? [...prev, ...(data as any[])] : ((data as any[]) ?? [])));
-      setTarefasTotal(count ?? 0);
-      setTarefasFrom(end + 1);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao carregar tarefas");
-    } finally {
-      setTarefasLoading(false);
-    }
-  }
-
-  /* ====== LOAD APROVAÇÕES ====== */
-  async function loadAprovacoes({ append }: { append: boolean }) {
-    if (!id) return;
-    setAprovLoading(true);
-    try {
-      const start = append ? aprovFrom : 0;
-      const end = start + PAGE_SIZE - 1;
-
-      // Filtrando aprovações por projeto via relação com artes (arte.projeto_id = id)
-      const { data, error, count } = await supabase
-        .from("aprovacoes")
-        .select(
-          `
-            id, status, comentario, criado_em,
-            aprovador:aprovador_id ( id, nome ),
-            arte:arte_id ( id, nome, projeto_id )
-          `,
-          { count: "exact" }
-        )
-        .eq("arte.projeto_id", id) // filtro pela relação
-        .order("criado_em", { ascending: false })
-        .range(start, end);
-
-      if (error) throw error;
-
-      // mapeia para remover projeto_id do nested arte (não precisamos dele na UI)
-      const rows = (data ?? []).map((r: any) => ({
-        id: r.id,
-        status: r.status,
-        comentario: r.comentario,
-        criado_em: r.criado_em,
-        aprovador: r.aprovador ? { id: r.aprovador.id, nome: r.aprovador.nome } : null,
-        arte: r.arte ? { id: r.arte.id, nome: r.arte.nome } : null,
-      })) as AprovacaoRow[];
-
-      setAprovacoes((prev) => (append ? [...prev, ...rows] : rows));
-      setAprovTotal(count ?? 0);
-      setAprovFrom(end + 1);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao carregar aprovações");
-    } finally {
-      setAprovLoading(false);
-    }
-  }
-
+  // ====== boot ======
   useEffect(() => {
-    void loadProjeto();
-    // também carrega as listas iniciais
-    void loadArtes({ append: false });
-    void loadTarefas({ append: false });
-    void loadAprovacoes({ append: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let mounted = true;
+    (async () => {
+      try {
+        const [p, a] = await Promise.all([getProjeto(id), getProjetoAlertas(id)]);
+        if (!mounted) return;
+        setProjeto(p);
+        setAlertas(a);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
   }, [id]);
 
-  const initialForModal: ProjetoInitial | null = useMemo(() => {
+  // Pill de status pro header
+  const statusPill = useMemo(() => {
     if (!projeto) return null;
-    return {
-      id: projeto.id,
-      nome: projeto.nome,
-      descricao: projeto.descricao ?? null,
-      status: projeto.status,
-      orcamento: projeto.orcamento ?? 0, // centavos → modal converte pra R$
-      prazo: projeto.prazo ?? null,
-      cliente_id: projeto.cliente?.id ?? null,
-    };
+    switch (projeto.status) {
+      case "EM_ANDAMENTO": return { label: "Em andamento", tone: "default" as const };
+      case "PAUSADO": return { label: "Pausado", tone: "warning" as const };
+      case "CONCLUIDO": return { label: "Fechado", tone: "success" as const };
+      default: return { label: projeto.status, tone: "default" as const };
+    }
   }, [projeto]);
 
-  const onUpdate = async (values: ProjetoInput) => {
-    if (!projeto) return;
-    try {
-      const atualizado = await updateProjeto(projeto.id, values);
-      setProjeto(atualizado);
-      toast.success("Projeto atualizado!");
-      setOpenModal(false);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao atualizar");
-      throw e;
-    }
-  };
+  /* =====================================================================================
+   * VISÃO GERAL — estados e loaders
+   * ===================================================================================== */
+  const [ovLoading, setOvLoading] = useState(false);
+  const [resumo, setResumo] = useState<ProjetoResumoUI | null>(null);
+  const [passos, setPassos] = useState<LibProximoPasso[]>([]);
+  const [kanban, setKanban] = useState<TarefasKanban | null>(null);
 
-const onDelete = async () => {
-  if (!projeto) return;
-  if (!confirm("Excluir este projeto?")) return;
-
-  try {
-    // pré-check de dependências
-    const [{ count: artesCount, error: aErr }, { count: tarefasCount, error: tErr }] = await Promise.all([
-      supabase.from("artes").select("id", { count: "exact", head: true }).eq("projeto_id", projeto.id),
-      supabase.from("tarefas").select("id", { count: "exact", head: true }).eq("projeto_id", projeto.id),
-    ]);
-    if (aErr || tErr) throw aErr || tErr;
-
-    if ((artesCount ?? 0) > 0 || (tarefasCount ?? 0) > 0) {
-      toast.error("Não é possível excluir: existem artes e/ou tarefas vinculadas.");
-      return;
-    }
-
-    await deleteProjeto(projeto.id);
-    toast.success("Projeto excluído!");
-    router.push("/projetos");
-  } catch (e: any) {
-    // se o FK do banco bloquear, mostra msg amigável
-    const msg = String(e?.message ?? e);
-    if (msg.includes("foreign key") || msg.includes("violates")) {
-      toast.error("Exclusão bloqueada por dependências (FK). Remova artes/tarefas primeiro.");
-    } else {
-      toast.error(e?.message ?? "Erro ao excluir");
-    }
+  const ALLOWED_KINDS: ReadonlyArray<ProximoPassoKind> =
+    ["APROVADOR", "PRAZO", "TAREFA", "APROVACAO", "GENERIC"];
+  function coerceKind(input: any): ProximoPassoKind {
+    const k = String(input ?? "").toUpperCase() as ProximoPassoKind;
+    return (ALLOWED_KINDS as readonly string[]).includes(k) ? k : "GENERIC";
   }
-};
 
+  // Adapter: overview → ProjetoResumoUI
+  function adaptResumo(raw: any): ProjetoResumoUI {
+    return {
+      artesAprovadas: Number(raw?.artesAprovadas ?? raw?.aprovadas ?? raw?.aprovadas_count ?? 0),
+      artesPendentes: Number(raw?.artesPendentes ?? raw?.pendentes ?? 0),
+      artesRejeitadas: Number(raw?.artesRejeitadas ?? raw?.rejeitadas ?? 0),
+      artesTotal: Number(raw?.artesTotal ?? raw?.total ?? 0),
+      prazoProjeto: raw?.prazoProjeto ?? raw?.prazo ?? null,
+      proximaRevisao: raw?.proximaRevisao ?? null,
+      orcamentoCentavos: raw?.orcamentoCentavos ?? raw?.orcamento ?? null,
+      sparkline: Array.isArray(raw?.sparkline) ? raw.sparkline : [],
+      pessoas: raw?.pessoas ?? {
+        owner: "", designers: 0, clientes: 0, aprovadores: 0, observadores: 0,
+      },
+      estado: (raw?.estado ?? "CRIAR_ARTE") as EstadoCTA,
+    };
+  }
 
+  // Adapter: tarefa do backend -> TarefaCard (LIB)
+  function adaptTarefaCard(r: any): TarefaCard {
+    return {
+      id: String(r.id),
+      titulo: String(r.titulo ?? r.title ?? "Tarefa"),
+      prazo: r.prazo ?? null,
+      prioridade: (r.prioridade ?? "MEDIA") as "ALTA" | "MEDIA" | "BAIXA",
+      status: (r.status ?? "PENDENTE") as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDA" | "CANCELADA",
+      responsavel_nome:
+        r.responsavel?.nome ??
+        r.responsavel_nome ??
+        (r.responsavel_id ? "—" : null),
+    };
+  }
+
+  // Adapter: back-end genérico → TarefasKanban (da lib)
+  function adaptKanban(raw: any): TarefasKanban {
+    const toCol = (arr: any[]) => {
+      const rows = Array.isArray(arr) ? arr : [];
+      return { top: rows.slice(0, 3).map(adaptTarefaCard), total: rows.length };
+    };
+    const pendenteSrc = raw?.pendente ?? raw?.PENDENTE ?? [];
+    const emAndamentoSrc = raw?.em_andamento ?? raw?.EM_ANDAMENTO ?? [];
+    const concluidaSrc = raw?.concluida ?? raw?.CONCLUIDA ?? [];
+    return {
+      pendente: toCol(pendenteSrc),
+      em_andamento: toCol(emAndamentoSrc),
+      concluida: toCol(concluidaSrc),
+    };
+  }
+
+  async function loadOverview() {
+    setOvLoading(true);
+    try {
+      const [r, p, k] = await Promise.all([
+        j<any>(`/api/projetos/${id}/overview`, undefined, {
+          aprovadas: 0, total: 0, pessoas: { owner: "", designers: 0, clientes: 0, aprovadores: 0 },
+          estado: "CRIAR_ARTE" as EstadoCTA,
+        }),
+        j<any[]>(`/api/projetos/${id}/proximos-passos`, undefined, []),
+        j<any>(`/api/projetos/${id}/kanban`, undefined, { pendente: [], em_andamento: [], concluida: [] }),
+      ]);
+
+      const passosLib: LibProximoPasso[] = (p ?? []).map((it: any, idx: number) => ({
+        id: String(it.id ?? idx),
+        kind: coerceKind(it.kind ?? it.tipo ?? "GENERIC"),
+        label: String(it.label ?? "Tarefa"),
+        tipo: it.tipo ?? "TAREFA",
+        done: !!it.done,
+      }));
+
+      setResumo(adaptResumo(r));
+      setPassos(passosLib);
+      setKanban(adaptKanban(k));
+    } finally { setOvLoading(false); }
+  }
+
+  /* =====================================================================================
+   * ARTES — estados e loader
+   * ===================================================================================== */
+  const [artLoading, setArtLoading] = useState(false);
+  const [artRows, setArtRows] = useState<ArteListItem[]>([]);
+  const [artTotal, setArtTotal] = useState(0);
+  const [artFrom, setArtFrom] = useState(0);
+
+  // ⚠️ Mantemos genérico pra não conflitar com a tipagem da Toolbar
+  const [filters, setFilters] = useState<ArteFilters>({} as ArteFilters);
+  const [peekId, setPeekId] = useState<string | null>(null);
+  const ART_PAGE = 12;
+
+  // helper pra serializar filtros — aceita várias chaves
+  function buildArtesQuery(from: number) {
+    const q = new URLSearchParams({ from: String(from), limit: String(ART_PAGE) });
+
+    const anyF = filters as any;
+
+    if (typeof anyF.q === "string" && anyF.q) q.set("q", anyF.q);
+
+    const statusArr: string[] =
+      Array.isArray(anyF.status) ? anyF.status :
+      Array.isArray(anyF.statuses) ? anyF.statuses : [];
+    statusArr.forEach((s) => q.append("status", s));
+
+    const tipoArr: string[] =
+      Array.isArray(anyF.tipo) ? anyF.tipo :
+      Array.isArray(anyF.tipos) ? anyF.tipos : [];
+    tipoArr.forEach((t) => q.append("tipo", t));
+
+    const autorArr: string[] =
+      Array.isArray(anyF.autor) ? anyF.autor :
+      Array.isArray(anyF.autores) ? anyF.autores :
+      Array.isArray(anyF.autorId) ? anyF.autorId : [];
+    autorArr.forEach((a) => q.append("autor", a));
+
+    const tagArr: string[] =
+      Array.isArray(anyF.tag) ? anyF.tag :
+      Array.isArray(anyF.tags) ? anyF.tags : [];
+    tagArr.forEach((t) => q.append("tag", t));
+
+    return q;
+  }
+
+  // Adapter: garantir campos exigidos pela DenseList
+  function adaptArteRows(raw: any[]): ArteListItem[] {
+    return (raw ?? []).map((r) => {
+      const autor =
+        r.autor && (r.autor.id || r.autor.nome)
+          ? { id: String(r.autor.id ?? r.autor_id ?? ""), nome: String(r.autor.nome ?? r.autor_nome ?? "—") }
+          : r.autor_nome
+            ? { id: "", nome: String(r.autor_nome) }
+            : null;
+
+      return {
+        id: String(r.id),
+        nome: String(r.nome ?? "Sem nome"),
+        thumb: r.thumb ?? r.preview ?? null,
+        versao: Number(r.versao ?? 1),
+        status: String(r.status ?? "EM_ANALISE"),
+        tipo: String(r.tipo ?? "DESCONHECIDO"),
+        criado_em: String(r.criado_em ?? new Date().toISOString()),
+        autor, // ← { id, nome } | null
+      };
+    }) as ArteListItem[];
+  }
+
+  async function loadArtes(append = false) {
+    setArtLoading(true);
+    try {
+      const from = append ? artFrom : 0;
+      const q = buildArtesQuery(from);
+      const data = await j<{ items: any[]; total: number }>(
+        `/api/projetos/${id}/artes?${q.toString()}`,
+        undefined,
+        { items: [], total: 0 }
+      );
+      const items = adaptArteRows(data.items);
+      setArtRows((prev) => (append ? [...prev, ...items] : items));
+      setArtTotal(data.total);
+      setArtFrom(from + ART_PAGE);
+    } finally { setArtLoading(false); }
+  }
+
+  /* =====================================================================================
+   * APROVAÇÃO — estados e loader
+   * ===================================================================================== */
+  const [apLoading, setApLoading] = useState(false);
+  const [painel, setPainel] = useState<AprovacaoPainel | null>(null);
+
+  function adaptPainel(raw: any): AprovacaoPainel {
+    if (!raw) return { regra: { tipo: "TODOS", exigirDesigner: false, slaDias: null }, items: [] } as unknown as AprovacaoPainel;
+    const items = raw.items ?? raw.itens ?? [];
+    const regra = raw.regra ?? { tipo: "TODOS", exigirDesigner: false, slaDias: null };
+    const normItems = items.map((i: any) => ({
+      arteId: String(i.arteId ?? i.arte_id ?? i.id),
+      nome: String(i.nome ?? "Arte"),
+      versao: Number(i.versao ?? 1),
+      estado: (i.estado ?? "EM_ANALISE") as "ENVIADA" | "EM_ANALISE" | "APROVADA" | "REJEITADA",
+      aprovadores: (i.aprovadores ?? []).map((ap: any) => ({
+        id: String(ap.id),
+        nome: String(ap.nome ?? ap.email ?? "—"),
+        status: (ap.status ?? "PENDENTE") as "OK" | "PENDENTE" | "REJEITADO",
+        deadline: ap.deadline ?? null,
+      })),
+      regra: i.regra ?? { tipo: "TODOS", exigirDesigner: false, slaDias: null },
+    }));
+    return { regra, items: normItems } as AprovacaoPainel;
+  }
+
+  async function loadApproval() {
+    setApLoading(true);
+    try {
+      const data = await j<any>(`/api/projetos/${id}/aprovacao/painel`, undefined, {
+        regra: { tipo: "TODOS", exigirDesigner: false, slaDias: null }, items: []
+      });
+      setPainel(adaptPainel(data));
+    } finally { setApLoading(false); }
+  }
+
+  async function lembrarAprovadores(aprovacaoId: string) {
+    await fetch(`/api/aprovacoes/${aprovacaoId}/remind`, { method: "POST" });
+  }
+  async function overrideOwner(arteId: string) {
+    await fetch(`/api/artes/${arteId}/override`, { method: "POST" });
+    await loadApproval();
+  }
+
+  /* =====================================================================================
+   * ATIVIDADE — estados e loader
+   * ===================================================================================== */
+  const [actLoading, setActLoading] = useState(false);
+  const [actRows, setActRows] = useState<any[]>([]);
+  const [actTotal, setActTotal] = useState(0);
+  const [actFrom, setActFrom] = useState(0);
+  const ACT_PAGE = 15;
+
+  async function loadActivity(append = false) {
+    setActLoading(true);
+    try {
+      const from = append ? actFrom : 0;
+      const data = await j<{ items: any[]; total: number }>(
+        `/api/projetos/${id}/atividade?from=${from}&limit=${ACT_PAGE}`,
+        undefined,
+        { items: [], total: 0 }
+      );
+      setActRows((prev) => (append ? [...prev, ...data.items] : data.items));
+      setActTotal(data.total);
+      setActFrom(from + ACT_PAGE);
+    } finally { setActLoading(false); }
+  }
+
+  // Lazy-load por aba
+  useEffect(() => {
+    if (tab === "overview" && !resumo) loadOverview();
+    if (tab === "artes" && artRows.length === 0) loadArtes(false);
+    if (tab === "approval" && !painel) loadApproval();
+    if (tab === "activity" && actRows.length === 0) loadActivity(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, id]);
+
+  // ====== estados base ======
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="ml-2">Carregando projeto...</p>
+      <div className="p-6 flex items-center justify-center h-[50vh]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+        Carregando projeto…
       </div>
     );
   }
 
-  if (error || !projeto) {
+  if (!projeto) {
     return (
-      <div className="flex flex-col items-center justify-center h-[50vh] gap-3">
-        <p className="text-destructive">{error ?? "Projeto não encontrado"}</p>
-        <Button variant="outline" asChild>
-          <Link href="/projetos">Voltar para Projetos</Link>
-        </Button>
+      <div className="p-6 flex flex-col items-center gap-3">
+        <div className="text-destructive">Projeto não encontrado.</div>
+        <Link href="/projetos" className="underline text-sm">Voltar para Projetos</Link>
       </div>
     );
   }
 
+  /* =====================================================================================
+   * Render
+   * ===================================================================================== */
   return (
-    <div className="space-y-6 p-6">
-      {/* Header: título à esquerda; Voltar/Editar/Excluir à direita */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>
-          {projeto.descricao && (
-            <p className="text-muted-foreground max-w-2xl mt-1">{projeto.descricao}</p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/projetos" className="inline-flex items-center gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Voltar
-            </Link>
-          </Button>
-          <Button variant="outline" onClick={() => setOpenModal(true)}>
-            Editar
-          </Button>
-          <Button variant="destructive" onClick={onDelete}>
-            Excluir
-          </Button>
-        </div>
-      </div>
-
-      {/* Resumo */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1">Status</div>
-            <div className="text-base font-medium">
-              {projeto.status === "EM_ANDAMENTO"
-                ? "Em Andamento"
-                : projeto.status === "CONCLUIDO"
-                ? "Finalizado"
-                : "Pausado"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <DollarSign className="h-3 w-3" /> Orçamento
-            </div>
-            <div className="text-base font-medium">{formatBRLFromCents(projeto.orcamento ?? 0)}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> Prazo
-            </div>
-            <div className="text-base font-medium">
-              {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString("pt-BR") : "Sem prazo"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Palette className="h-3 w-3" /> Artes
-            </div>
-            <div className="text-base font-medium">{artesTotal}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Pessoas */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Designer
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-sm">{projeto.designer?.nome}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Cliente
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="text-sm">{projeto.cliente?.nome}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Artes */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Palette className="h-5 w-5" />
-            Artes ({artesTotal})
-          </h2>
-        </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {artes.map((a) => (
-            <Card key={a.id} className="hover:shadow-sm transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{a.nome}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-sm space-y-1">
-                {a.descricao && <p className="text-muted-foreground line-clamp-2">{a.descricao}</p>}
-                <p><span className="text-muted-foreground">Tipo:</span> {a.tipo} • v{a.versao}</p>
-                <p><span className="text-muted-foreground">Status:</span> {a.status}</p>
-                <p><span className="text-muted-foreground">Autor:</span> {a.autor?.nome ?? "—"}</p>
-                <p><span className="text-muted-foreground">Criado:</span> {new Date(a.criado_em).toLocaleDateString("pt-BR")}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        {artesFrom < artesTotal && (
-          <div className="flex justify-center">
-            <Button variant="outline" disabled={artesLoading} onClick={() => loadArtes({ append: true })}>
-              {artesLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Carregar mais artes
-            </Button>
-          </div>
-        )}
-        {artesTotal === 0 && <p className="text-sm text-muted-foreground">Nenhuma arte cadastrada.</p>}
-      </section>
-
-      {/* Tarefas */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Tarefas ({tarefasTotal})
-          </h2>
-        </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tarefas.map((t) => (
-            <Card key={t.id} className="hover:shadow-sm transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{t.titulo}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-sm space-y-1">
-                {t.descricao && <p className="text-muted-foreground line-clamp-2">{t.descricao}</p>}
-                <p><span className="text-muted-foreground">Status:</span> {t.status}</p>
-                <p><span className="text-muted-foreground">Prioridade:</span> {t.prioridade}</p>
-                <p><span className="text-muted-foreground">Responsável:</span> {t.responsavel?.nome ?? "—"}</p>
-                <p><span className="text-muted-foreground">Entrega:</span> {t.prazo ? new Date(t.prazo).toLocaleDateString("pt-BR") : "Sem prazo"}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        {tarefasFrom < tarefasTotal && (
-          <div className="flex justify-center">
-            <Button variant="outline" disabled={tarefasLoading} onClick={() => loadTarefas({ append: true })}>
-              {tarefasLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Carregar mais tarefas
-            </Button>
-          </div>
-        )}
-        {tarefasTotal === 0 && <p className="text-sm text-muted-foreground">Nenhuma tarefa cadastrada.</p>}
-      </section>
-
-      {/* Aprovações */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Aprovações ({aprovTotal})
-          </h2>
-        </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {aprovacoes.map((ap) => (
-            <Card key={ap.id} className="hover:shadow-sm transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">#{ap.id.slice(0, 6)} • {ap.status}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 text-sm space-y-1">
-                {ap.comentario && <p className="text-muted-foreground line-clamp-2">{ap.comentario}</p>}
-                <p><span className="text-muted-foreground">Arte:</span> {ap.arte?.nome ?? "—"}</p>
-                <p><span className="text-muted-foreground">Aprovador:</span> {ap.aprovador?.nome ?? "—"}</p>
-                <p><span className="text-muted-foreground">Criado:</span> {new Date(ap.criado_em).toLocaleDateString("pt-BR")}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        {aprovFrom < aprovTotal && (
-          <div className="flex justify-center">
-            <Button variant="outline" disabled={aprovLoading} onClick={() => loadAprovacoes({ append: true })}>
-              {aprovLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Carregar mais aprovações
-            </Button>
-          </div>
-        )}
-        {aprovTotal === 0 && <p className="text-sm text-muted-foreground">Nenhuma aprovação registrada.</p>}
-      </section>
-
-      {/* Modal de edição */}
-      <ProjetoModal
-        open={openModal}
-        onOpenChange={setOpenModal}
-        initial={initialForModal}
-        onSubmit={onUpdate}
+    <div className="p-6 space-y-4">
+      {/* Header */}
+      <ProjetoHeader
+        projeto={projeto}
+        statusPill={statusPill ?? undefined}
+        onEditar={() => router.push(`/projetos/${projeto.id}?edit=1`)}
+        onDuplicar={() => console.log("duplicar", projeto.id)}
+        onExportar={() => console.log("exportar", projeto.id)}
+        onArquivar={() => console.log("arquivar", projeto.id)}
       />
+
+      {/* Alertas contextuais */}
+      {alertas && (
+        <ProjetoAlertBanner
+          prazosSemana={alertas.prazosSemana}
+          aprovacaoTravada={alertas.aprovacaoTravada}
+          semAprovador={alertas.semAprovador}
+          onResolver={() => setTab("approval")}
+        />
+      )}
+
+      {/* Tabs sticky */}
+      <ProjetoTabs current={tab} onChange={setTab} />
+
+      {/* Conteúdo por aba */}
+      <div className="pt-2 space-y-6">
+        {/* ===== VISÃO GERAL ===== */}
+        {tab === "overview" && (
+          ovLoading || !resumo || !kanban ? (
+            <OverviewSkeleton />
+          ) : (
+            <>
+              <ResumoCards resumo={resumo} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <ProximosPassos
+                  passos={passos}
+                  onAction={(passo) => {
+                    if (passo.tipo === "APROVADOR") setTab("approval");
+                    if (passo.tipo === "PRAZO") console.log("definir prazo");
+                    if (passo.tipo === "TAREFA") console.log("abrir tarefa");
+                    if (passo.tipo === "APROVACAO") setTab("approval");
+                  }}
+                />
+                <MicroKanban
+                  kanban={kanban}
+                  onNovo={() => console.log("nova tarefa")}
+                  onAbrir={(tid) => console.log("abrir tarefa", tid)}
+                />
+              </div>
+              <div className="flex justify-end">
+                <CTAContextual
+                  estado={resumo.estado ?? "CRIAR_ARTE"}
+                  onClick={() => {
+                    if (resumo.estado === "CONCLUIR") {
+                      console.log("Concluir projeto");
+                    } else if (resumo.estado === "PEDIR_APROVACAO") {
+                      setTab("approval");
+                    } else {
+                      setTab("artes");
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )
+        )}
+
+        {/* ===== ARTES ===== */}
+        {tab === "artes" && (
+          <>
+            <ArtesToolbar
+              filters={filters}
+              onChange={(f) => {
+                setFilters(f);
+                setArtFrom(0);
+                loadArtes(false);
+              }}
+            />
+            {artLoading && artRows.length === 0 ? (
+              <ArtesSkeleton />
+            ) : (
+              <>
+                <ArtesDenseList
+                  rows={artRows}
+                  total={artTotal}
+                  loading={artLoading}
+                  onLoadMore={() => loadArtes(true)}
+                  onPeek={(arteId) => setPeekId(arteId)}
+                />
+                <ArteQuickPeekDrawer
+                  open={!!peekId}
+                  onOpenChange={(v) => !v && setPeekId(null)}
+                  arteId={peekId ?? ""}
+                />
+              </>
+            )}
+          </>
+        )}
+
+        {/* ===== TAREFAS ===== */}
+        {tab === "tasks" && (
+          <>
+            {ovLoading && !kanban ? (
+              <OverviewSkeleton />
+            ) : (
+              <MicroKanban
+                kanban={
+                  kanban ?? {
+                    pendente: { top: [], total: 0 },
+                    em_andamento: { top: [], total: 0 },
+                    concluida: { top: [], total: 0 },
+                  }
+                }
+                onNovo={() => console.log("nova tarefa")}
+                onAbrir={(tid) => console.log("abrir tarefa", tid)}
+              />
+            )}
+          </>
+        )}
+
+        {/* ===== APROVAÇÃO ===== */}
+        {tab === "approval" && (
+          apLoading || !painel ? (
+            <AprovacaoSkeleton />
+          ) : (
+            <AprovacaoPanel
+              painel={painel}
+              onLembrar={lembrarAprovadores}
+              onOverride={overrideOwner}
+            />
+          )
+        )}
+
+        {/* ===== ATIVIDADE ===== */}
+        {tab === "activity" && (
+          actLoading && actRows.length === 0 ? (
+            <AtividadeSkeleton />
+          ) : (
+            <AtividadeFeed
+              rows={actRows}
+              total={actTotal}
+              loading={actLoading}
+              onLoadMore={() => loadActivity(true)}
+              onOpen={(ref) => {
+                console.log("abrir no contexto", ref);
+              }}
+            />
+          )
+        )}
+      </div>
     </div>
   );
 }
