@@ -1,36 +1,36 @@
-// components/projetos/ProjetoModal.tsx
 "use client";
 
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { ProjetoForm, type ProjetoFormValues, type ClienteOption } from "./ProjetoForm";
 import type { ProjetoInput } from "@/lib/projects";
+import { Stepper } from "@/components/ui/stepper";
 
+import type { ClienteOption, UsuarioOption, ProjetoFormValues } from "./ProjetoForm";
+import StepBasic from "./forms/StepBasic";
+import StepParticipants from "./forms/StepParticipants";
+import StepApproval from "./forms/StepApproval";
+import StepReview from "./forms/StepReview";
+import type { ProjetoExtraPayload } from "./project-extra-types";
+
+// ===== tipos originais =====
 type StatusProjeto = "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
-
-/** Shape mínimo aceito em `initial` (o page.tsx faz o mapeamento) */
 export type ProjetoInitial = {
-  id: string;
-  nome: string;
-  descricao?: string | null;
-  status: StatusProjeto;
-  orcamento: number;          // centavos
-  prazo?: string | null;      // ISO | null
-  cliente_id?: string | null; // pode vir ausente
+  id: string; nome: string; descricao?: string | null; status: StatusProjeto;
+  orcamento: number; prazo?: string | null; cliente_id?: string | null;
 };
 
 interface ProjetoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ProjetoInitial | null;
-  onSubmit?: (values: ProjetoInput) => Promise<void>; // (R$ no orcamento, prazo string|null)
+  onSubmit?: (values: ProjetoInput & ProjetoExtraPayload) => Promise<void>;
 }
 
-/* ---------- utils ---------- */
+// ===== utils (mesmos que você já tinha) =====
 function safeErrorToString(err: unknown) {
   try {
     if (!err) return "Erro desconhecido";
@@ -39,9 +39,6 @@ function safeErrorToString(err: unknown) {
     if (typeof err === "object") {
       const anyErr = err as any;
       if (anyErr.message) return anyErr.message;
-      if (anyErr.code || anyErr.details || anyErr.hint) {
-        return JSON.stringify({ code: anyErr.code, message: anyErr.message, details: anyErr.details, hint: anyErr.hint });
-      }
       return JSON.stringify(err);
     }
     return String(err);
@@ -50,227 +47,287 @@ function safeErrorToString(err: unknown) {
   }
 }
 const isUuidLike = (v?: string | null) => !!v && v.length === 36;
-
-/** Garante que exista um perfil em public.usuarios com id = auth.uid() */
 async function ensureUsuarioExiste() {
   const { data: auth, error: authErr } = await supabase.auth.getUser();
   if (authErr) throw authErr;
   const u = auth?.user;
   if (!u) throw new Error("Não autenticado.");
-
-  const { data: me, error: meErr } = await supabase
-    .from("usuarios")
-    .select("id")
-    .eq("id", u.id)
-    .maybeSingle();
-
+  const { data: me, error: meErr } = await supabase.from("usuarios").select("id").eq("id", u.id).maybeSingle();
   if (meErr) throw meErr;
   if (me) return;
-
   const nome =
     (u.user_metadata?.full_name as string) ||
     (u.user_metadata?.name as string) ||
     (u.email?.split("@")[0] as string) ||
     "Usuário";
-
   const { error: insErr } = await supabase.from("usuarios").insert({ id: u.id, email: u.email, nome });
   if (insErr) throw insErr;
 }
 
-/* ---------- componente ---------- */
+// ===== componente =====
 export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: ProjetoModalProps) {
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [clientes, setClientes] = useState<ClienteOption[]>([]);
+  const [designers, setDesigners] = useState<UsuarioOption[]>([]);
   const [souCliente, setSouCliente] = useState(false);
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    { key: "basic", label: "Básico" },
+    { key: "participants", label: "Participantes" },
+    { key: "approval", label: "Aprovação" },
+    { key: "review", label: "Revisão" },
+  ] as const;
 
   const [formData, setFormData] = useState<ProjetoFormValues>({
     nome: "",
     descricao: "",
     status: "EM_ANDAMENTO",
-    orcamento: 0,   // R$ no formulário
+    orcamento: 0,
     prazo: "",
     cliente_id: "",
+    aprovacao: {
+      exigirAprovacaoDesigner: true,
+      aprovadoresClienteIds: [],
+      todosAprovadoresSaoObrigatorios: true,
+      permitirOverrideOwner: true,
+      prazoAprovacaoDias: null,
+    },
+    participantes: {
+      designersAdicionaisIds: [],
+      clientesAdicionaisIds: [],
+    },
   });
 
-  // Boot: garante perfil, detecta tipo, carrega clientes
+  // Boot
   useEffect(() => {
     const boot = async () => {
       if (!open) return;
       setLoading(true);
       try {
         await ensureUsuarioExiste();
-
         const { data: auth } = await supabase.auth.getUser();
         const userId = auth?.user?.id ?? null;
 
         if (userId) {
-          const { data: me } = await supabase
-            .from("usuarios")
-            .select("id, tipo")
-            .eq("id", userId)
-            .maybeSingle();
-
+          const { data: me } = await supabase.from("usuarios").select("id, tipo").eq("id", userId).maybeSingle();
           if (me?.tipo === "CLIENTE") {
             setSouCliente(true);
-            setFormData((prev: ProjetoFormValues) => ({ ...prev, cliente_id: me.id }));
+            setFormData((prev) => ({ ...prev, cliente_id: me.id }));
           } else {
             setSouCliente(false);
           }
         }
 
-        const { data: cliData, error: cliErr } = await supabase
-          .from("usuarios")
-          .select("id, nome")
-          .eq("tipo", "CLIENTE")
-          .eq("ativo", true)
-          .order("nome", { ascending: true });
+        const [cli, des] = await Promise.all([
+          supabase.from("usuarios").select("id, nome").eq("tipo", "CLIENTE").eq("ativo", true).order("nome"),
+          supabase.from("usuarios").select("id, nome").eq("tipo", "DESIGNER").eq("ativo", true).order("nome"),
+        ]);
+        if (cli.error) throw cli.error;
+        if (des.error) throw des.error;
 
-        if (cliErr) throw cliErr;
+        setClientes((cli.data ?? []).map((c) => ({ id: c.id as string, nome: c.nome as string })));
+        setDesigners((des.data ?? []).map((d) => ({ id: d.id as string, nome: d.nome as string })));
 
-        const opts = (cliData ?? []).map((c) => ({ id: c.id as string, nome: c.nome as string }));
-        setClientes(opts);
-
-        // 🆕 auto-seleciona o 1º cliente se não for CLIENTE e ainda não tiver cliente_id
-        if (!souCliente && !formData.cliente_id && opts.length > 0) {
-          setFormData((prev: ProjetoFormValues) => ({ ...prev, cliente_id: opts[0].id }));
+        // auto-select 1º cliente se não for cliente logado
+        if (!souCliente && !formData.cliente_id && (cli.data ?? []).length > 0) {
+          setFormData((prev) => ({ ...prev, cliente_id: (cli.data![0].id as string) }));
         }
+
+        setStep(0); // sempre começa no passo 0 ao abrir
       } catch (e) {
-        console.error("Erro ao inicializar modal de projeto:", safeErrorToString(e), e);
+        console.error("Erro boot modal projeto:", safeErrorToString(e));
       } finally {
         setLoading(false);
       }
     };
-
     void boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Preenche ao editar
+  // Editar
   useEffect(() => {
     if (initial) {
-      setFormData((prev: ProjetoFormValues) => ({
+      setFormData((prev) => ({
         ...prev,
         nome: initial.nome,
         descricao: initial.descricao || "",
         status: initial.status,
-        orcamento: (initial.orcamento ?? 0) / 100, // centavos -> R$
+        orcamento: (initial.orcamento ?? 0) / 100,
         prazo: initial.prazo ? initial.prazo.substring(0, 10) : "",
-        // preserva o que já estava (ex.: boot para CLIENTE) caso initial não traga cliente_id
         cliente_id: initial.cliente_id ?? prev.cliente_id ?? "",
       }));
     } else {
-      setFormData((prev: ProjetoFormValues) => ({
+      setFormData((prev) => ({
         ...prev,
-        nome: "",
-        descricao: "",
-        status: "EM_ANDAMENTO",
-        orcamento: 0,
-        prazo: "",
-        cliente_id: prev.cliente_id || "",
+        nome: "", descricao: "", status: "EM_ANDAMENTO", orcamento: 0, prazo: "", cliente_id: prev.cliente_id || "",
       }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, open]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ===== validações por step =====
+  const invalidBasic = useMemo(() => {
+    const nomeOk = formData.nome.trim().length > 0;
+    const orcOk = Number.isFinite(formData.orcamento);
+    const cliOk = souCliente || isUuidLike(formData.cliente_id);
+    return !(nomeOk && orcOk && cliOk);
+  }, [formData, souCliente]);
+
+  // participantes: nada obrigatório
+  // aprovação: se marcou aprovadores, ok; se não marcou e "todos obrigatórios" = true, continua ok (opções livres)
+
+  // ===== submissão =====
+  const handleSubmitFinal = async () => {
     setSalvando(true);
     try {
       await ensureUsuarioExiste();
-
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth?.user?.id;
       if (!userId) throw new Error("Usuário não autenticado.");
 
-      if (!formData.nome.trim()) throw new Error("Nome é obrigatório.");
-
-      // 🔒 clienteId SEMPRE válido (evita uuid "")
       const clienteId = souCliente ? userId : (isUuidLike(formData.cliente_id) ? formData.cliente_id! : null);
       if (!clienteId) throw new Error("Selecione um cliente.");
 
-      // ProjetoInput: prazo = string|null; orcamento = R$
       const prazoISO: string | null = formData.prazo ? new Date(formData.prazo).toISOString() : null;
 
+      const baseValues: ProjetoInput = {
+        nome: formData.nome.trim(),
+        descricao: formData.descricao?.trim() || undefined,
+        status: formData.status,
+        prazo: prazoISO,
+        cliente_id: clienteId,
+        orcamento: Number.isFinite(formData.orcamento) ? formData.orcamento : 0,
+      };
+      const extra: ProjetoExtraPayload = {
+        aprovacao: { ...formData.aprovacao },
+        participantes: { ...formData.participantes },
+      };
+
       if (onSubmit) {
-        const values: ProjetoInput = {
-            nome: formData.nome.trim(),
-            descricao: formData.descricao?.trim() || undefined,
-            status: formData.status,
-            prazo: prazoISO,
-            cliente_id: clienteId,
-            orcamento: Number.isFinite(formData.orcamento) ? formData.orcamento : 0,
-        };
-        await onSubmit(values);
+        await onSubmit({ ...baseValues, ...extra });
       } else {
-        // fallback: inserir direto (converte R$ -> centavos)
-        const orcamentoCentavos = Math.round((Number.isFinite(formData.orcamento) ? formData.orcamento : 0) * 100);
-
-        const { error } = await supabase
-          .from("projetos")
-          .insert({
-            nome: formData.nome.trim(),
-            descricao: formData.descricao?.trim() || null,
-            status: formData.status,
-            orcamento: orcamentoCentavos,
-            prazo: prazoISO,
-            designer_id: userId,
-            cliente_id: clienteId,
-          })
-          .select("id")
-          .single();
-
+        // fallback simples (sem extras)
+        const orcCents = Math.round((baseValues.orcamento ?? 0) * 100);
+        const { error } = await supabase.from("projetos").insert({
+          nome: baseValues.nome,
+          descricao: baseValues.descricao ?? null,
+          status: baseValues.status,
+          orcamento: orcCents,
+          prazo: baseValues.prazo,
+          designer_id: userId,
+          cliente_id: baseValues.cliente_id,
+        }).select("id").single();
         if (error) throw error;
       }
 
       onOpenChange(false);
-    } catch (error) {
-      console.error("Error submitting project:", safeErrorToString(error), error);
+    } catch (e) {
+      console.error("Erro ao salvar:", safeErrorToString(e));
     } finally {
       setSalvando(false);
     }
   };
 
-  const noClientsAvailable = !souCliente && clientes.length === 0;
-  const invalidCliente = !souCliente && !isUuidLike(formData.cliente_id);
+  // ===== resumo para a revisão =====
+  const resumo = useMemo(() => {
+    const nomeCliente = clientes.find(c => c.id === formData.cliente_id)?.nome;
+    const designersAd = formData.participantes.designersAdicionaisIds
+      .map(id => designers.find(d => d.id === id)?.nome || id);
+    const clientesAd  = formData.participantes.clientesAdicionaisIds
+      .map(id => clientes.find(c => c.id === id)?.nome || id);
+    const aprovadores = formData.aprovacao.aprovadoresClienteIds
+      .map(id => clientes.find(c => c.id === id)?.nome || id);
+
+    const statusLabel = formData.status === "EM_ANDAMENTO" ? "Em andamento" :
+                        formData.status === "CONCLUIDO" ? "Concluído" : "Pausado";
+    const orcFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(formData.orcamento || 0);
+    const prazoFmt = formData.prazo ? new Date(formData.prazo).toLocaleDateString("pt-BR") : undefined;
+
+    return {
+      nome: formData.nome,
+      cliente: nomeCliente,
+      prazo: prazoFmt,
+      orcamento: orcFmt,
+      status: statusLabel,
+      designersAdicionais: designersAd,
+      clientesAdicionais: clientesAd,
+      aprovadores,
+      exigirAprovDesigner: formData.aprovacao.exigirAprovacaoDesigner,
+      todosObrigatorios: formData.aprovacao.todosAprovadoresSaoObrigatorios,
+      overrideOwner: formData.aprovacao.permitirOverrideOwner,
+      prazoAprovDias: formData.aprovacao.prazoAprovacaoDias ?? null,
+    };
+  }, [formData, clientes, designers]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar Projeto" : "Novo Projeto"}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <ProjetoForm
-            values={formData}
-            setValues={(v) => setFormData(v)}
-            clientes={clientes}
-            souCliente={souCliente}
+        {/* Stepper */}
+        <div className="mb-4">
+          <Stepper
+            steps={[
+              { key: "basic", label: "Básico" },
+              { key: "participants", label: "Participantes" },
+              { key: "approval", label: "Aprovação" },
+              { key: "review", label: "Revisão" },
+            ]}
+            current={step}
           />
+        </div>
 
-          {!souCliente && invalidCliente && !noClientsAvailable && (
-            <p className="text-xs text-red-600">Selecione um cliente válido.</p>
-          )}
+          {/* Conteúdo */}
+          <div className="min-h-[260px]">
+            {step === 0 && (
+              <StepBasic
+                values={formData}
+                setValues={setFormData}
+                souCliente={souCliente}
+              />
+            )}
+            {step === 1 && (
+              <StepParticipants
+                values={formData}
+                setValues={setFormData}
+                souCliente={souCliente}
+              />
+            )}
+            {step === 2 && (
+              <StepApproval
+                values={formData}
+                setValues={setFormData}
+              />
+            )}
+            {step === 3 && <StepReview resumo={resumo} />}
+          </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
+
+        {/* Navegação */}
+        <div className="flex justify-between pt-2">
+          <Button variant="outline" onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
+            {step > 0 ? "Voltar" : "Cancelar"}
+          </Button>
+
+          {step < steps.length - 1 ? (
             <Button
-              type="submit"
-              disabled={
-                salvando ||
-                loading ||
-                noClientsAvailable ||
-                invalidCliente
-              }
+              onClick={() => setStep(step + 1)}
+              disabled={(step === 0 && (loading || invalidBasic))}
+              title={step === 0 && invalidBasic ? "Preencha nome, valor e cliente" : undefined}
             >
+              Próximo
+            </Button>
+          ) : (
+            <Button onClick={handleSubmitFinal} disabled={salvando || loading}>
               {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {initial ? "Salvar" : "Criar"}
             </Button>
-          </div>
-        </form>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
