@@ -1,7 +1,6 @@
-// components/layout/Sidebar.tsx
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -12,9 +11,18 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
-  BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight
+  BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
+  ChevronLeft, PanelRightClose, PanelLeftOpen
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+
+// ✅ Tooltip do shadcn (se não tiver, me avisa que troco por title nativo)
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // --- helpers ---------------------------------------------------------------
 
@@ -22,6 +30,27 @@ function useMounted() {
   const [m, setM] = useState(false);
   useEffect(() => setM(true), []);
   return m;
+}
+
+// localStorage seguro (SSR)
+function useLocalStorageBoolean(key: string, initial = false) {
+  const mounted = useMounted();
+  const [value, setValue] = useState(initial);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === 'true' || raw === 'false') setValue(raw === 'true');
+    } catch {}
+  }, [key, mounted]);
+
+  const update = useCallback((v: boolean) => {
+    setValue(v);
+    try { localStorage.setItem(key, String(v)); } catch {}
+  }, [key]);
+
+  return [value, update] as const;
 }
 
 type MaybeNumber = number | null | undefined;
@@ -62,6 +91,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const mounted = useMounted();
 
+  const [collapsed, setCollapsed] = useLocalStorageBoolean('viu.sidebar.collapsed', false);
   const [contadores, setContadores] = useState<Contadores>({
     tarefasPendentes: undefined,
     feedbacksPendentes: undefined,
@@ -71,6 +101,21 @@ export function Sidebar() {
 
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
   const fetchingRef = useRef(false);
+
+  // Toggle via botão e via atalho
+  const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Ctrl/Cmd + B
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleCollapsed();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleCollapsed]);
 
   // evita hydration: só pintamos "ativo" após montar
   const isActive = (href: string) => {
@@ -90,11 +135,7 @@ export function Sidebar() {
       fetchingRef.current = true;
       try {
         // garante sessão (importante p/ RLS e row-level filters)
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id;
-
-        // se tiver RLS por usuário e quiser filtrar por ele, ajuste aqui.
-        // exemplo: .eq('responsavel_id', userId)
+        await supabase.auth.getUser();
 
         // Tarefas PENDENTE/EM_ANDAMENTO
         const { count: tarefasPendentes } = await supabase
@@ -137,18 +178,15 @@ export function Sidebar() {
       } catch (err) {
         console.error('Erro ao buscar contadores:', err);
         if (!alive) return;
-        // mantém undefined para não quebrar hidratação com valores divergentes
         setContadores((prev) => ({ ...prev }));
       } finally {
         fetchingRef.current = false;
       }
     }
 
-    // primeira carga + polling
     fetchContadores();
     const interval = setInterval(fetchContadores, 5 * 60 * 1000);
 
-    // realtime: escuta mudanças relevantes e revalida
     const chan = supabase
       .channel('sidebar-counters')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, fetchContadores)
@@ -164,7 +202,7 @@ export function Sidebar() {
     };
   }, []);
 
-  // sections memoizadas pra evitar recalcular em cada render
+  // sections memoizadas
   const navigationSections: NavSection[] = useMemo(() => ([
     {
       title: 'Principal',
@@ -212,86 +250,178 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex h-full w-64 flex-col bg-background border-r">
-      {/* Header */}
-      <div className="p-6">
-        <h2 className="text-lg font-semibold">VIU</h2>
-        <p className="text-sm text-muted-foreground">Gestão de Projetos</p>
-      </div>
+    <TooltipProvider delayDuration={50}>
+      <div
+        className={cn(
+          "group/sidebar flex h-full flex-col border-r bg-background transition-[width] duration-300 ease-out",
+          collapsed ? "w-16" : "w-64"
+        )}
+        aria-label="Barra lateral de navegação"
+      >
+        {/* Header */}
+        <div className={cn("flex items-center justify-between p-3", collapsed && "justify-center")}>
+          <div className={cn("flex items-center gap-2", collapsed && "hidden")}>
+            <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
+              <User className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold leading-none">VIU</h2>
+              <p className="text-xs text-muted-foreground">Gestão de Projetos</p>
+            </div>
+          </div>
 
-      <Separator className="my-4" />
+        {/* Botão de colapsar/expandir */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={toggleCollapsed}
+                aria-label={collapsed ? "Expandir navegação (Ctrl/Cmd+B)" : "Recolher navegação (Ctrl/Cmd+B)"}
+                aria-pressed={collapsed}
+              >
+                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <span>{collapsed ? 'Expandir' : 'Recolher'} (Ctrl/Cmd + B)</span>
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-      {/* Navegação */}
-      <ScrollArea className="flex-1 px-4">
-        <nav className="space-y-6">
-          {navigationSections.map((section) => {
-            const isCollapsed = sectionsCollapsed[section.title];
-            const showItems = !section.collapsible || !isCollapsed;
+        <Separator className="my-2" />
 
-            return (
-              <div key={section.title}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.title}
-                  </h3>
-                  {section.collapsible && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => toggleSection(section.title)}
-                      aria-label={isCollapsed ? "Expandir seção" : "Recolher seção"}
-                    >
-                      {isCollapsed ? (
-                        <ChevronRight className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
+        {/* Navegação */}
+        <ScrollArea className="flex-1 px-2">
+          <nav className="space-y-5">
+            {navigationSections.map((section) => {
+              const isCollapsedSection = sectionsCollapsed[section.title];
+              const showItems = !section.collapsible || !isCollapsedSection;
+
+              return (
+                <div key={section.title}>
+                  {/* Header da seção */}
+                  <div className={cn(
+                    "mb-1 flex items-center justify-between px-2",
+                    collapsed && "justify-center"
+                  )}>
+                    {!collapsed && (
+                      <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {section.title}
+                      </h3>
+                    )}
+
+                    {section.collapsible && !collapsed && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => toggleSection(section.title)}
+                        aria-label={isCollapsedSection ? "Expandir seção" : "Recolher seção"}
+                      >
+                        {isCollapsedSection ? (
+                          <ChevronRight className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+
+                    {/* separador visual no modo compacto */}
+                    {collapsed && <div className="h-px w-8 bg-border" />}
+                  </div>
+
+                  {/* Itens */}
+                  {showItems && (
+                    <div className={cn("space-y-1", collapsed && "space-y-2")}>
+                      {section.items.map((item) => (
+                        <NavItemRow
+                          key={item.href}
+                          item={item}
+                          active={isActive(item.href)}
+                          collapsed={collapsed}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
+              );
+            })}
+          </nav>
+        </ScrollArea>
 
-                {showItems && (
-                  <div className="space-y-1">
-                    {section.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = isActive(item.href);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={cn(
-                            "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                            "hover:bg-accent hover:text-accent-foreground",
-                            active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-                            item.disabled && "pointer-events-none opacity-50"
-                          )}
-                          suppressHydrationWarning
-                        >
-                          <div className="flex items-center">
-                            <Icon className="mr-3 h-4 w-4" />
-                            {item.title}
-                          </div>
-                          {renderBadge(item.badge)}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-      </ScrollArea>
-
-      {/* Rodapé (usuario) */}
-      <SidebarUser />
-    </div>
+        {/* Rodapé (usuario) */}
+        <SidebarUser collapsed={collapsed} />
+      </div>
+    </TooltipProvider>
   );
 }
 
-// footer isolado (pode futuramente ler usuário real)
-function SidebarUser() {
+// --- Item isolado ----------------------------------------------------------
+
+function NavItemRow({
+  item,
+  active,
+  collapsed,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+}) {
+  const Icon = item.icon;
+
+  const content = (
+    <Link
+      href={item.href}
+      className={cn(
+        "group/item relative flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors outline-none",
+        "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+        item.disabled && "pointer-events-none opacity-50"
+      )}
+      aria-current={active ? 'page' : undefined}
+    >
+      {/* Indicador de ativo (borda à esquerda) */}
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r",
+          active ? "bg-primary" : "bg-transparent"
+        )}
+        aria-hidden
+      />
+
+      <Icon className={cn("h-4 w-4", collapsed ? "mx-auto" : "mr-3")} />
+
+      {/* Título + badge (somem no compacto) */}
+      {!collapsed && (
+        <div className="ml-1 flex w-full items-center justify-between">
+          <span>{item.title}</span>
+          {renderBadge(item.badge)}
+        </div>
+      )}
+    </Link>
+  );
+
+  // No modo compacto, envolvemos no Tooltip para mostrar o título e o badge
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="right" className="flex items-center gap-2">
+          <span className="font-medium">{item.title}</span>
+          {renderBadge(item.badge)}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return content;
+}
+
+// --- footer isolado --------------------------------------------------------
+
+function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const [email, setEmail] = useState<string>('—');
   const [nome, setNome] = useState<string>('—');
 
@@ -302,22 +432,23 @@ function SidebarUser() {
       const u = data?.user;
       if (!alive) return;
       setEmail(u?.email ?? '—');
-      // Se você tiver tabela de perfis/usuarios, pode buscar o nome aqui.
       setNome((u?.user_metadata as any)?.name ?? 'Usuário');
     })();
     return () => { alive = false; };
   }, []);
 
   return (
-    <div className="p-4 border-t">
-      <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+    <div className={cn("border-t p-2", collapsed && "p-2")}>
+      <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
           <User className="h-4 w-4 text-primary" />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{nome}</p>
-          <p className="text-xs text-muted-foreground truncate">{email}</p>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{nome}</p>
+            <p className="truncate text-xs text-muted-foreground">{email}</p>
+          </div>
+        )}
       </div>
     </div>
   );

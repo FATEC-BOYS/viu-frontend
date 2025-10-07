@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 import {
   Card,
@@ -6,134 +6,67 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import {
-  FolderOpen,
-  CheckCircle,
-  Clock,
-  MessageSquare,
-  TrendingUp,
-  Bell,
-  X as CloseIcon,
-} from 'lucide-react';
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
-import { getBaseUrl } from '@/lib/baseUrl';
+} from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { FolderOpen, Clock, MessageSquare } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabaseClient'
+import { getBaseUrl } from '@/lib/baseUrl'
 
-/* ===========================
-   Tipos
-   =========================== */
+// Cards de onboarding (Duolingo‑style)
+import StepCliente from '@/components/dashboard/StepCliente'
+import StepProjeto from '@/components/dashboard/StepProjeto'
+import StepTime from '@/components/dashboard/StepTime'
+import StepArte from '@/components/dashboard/StepArte'
+import StepFeedback from '@/components/dashboard/StepFeedback'
+import StepAprovacao from '@/components/dashboard/StepAprovacao'
+import StepConcluido from '@/components/dashboard/StepConcluido'
 
-export type ArteHeaderLite = {
-  id: string;
-  nome: string;
-  status_atual: string | null;
-  versao_atual: number | null;
-};
+// ============================
+// Tipos
+// ============================
 
-export type Projeto = {
-  id: string;
-  nome: string;
-  status: string;
-  prazo: string | null;
-  cliente: { nome: string } | null;
-  artes: ArteHeaderLite[];
-};
-
-export type Feedback = {
-  id: string;
-  conteudo: string;
-  criado_em: string;
-  autor: { nome: string } | null;
-  arte_versao: {
-    versao: number;
-    arte: { nome: string } | null;
-  } | null;
-};
-
-export type Tarefa = {
-  id: string;
-  titulo: string;
-  status: string;
-  prioridade: string;
-  prazo: string | null;
-  projeto: { nome: string } | null;
-};
-
-/* ===========================
-   UI helpers
-   =========================== */
-
-function MetricCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  trend,
-}: {
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
-  trend?: { value: string; isPositive: boolean };
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
-        {trend && (
-          <div
-            className={`flex items-center space-x-1 text-xs ${
-              trend.isPositive ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            <TrendingUp className="h-3 w-3" />
-            <span>{trend.value}</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+type Projeto = {
+  id: string
+  nome: string
+  status: string
+  prazo?: string | null
+  cliente?: { nome?: string | null } | null
+  artes?: { id: string; nome: string; status_atual: string | null }[]
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const statusConfig = {
-    EM_ANDAMENTO: { label: 'Em Andamento', variant: 'default' as const },
-    CONCLUIDO: { label: 'Concluído', variant: 'default' as const },
-    PAUSADO: { label: 'Pausado', variant: 'secondary' as const },
-    EM_ANALISE: { label: 'Em Análise', variant: 'outline' as const },
-    APROVADO: { label: 'Aprovado', variant: 'default' as const },
-    REJEITADO: { label: 'Rejeitado', variant: 'destructive' as const },
-    PENDENTE: { label: 'Pendente', variant: 'secondary' as const },
-  } as const;
-
-  const config =
-    statusConfig[status as keyof typeof statusConfig] ||
-    ({ label: status, variant: 'outline' } as const);
-
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+type Feedback = {
+  id: string
+  conteudo: string
+  criado_em: string
+  autor?: { nome?: string | null } | null
 }
 
-/* ===========================
-   Página
-   =========================== */
+type Tarefa = {
+  id: string
+  titulo: string
+  status: string
+  prioridade: string
+  prazo?: string | null
+  projeto?: { nome?: string | null } | null
+}
+
+// ============================
+// Página
+// ============================
 
 export default function DashboardPage() {
-  const [projetos, setProjetos] = useState<Projeto[]>([]);
-  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
-  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [authIssue, setAuthIssue] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [projetos, setProjetos] = useState<Projeto[]>([])
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
+  const [tarefas, setTarefas] = useState<Tarefa[]>([])
+  const [clientesCount, setClientesCount] = useState<number>(0)
+
+  const [loading, setLoading] = useState(true)
+  const [authIssue, setAuthIssue] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const [metricas, setMetricas] = useState({
     totalProjetos: 0,
@@ -142,185 +75,92 @@ export default function DashboardPage() {
     artesAprovadas: 0,
     feedbacksRecentes: 0,
     tarefasPendentes: 0,
-  });
-
-  // controle do banner de atividade recente (notificação rápida)
-  const [showActivityBanner, setShowActivityBanner] = useState(true);
+  })
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      setLoading(true);
-      setError(null);
-      setAuthIssue(null);
+      setLoading(true)
+      setError(null)
+      setAuthIssue(null)
 
       const {
         data: { user },
         error: userErr,
-      } = await supabase.auth.getUser();
-      if (userErr) console.error('Falha ao obter usuário:', userErr);
+      } = await supabase.auth.getUser()
+      if (userErr) console.error('Falha ao obter usuário:', userErr)
       if (!user) {
-        setAuthIssue(
-          'Você precisa estar autenticado para ver o dashboard. Faça login e tente novamente.'
-        );
-        setLoading(false);
-        return;
+        setAuthIssue('Você precisa estar autenticado para ver o dashboard. Faça login e tente novamente.')
+        setLoading(false)
+        return
       }
 
       try {
-        const [projetosQ, feedbacksQ, tarefasQ] = await Promise.all([
+        const [projetosQ, feedbacksQ, tarefasQ, clientesQ] = await Promise.all([
           supabase
             .from('projetos')
-            .select(
-              `
-              id,
-              nome,
-              status,
-              prazo,
-              cliente:cliente_id ( nome ),
-              artes (
-                id,
-                nome,
-                status_atual,
-                versao_atual
-              )
-            `
-            )
+            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`) 
             .throwOnError(),
           supabase
             .from('feedbacks')
-            .select(
-              `
-              id,
-              conteudo,
-              criado_em,
-              autor:autor_id ( nome ),
-              arte_versao:arte_versao_id (
-                versao,
-                arte:arte_id ( nome )
-              )
-            `
-            )
+            .select(`id, conteudo, criado_em, autor:autor_id ( nome )`)
             .order('criado_em', { ascending: false })
             .limit(6)
             .throwOnError(),
           supabase
             .from('tarefas')
-            .select(
-              `
-              id,
-              titulo,
-              status,
-              prioridade,
-              prazo,
-              projeto:projeto_id ( nome )
-            `
-            )
+            .select(`id, titulo, status, prioridade, prazo, projeto:projeto_id ( nome )`)
             .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
             .order('prazo', { ascending: true, nullsFirst: false })
-            .limit(5)
+            .limit(6)
             .throwOnError(),
-        ]);
+          supabase
+            .from('usuarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('tipo', 'CLIENTE'),
+        ])
 
-        const projetosData = (projetosQ.data || []) as unknown as Projeto[];
-        const feedbacksData = (feedbacksQ.data || []) as unknown as Feedback[];
-        const tarefasData = (tarefasQ.data || []) as unknown as Tarefa[];
+        const projetosData = (projetosQ.data || []) as Projeto[]
+        const feedbacksData = (feedbacksQ.data || []) as Feedback[]
+        const tarefasData = (tarefasQ.data || []) as Tarefa[]
 
-        setProjetos(projetosData);
-        setFeedbacks(feedbacksData);
-        setTarefas(tarefasData);
+        setProjetos(projetosData)
+        setFeedbacks(feedbacksData)
+        setTarefas(tarefasData)
+        setClientesCount(clientesQ.count ?? 0)
 
-        const totalArtes =
-          projetosData.reduce(
-            (acc, p) => acc + (Array.isArray(p.artes) ? p.artes.length : 0),
-            0
-          ) || 0;
-
-        const artesAprovadas =
-          projetosData.reduce((acc, p) => {
-            const aprovadas =
-              (p.artes || []).filter((a) => a.status_atual === 'APROVADO')
-                .length || 0;
-            return acc + aprovadas;
-          }, 0) || 0;
+        const totalArtes = projetosData.reduce((acc, p) => acc + (p.artes?.length || 0), 0)
+        const artesAprovadas = projetosData.reduce(
+          (acc, p) => acc + (p.artes?.filter((a) => a.status_atual === 'APROVADO').length || 0),
+          0
+        )
 
         setMetricas({
-          totalProjetos: projetosData.length || 0,
-          projetosAtivos:
-            projetosData.filter((p) => p.status === 'EM_ANDAMENTO').length || 0,
+          totalProjetos: projetosData.length,
+          projetosAtivos: projetosData.filter((p) => p.status === 'EM_ANDAMENTO').length,
           totalArtes,
           artesAprovadas,
-          feedbacksRecentes: feedbacksData.length || 0,
-          tarefasPendentes: tarefasData.length || 0,
-        });
-
-        // mostra o banner apenas se houver feedbacks
-        setShowActivityBanner(feedbacksData.length > 0);
+          feedbacksRecentes: feedbacksData.length,
+          tarefasPendentes: tarefasData.length,
+        })
       } catch (e: any) {
-        console.error('Erro ao buscar dados do dashboard:', e);
-        setError(
-          e?.message ?? 'Não foi possível carregar os dados do dashboard (RLS).'
-        );
+        console.error('Erro ao buscar dados do dashboard:', e)
+        setError(e?.message || 'Erro ao carregar dados do dashboard')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-
-    fetchDashboardData();
-  }, []);
-
-  /* ===========================
-     Helpers de formatação
-     =========================== */
-
-  const formatDate = (dateString?: string | null) => {
-    if (!dateString) return '—';
-    try {
-      return new Date(dateString).toLocaleDateString('pt-BR');
-    } catch {
-      return '—';
     }
-  };
 
-  const formatRelativeTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
-    );
+    fetchDashboardData()
+  }, [])
 
-    if (diffInHours < 1) return 'Agora há pouco';
-    if (diffInHours < 24) return `${diffInHours}h atrás`;
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays}d atrás`;
-    return formatDate(dateString);
-  };
-
-  const getPrioridadeColor = (prioridade: string) => {
-    switch (prioridade) {
-      case 'ALTA':
-        return 'text-red-600';
-      case 'MEDIA':
-        return 'text-yellow-600';
-      case 'BAIXA':
-        return 'text-green-600';
-      default:
-        return 'text-gray-600';
-    }
-  };
-
-  /* ===========================
-     Estados de carregamento/erro
-     =========================== */
-
-  if (loading) {
+  if (loading)
     return (
       <div className="flex items-center justify-center h-screen">
-        <span className="sr-only">Carregando...</span>
+        <span className="sr-only">Carregando…</span>
       </div>
-    );
-  }
+    )
 
-  if (authIssue) {
+  if (authIssue)
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center max-w-sm">
@@ -339,240 +179,199 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    );
-  }
+    )
 
-  if (error) {
+  if (error)
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center text-destructive">{error}</div>
       </div>
-    );
-  }
+    )
 
-  const projetosEmAndamento = projetos.filter(
-    (p) => p.status === 'EM_ANDAMENTO'
-  );
-
-  /* ===========================
-     Render
-     =========================== */
+  const projetosEmAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO')
+  const mostrarOnboardingPrimeiro = clientesCount === 0 || projetos.length === 0
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header com ações enxutas */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {mostrarOnboardingPrimeiro ? 'Vamos começar 🚀' : 'Dashboard'}
+          </h1>
           <p className="text-muted-foreground">
-            Visão geral dos seus projetos e atividades
+            {mostrarOnboardingPrimeiro
+              ? 'Complete os passos abaixo e desbloqueie sua primeira entrega'
+              : 'Visão geral dos seus projetos e atividades'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button asChild size="sm">
-            <Link href="/projetos">Ver projetos</Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/prazos">Ver calendário</Link>
-          </Button>
-        </div>
       </div>
 
-      {/* Banner de Atividade Recente (notificação rápida, dismissible) */}
-      {showActivityBanner && feedbacks.length > 0 && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Atividade recente</CardTitle>
+      {/* Onboarding sempre visível no topo */}
+      <section className="space-y-4">
+        <StepCliente />
+        <StepProjeto />
+        <StepTime />
+        <StepArte />
+        <StepFeedback />
+        <StepAprovacao />
+        <StepConcluido />
+      </section>
+
+      {/* Grid Bento só quando já passou do início */}
+      {!mostrarOnboardingPrimeiro && (
+        <section className="grid gap-4 lg:grid-cols-6 auto-rows-[1fr]">
+          {/* KPIs compactos */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Resumo rápido</CardTitle>
+              <CardDescription>Como você está hoje</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Projetos ativos</p>
+                <p className="text-2xl font-semibold">{metricas.projetosAtivos}</p>
+                <p className="text-[11px] text-muted-foreground">{metricas.totalProjetos} no total</p>
               </div>
-              <button
-                aria-label="Fechar atividade recente"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => setShowActivityBanner(false)}
-              >
-                <CloseIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <CardDescription>
-              Feedbacks e comentários mais recentes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {feedbacks.slice(0, 3).map((fb) => (
-              <div key={fb.id} className="flex gap-3">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">
-                      {fb.autor?.nome || 'Alguém'} comentou em “
-                      {fb.arte_versao?.arte?.nome || 'Arte'}” (v
-                      {fb.arte_versao?.versao})
-                    </p>
-                    <span className="text-xs text-muted-foreground">
-                      {formatRelativeTime(fb.criado_em)}
-                    </span>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Artes aprovadas</p>
+                <p className="text-2xl font-semibold">{metricas.artesAprovadas}</p>
+                <p className="text-[11px] text-muted-foreground">{metricas.totalArtes} no total</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Feedbacks recentes</p>
+                <p className="text-2xl font-semibold">{metricas.feedbacksRecentes}</p>
+                <p className="text-[11px] text-muted-foreground">últimos itens</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Tarefas pendentes</p>
+                <p className="text-2xl font-semibold">{metricas.tarefasPendentes}</p>
+                <p className="text-[11px] text-muted-foreground">a fazer</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Atividade recente (alto) */}
+          <Card className="lg:col-span-2 lg:row-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Atividade recente</CardTitle>
+              <CardDescription>Feedbacks e comentários</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {feedbacks.slice(0, 5).map((fb) => (
+                <div key={fb.id} className="flex gap-3">
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <MessageSquare className="h-4 w-4 text-primary" />
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {fb.conteudo}
-                  </p>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{fb.autor?.nome || 'Alguém'} comentou</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{fb.conteudo}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-            {feedbacks.length > 3 && (
-              <div className="pt-2">
-                <Button asChild variant="link" className="px-0">
-                  <Link href="/feedbacks">Ver tudo</Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              ))}
+              {feedbacks.length === 0 && (
+                <p className="text-sm text-muted-foreground">Sem novidades por aqui 🙂</p>
+              )}
+              {feedbacks.length > 5 && (
+                <div className="pt-2">
+                  <Button asChild variant="link" className="px-0">
+                    <Link href="/feedbacks">Ver tudo</Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Cards de Métricas */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Projetos Ativos"
-          value={metricas.projetosAtivos}
-          subtitle={`${metricas.totalProjetos} projetos no total`}
-          icon={FolderOpen}
-          trend={{ value: '+2 este mês', isPositive: true }}
-        />
-        <MetricCard
-          title="Artes Aprovadas"
-          value={metricas.artesAprovadas}
-          subtitle={`${metricas.totalArtes} artes no total`}
-          icon={CheckCircle}
-          trend={{ value: '+5 esta semana', isPositive: true }}
-        />
-        <MetricCard
-          title="Feedbacks Recentes"
-          value={metricas.feedbacksRecentes}
-          subtitle="Novos comentários"
-          icon={MessageSquare}
-        />
-        <MetricCard
-          title="Tarefas Pendentes"
-          value={metricas.tarefasPendentes}
-          subtitle="Aguardando conclusão"
-          icon={Clock}
-        />
-      </div>
+          {/* Projetos em andamento (grande) */}
+          <Card className="lg:col-span-4 lg:row-span-3">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <FolderOpen className="h-5 w-5 mr-2" />Projetos em andamento
+              </CardTitle>
+              <CardDescription>Progresso e prazos</CardDescription>
+            </CardHeader>
+            <CardContent className="grid sm:grid-cols-2 lg:grid-cols-2 gap-4">
+              {projetosEmAndamento.slice(0, 6).map((projeto) => {
+                const total = projeto.artes?.length || 0
+                const aprovadas = projeto.artes?.filter((a) => a.status_atual === 'APROVADO').length || 0
+                const progresso = total > 0 ? Math.round((aprovadas / total) * 100) : 0
 
-      {/* Grid Principal (sem Artes Recentes) */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Projetos em Andamento */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FolderOpen className="h-5 w-5 mr-2" />
-              Projetos em Andamento
-            </CardTitle>
-            <CardDescription>
-              Acompanhe o progresso dos seus projetos ativos
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {projetosEmAndamento.slice(0, 4).map((projeto) => {
-              const total = projeto.artes?.length || 0;
-              const aprovadas =
-                projeto.artes?.filter((a) => a.status_atual === 'APROVADO')
-                  .length || 0;
-              const progresso = total > 0 ? (aprovadas / total) * 100 : 0;
-
-              return (
-                <div
-                  key={projeto.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div className="space-y-1">
-                    <h4 className="font-medium">{projeto.nome}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Cliente: {projeto.cliente?.nome || 'N/A'}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <StatusBadge status={projeto.status} />
-                      <span className="text-xs text-muted-foreground">
-                        {total} artes
-                      </span>
+                return (
+                  <div key={projeto.id} className="border rounded-lg p-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium truncate">{projeto.nome}</h4>
+                      <Badge variant="secondary" className="shrink-0">{projeto.status}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Cliente: {projeto.cliente?.nome || '—'}</p>
+                    <div className="flex items-center justify-between text-xs">
+                      <span>{aprovadas}/{total} artes</span>
+                      <span className="text-muted-foreground">Prazo: {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '—'}</span>
+                    </div>
+                    {total > 0 && <Progress value={progresso} className="h-2" />}
+                    <div className="flex justify-end">
+                      <Button asChild size="sm" variant="ghost" className="h-7 px-2">
+                        <Link href={`/projetos/${projeto.id}`}>Abrir</Link>
+                      </Button>
                     </div>
                   </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-sm font-medium">
-                      Prazo: {formatDate(projeto.prazo)}
-                    </p>
-                    {total > 0 && (
-                      <Progress value={progresso} className="w-20 h-2" />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {projetosEmAndamento.length === 0 && (
-              <p className="text-center text-muted-foreground py-4">
-                Nenhum projeto em andamento
-              </p>
-            )}
-            <div className="pt-2">
-              <Button asChild variant="link" className="px-0">
-                <Link href="/projetos">Ver todos os projetos</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                )
+              })}
+              {projetosEmAndamento.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum projeto em andamento</p>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Tarefas Pendentes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Clock className="h-5 w-5 mr-2" />
-              Tarefas Urgentes
-            </CardTitle>
-            <CardDescription>Tarefas com prazos próximos</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {tarefas.map((tarefa) => (
-              <div key={tarefa.id} className="space-y-2">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <h5 className="font-medium text-sm">{tarefa.titulo}</h5>
-                    <p className="text-xs text-muted-foreground">
-                      {tarefa.projeto?.nome}
-                    </p>
+          {/* Tarefas (médio) */}
+          <Card className="lg:col-span-2 lg:row-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center"><Clock className="h-5 w-5 mr-2" />Tarefas urgentes</CardTitle>
+              <CardDescription>Prazos mais próximos</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {tarefas.slice(0, 6).map((tarefa) => (
+                <div key={tarefa.id} className="space-y-1 border rounded-md p-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
+                      <p className="text-xs text-muted-foreground truncate">{tarefa.projeto?.nome}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">{tarefa.prioridade}</Badge>
                   </div>
-                  <span
-                    className={`text-xs font-medium ${getPrioridadeColor(
-                      tarefa.prioridade
-                    )}`}
-                  >
-                    {tarefa.prioridade}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <Badge variant="secondary" className="text-[10px]">{tarefa.status}</Badge>
+                    <span className="text-[11px] text-muted-foreground">{tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR') : '—'}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <StatusBadge status={tarefa.status} />
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate(tarefa.prazo)}
-                  </span>
+              ))}
+              {tarefas.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nada urgente por enquanto 🤙</p>
+              )}
+              {tarefas.length > 6 && (
+                <div className="pt-2">
+                  <Button asChild variant="link" className="px-0">
+                    <Link href="/prazos">Abrir calendário</Link>
+                  </Button>
                 </div>
-              </div>
-            ))}
-            {tarefas.length === 0 && (
-              <p className="text-center text-muted-foreground py-4 text-sm">
-                Nenhuma tarefa pendente
-              </p>
-            )}
-            <div className="pt-2">
-              <Button asChild variant="link" className="px-0">
-                <Link href="/prazos">Abrir calendário</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Ações rápidas (fino) */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Ações rápidas</CardTitle>
+              <CardDescription>Atalhos úteis</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild size="sm"><Link href="/projetos/novo">Novo projeto</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link href="/artes/nova">Enviar arte</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link href="/links">Gerar link</Link></Button>
+              <Button asChild size="sm" variant="ghost"><Link href="/feedbacks">Ver feedbacks</Link></Button>
+            </CardContent>
+          </Card>
+        </section>
+      )}
     </div>
-  );
+  )
 }

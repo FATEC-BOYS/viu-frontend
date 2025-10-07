@@ -1,0 +1,7 @@
+export { default as StepCliente } from './StepCliente'
+export { default as StepProjeto } from './StepProjeto'
+export { default as StepTime } from './StepTime'
+export { default as StepArte } from './StepArte'
+export { default as StepFeedback } from './StepFeedback'
+export { default as StepAprovacao } from './StepAprovacao'
+export { default as StepConcluido } from './StepConcluido'
