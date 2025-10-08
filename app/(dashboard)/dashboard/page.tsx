@@ -11,12 +11,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { FolderOpen, Clock, MessageSquare } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { getBaseUrl } from '@/lib/baseUrl'
 
-// Cards de onboarding (Duolingo‑style)
+// Cards de onboarding (Duolingo-style)
 import StepCliente from '@/components/dashboard/StepCliente'
 import StepProjeto from '@/components/dashboard/StepProjeto'
 import StepTime from '@/components/dashboard/StepTime'
@@ -98,7 +98,7 @@ export default function DashboardPage() {
         const [projetosQ, feedbacksQ, tarefasQ, clientesQ] = await Promise.all([
           supabase
             .from('projetos')
-            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`) 
+            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`)
             .throwOnError(),
           supabase
             .from('feedbacks')
@@ -153,6 +153,27 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [])
 
+  // ============================
+  // Regras de visibilidade do Onboarding
+  // ============================
+  const {
+    totalArtes,
+    artesAprovadas,
+  } = metricas
+
+  const temCliente = clientesCount > 0
+  const temProjeto = projetos.length > 0
+  const temProjetoConcluido = useMemo(
+    () => projetos.some(p => ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(p.status.toUpperCase())),
+    [projetos]
+  )
+  const temArteAprovada = totalArtes > 0 && artesAprovadas > 0
+
+  // Onboarding é exibido somente se ainda está “no começo”
+  // Critérios para CONCLUÍDO: tem cliente E (tem projeto concluído OU já houve arte aprovada)
+  const onboardingConcluido = temCliente && (temProjetoConcluido || (temProjeto && temArteAprovada))
+  const mostrarOnboarding = !onboardingConcluido
+
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen">
@@ -189,7 +210,6 @@ export default function DashboardPage() {
     )
 
   const projetosEmAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO')
-  const mostrarOnboardingPrimeiro = clientesCount === 0 || projetos.length === 0
 
   return (
     <div className="space-y-6 p-6">
@@ -197,29 +217,31 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {mostrarOnboardingPrimeiro ? 'Vamos começar 🚀' : 'Dashboard'}
+            {mostrarOnboarding ? 'Vamos começar 🚀' : 'Dashboard'}
           </h1>
           <p className="text-muted-foreground">
-            {mostrarOnboardingPrimeiro
+            {mostrarOnboarding
               ? 'Complete os passos abaixo e desbloqueie sua primeira entrega'
               : 'Visão geral dos seus projetos e atividades'}
           </p>
         </div>
       </div>
 
-      {/* Onboarding sempre visível no topo */}
-      <section className="space-y-4">
-        <StepCliente />
-        <StepProjeto />
-        <StepTime />
-        <StepArte />
-        <StepFeedback />
-        <StepAprovacao />
-        <StepConcluido />
-      </section>
+      {/* Onboarding: só aparece enquanto NÃO concluído */}
+      {mostrarOnboarding && (
+        <section className="space-y-4">
+          <StepCliente />
+          <StepProjeto />
+          <StepTime />
+          <StepArte />
+          <StepFeedback />
+          <StepAprovacao />
+          <StepConcluido />
+        </section>
+      )}
 
-      {/* Grid Bento só quando já passou do início */}
-      {!mostrarOnboardingPrimeiro && (
+      {/* Grid Bento: só aparece quando já passou do início */}
+      {!mostrarOnboarding && (
         <section className="grid gap-4 lg:grid-cols-6 auto-rows-[1fr]">
           {/* KPIs compactos */}
           <Card className="lg:col-span-2">
