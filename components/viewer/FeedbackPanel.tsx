@@ -1,168 +1,233 @@
-// components/viewer/FeedbackPanel.tsx
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import IdentityGate from "./IdentityGate";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 
-type Feedback = {
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+
+type FeedbackItem = {
   id: string;
-  conteudo: string | null;
+  conteudo: string;
   tipo: "TEXTO" | "AUDIO";
-  arquivo: string | null;
+  arquivo?: string | null;
+  status: string;
   criado_em: string;
-  arte_versao_id: number;
-  autor_externo_id: string | null;
+  autor_nome?: string | null;
+  autor_email?: string | null;
+  arte_versao_id?: string | null;
+};
+
+type Aprovacao = {
+  id: string;
+  arte_versao_id: string;
+  aprovador_nome?: string | null;
+  aprovador_email?: string | null;
+  aprovado_em?: string | null;
+  visto_em?: string | null;
+};
+
+type Props = {
+  arteId: string;
+  versoes: { id: string | null; numero: number; criado_em: string; status: string | null }[];
+  aprovacoesByVersao: Record<string, Aprovacao[]>;
+  readOnly: boolean;
+  viewer?: { email: string; nome?: string | null } | null;
+  token: string;
+  initialFeedbacks: FeedbackItem[];
 };
 
 export default function FeedbackPanel({
   arteId,
+  versoes,
+  aprovacoesByVersao,
+  readOnly,
+  viewer,
   token,
   initialFeedbacks,
-  readOnly,
-}: {
-  arteId: string;
-  token: string;
-  initialFeedbacks: Feedback[];
-  readOnly: boolean;
-}) {
-  const [viewer, setViewer] = useState<{ email: string; nome?: string | null } | null>(null);
-  const [feedbacks, setFeedbacks] = useState<Feedback[]>(initialFeedbacks);
-  const [text, setText] = useState("");
-  const [posting, setPosting] = useState(false);
+}: Props) {
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>(initialFeedbacks);
+  const [loading, setLoading] = useState(false);
 
-  // linha do tempo por versão (mais recente em cima)
-  const porVersao = useMemo(() => {
-    const groups = new Map<number, Feedback[]>();
-    feedbacks.forEach((f) => {
-      const arr = groups.get(f.arte_versao_id) || [];
-      arr.push(f);
-      groups.set(f.arte_versao_id, arr);
-    });
-    return Array.from(groups.entries())
-      .sort((a, b) => b[0] - a[0])
-      .map(([versao, arr]) => ({ versao, itens: arr.sort((a, b) => +new Date(a.criado_em) - +new Date(b.criado_em)) }));
-  }, [feedbacks]);
+  async function loadFeedbacks() {
+    try {
+      if (!token) {
+        console.warn("[FeedbackPanel] sem token — pulando fetch");
+        return;
+      }
 
-  // “todo mundo VIU / aprovadores”
-  const [viu, setViu] = useState<boolean>(false);
-  const [aprovado, setAprovado] = useState<boolean>(false);
+      setLoading(true);
+
+      const url = `/api/arte/${encodeURIComponent(arteId)}/feedbacks?token=${encodeURIComponent(
+        token
+      )}`;
+
+      const res = await fetch(url, { cache: "no-store" });
+
+      if (!res.ok) {
+        let payload: any = null;
+        try {
+          payload = await res.json();
+        } catch {
+          try {
+            payload = await res.text();
+          } catch {}
+        }
+        console.error("[FeedbackPanel] fetch not ok", res.status, payload);
+        setFeedbacks([]); // mantém a UI funcional
+        return;
+      }
+
+      const data = (await res.json()) as FeedbackItem[];
+      if (!Array.isArray(data)) {
+        console.warn("[FeedbackPanel] resposta inesperada", data);
+        setFeedbacks([]);
+        return;
+      }
+
+      setFeedbacks(data);
+    } catch (e) {
+      console.error("[FeedbackPanel] erro geral no fetch:", e);
+      setFeedbacks([]); // fallback seguro
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    // se já tem viewer salvo (IdentityGate também faz isso), carregar estado visto/aprovação
-    const raw = localStorage.getItem("viu.viewer");
-    if (raw && !viewer) {
-      try { setViewer(JSON.parse(raw)); } catch {}
-    }
-  }, [viewer]);
-
-  async function marcarViu(aprovar?: boolean) {
-    if (!viewer) return;
-    const { data, error } = await supabase.rpc("viewer_mark_seen_and_approve", {
-      p_token: token,
-      p_arte_id: arteId,
-      p_email: viewer.email,
-      p_aprovar: typeof aprovar === "boolean" ? aprovar : null,
-    });
-    if (!error && Array.isArray(data) && data[0]) {
-      setViu(!!data[0].visto);
-      setAprovado(!!data[0].aprovado);
-    }
-  }
-
-  async function enviarTexto() {
-    if (readOnly || !viewer || !text.trim()) return;
-    setPosting(true);
-    try {
-      const { data, error } = await supabase.rpc("viewer_add_feedback", {
-        p_token: token,
-        p_arte_id: arteId,
-        p_email: viewer.email,
-        p_conteudo: text.trim(),
-        p_tipo: "TEXTO",
-        p_arquivo: null,
-        p_posicao_x: null,
-        p_posicao_y: null,
-      });
-      if (error) throw error;
-      setFeedbacks((prev) => [data as any, ...prev]); // adiciona na memória
-      setText("");
-    } catch (e) {
-      // TODO: toast
-    } finally {
-      setPosting(false);
-    }
-  }
+    const interval = setInterval(() => {
+      loadFeedbacks();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [arteId, token]);
 
   return (
-    <aside className="space-y-4">
-      {!viewer && (
-        <IdentityGate
-          token={token}
-          arteId={arteId}
-          onIdentified={(v) => setViewer(v)}
-        />
-      )}
+    <Card className="h-full flex flex-col border-0 shadow-none">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base font-semibold">Versões & Feedbacks</CardTitle>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={loadFeedbacks}
+          disabled={loading}
+          className="text-xs"
+        >
+          {loading ? "Atualizando..." : "Recarregar"}
+        </Button>
+      </CardHeader>
 
-      {/* Aprovação / “todo mundo VIU” */}
-      <div className="rounded-lg border p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Reconhecimento</p>
-          <div className="text-xs text-muted-foreground">versão atual</div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant={viu ? "default" : "outline"} size="sm" disabled={!viewer} onClick={() => marcarViu()}>
-            {viu ? "Você já viu" : "Marcar como visto"}
-          </Button>
-          <Button
-            variant={aprovado ? "default" : "outline"}
-            size="sm"
-            disabled={!viewer}
-            onClick={() => marcarViu(!aprovado)}
-          >
-            {aprovado ? "Aprovado por você" : "Aprovar esta versão"}
-          </Button>
-        </div>
-      </div>
+      <CardContent className="flex-1 overflow-hidden">
+        <ScrollArea className="h-[calc(100vh-18rem)] pr-3">
+          {versoes.map((v) => {
+            const vId = v.id ?? "sem-id";
+            const listaFeedbacks = feedbacks.filter((f) => f.arte_versao_id === v.id);
+            const aprovacoes = aprovacoesByVersao[vId] ?? [];
 
-      {/* Timeline por versão */}
-      <div className="space-y-4">
-        {porVersao.map(({ versao, itens }) => (
-          <div key={versao} className="rounded-lg border">
-            <div className="px-3 py-2 border-b text-xs text-muted-foreground">
-              Versão v{versao}
-            </div>
-            <div className="p-3 space-y-3">
-              {itens.map((f) => (
-                <div key={f.id} className="text-sm">
-                  <div className="text-muted-foreground text-[12px]">
-                    {new Date(f.criado_em).toLocaleString("pt-BR")}
-                  </div>
-                  <div className="whitespace-pre-wrap">{f.conteudo || "—"}</div>
+            return (
+              <div key={vId} className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold">
+                    Versão {v.numero}
+                    <span
+                      suppressHydrationWarning
+                      className="ml-2 text-xs text-muted-foreground"
+                    >
+                      {new Date(v.criado_em).toLocaleDateString()}
+                    </span>
+                  </h4>
+                  <Badge
+                    variant={
+                      v.status === "APROVADO"
+                        ? "default"
+                        : v.status === "REJEITADO"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {v.status ?? "EM ANÁLISE"}
+                  </Badge>
                 </div>
-              ))}
-              {itens.length === 0 && <div className="text-xs text-muted-foreground">Sem mensagens.</div>}
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Caixa de envio */}
-      <div className="rounded-lg border p-3">
-        <p className="text-sm font-medium mb-2">Escreva um comentário</p>
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={readOnly ? "Este link é somente leitura" : "Seu comentário…"}
-          disabled={readOnly || !viewer}
-        />
-        <div className="flex justify-end pt-2">
-          <Button onClick={enviarTexto} disabled={readOnly || !viewer || posting}>
-            {posting ? "Enviando…" : "Enviar"}
-          </Button>
-        </div>
-      </div>
-    </aside>
+                {/* Aprovadores */}
+                {aprovacoes.length > 0 && (
+                  <div className="mb-2 space-y-1">
+                    {aprovacoes.map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex justify-between text-xs text-muted-foreground"
+                      >
+                        <span>
+                          {a.aprovador_nome || a.aprovador_email || "Aprovador desconhecido"}
+                        </span>
+                        <span suppressHydrationWarning>
+                          {a.aprovado_em
+                            ? "✅ " + new Date(a.aprovado_em).toLocaleDateString()
+                            : a.visto_em
+                            ? "👁️ " + new Date(a.visto_em).toLocaleDateString()
+                            : "⏳ pendente"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Feedbacks */}
+                <div className="space-y-2">
+                  {listaFeedbacks.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhum feedback nesta versão.
+                    </p>
+                  )}
+                  {listaFeedbacks.map((f) => (
+                    <div key={f.id} className="rounded-md border p-2">
+                      <div className="flex justify-between">
+                        <span className="text-xs font-medium">
+                          {f.autor_nome || f.autor_email || "Anônimo"}
+                        </span>
+                        <span
+                          suppressHydrationWarning
+                          className="text-[10px] text-muted-foreground"
+                        >
+                          {new Date(f.criado_em).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {f.tipo === "AUDIO" ? (
+                        <audio
+                          src={f.arquivo || ""}
+                          controls
+                          className="mt-1 w-full"
+                        />
+                      ) : (
+                        <p className="text-xs mt-1 whitespace-pre-wrap">
+                          {f.conteudo || "(sem texto)"}
+                        </p>
+                      )}
+
+                      <div className="mt-1 flex justify-end">
+                        <Badge
+                          variant={
+                            f.status === "RESOLVIDO"
+                              ? "default"
+                              : f.status === "EM_ANALISE"
+                              ? "secondary"
+                              : f.status === "ARQUIVADO"
+                              ? "outline"
+                              : "destructive"
+                          }
+                          className="text-[10px] uppercase"
+                        >
+                          {f.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }

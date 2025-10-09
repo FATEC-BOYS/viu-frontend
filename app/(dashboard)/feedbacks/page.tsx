@@ -183,7 +183,7 @@ function ListItem({
 }
 
 /* =========================
-   Detail
+   Detail (com thread)
    ========================= */
 function AudioInline({ src }: { src: string }) {
   return (
@@ -193,10 +193,63 @@ function AudioInline({ src }: { src: string }) {
     </div>
   );
 }
+
 function FeedbackDetail({
-  fb, onVerNaArte, onCriarTarefa, onSendReply,
-}: { fb: FeedbackRow; onVerNaArte: (f: FeedbackRow) => void; onCriarTarefa: (f: FeedbackRow) => void; onSendReply: (f: FeedbackRow, text: string) => Promise<void>; }) {
+  fb, onVerNaArte, onCriarTarefa,
+}: {
+  fb: FeedbackRow;
+  onVerNaArte: (f: FeedbackRow) => void;
+  onCriarTarefa: (f: FeedbackRow) => void;
+}) {
   const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [thread, setThread] = useState<
+    { id: string; conteudo: string; criado_em: string; autor: { id: string; nome: string | null } }[]
+  >([]);
+  const [loadingThread, setLoadingThread] = useState(false);
+
+  async function loadThread() {
+    try {
+      setLoadingThread(true);
+      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Falha ao carregar respostas');
+      const data = await res.json();
+      setThread(data);
+    } catch (e) {
+      console.error('[FeedbackDetail] loadThread error', e);
+      setThread([]);
+    } finally {
+      setLoadingThread(false);
+    }
+  }
+
+  useEffect(() => {
+    loadThread();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fb.id]);
+
+  async function sendReply() {
+    if (!reply.trim()) return;
+    try {
+      setSending(true);
+      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ conteudo: reply.trim(), statusAfter: 'EM_ANALISE' }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || 'Falha ao enviar resposta');
+      setThread((prev) => [...prev, j.resposta]);
+      setReply('');
+      toast.success('Resposta enviada!');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao enviar resposta.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b">
@@ -223,14 +276,48 @@ function FeedbackDetail({
           <Button asChild variant="link" size="sm"><Link href={`/projetos/${fb.projeto_id}`}>Abrir projeto</Link></Button>
         </div>
 
+        {/* Thread */}
+        <div className="space-y-3">
+          <div className="text-xs font-semibold text-muted-foreground">Respostas</div>
+          {loadingThread ? (
+            <div className="text-xs text-muted-foreground">Carregando…</div>
+          ) : thread.length === 0 ? (
+            <div className="text-xs text-muted-foreground">Ainda não há respostas.</div>
+          ) : (
+            <div className="space-y-2">
+              {thread.map((r) => (
+                <div key={r.id} className="rounded-md border p-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium">{r.autor.nome ?? 'Usuário'}</div>
+                    <div className="text-[10px] text-muted-foreground">{formatDateTime(r.criado_em)}</div>
+                  </div>
+                  <div className="mt-1 whitespace-pre-wrap text-sm">{r.conteudo}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Composer */}
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground">Responder</label>
-          <textarea className="min-h-[90px] w-full resize-y rounded-md border bg-background p-2 text-sm" placeholder={`Responder para ${fb.autor_nome}…`} value={reply} onChange={(e) => setReply(e.target.value)} />
+          <textarea
+            className="min-h-[90px] w-full resize-y rounded-md border bg-background p-2 text-sm"
+            placeholder={`Responder para ${fb.autor_nome}…`}
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                sendReply();
+              }
+            }}
+          />
           <div className="flex items-center justify-between">
-            <div className="text-[11px] text-muted-foreground">Dica: Shift+Enter quebra linha</div>
+            <div className="text-[11px] text-muted-foreground">Dica: Ctrl/Cmd+Enter envia • Shift+Enter quebra linha</div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setReply('')}>Limpar</Button>
-              <Button size="sm" onClick={async () => { if (!reply.trim()) return; await onSendReply(fb, reply.trim()); setReply(''); }}>Enviar</Button>
+              <Button variant="outline" size="sm" onClick={() => setReply('')} disabled={sending}>Limpar</Button>
+              <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim()}>{sending ? 'Enviando…' : 'Enviar'}</Button>
             </div>
           </div>
         </div>
@@ -240,7 +327,7 @@ function FeedbackDetail({
 }
 
 /* =========================
-   Board & Timeline compactos
+   Board & Timeline
    ========================= */
 function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; onOpen: (id: string)=>void; onMove: (id: string, to: FeedbackStatus)=>void; }) {
   const cols: { key: FeedbackStatus; title: string }[] = [
@@ -496,7 +583,9 @@ export default function FeedbacksPage() {
       : `/artes/${fb.arte_id}`;
     window.open(url, '_blank');
   };
-  const handleResponder = async () => { toast.info('Abrir thread/composer real (TODO).'); };
+  const handleResponder = async (fb: FeedbackRow) => {
+    setSelectedId(fb.id); // foca o detalhe para responder
+  };
   const handleCriarTarefa = async (fb: FeedbackRow) => {
     try {
       const user = (await supabase.auth.getUser()).data.user;
@@ -514,10 +603,6 @@ export default function FeedbacksPage() {
       toast.error('Falha ao criar tarefa. ' + (e?.message || ''));
     }
   };
-  const handleSendReply = async () => { toast.success('Resposta enviada! (fake por enquanto)'); };
-
-  /* ----------- estatísticas ----------- */
-
 
   /* ----------- render ----------- */
   if (loading) {
@@ -566,7 +651,7 @@ export default function FeedbacksPage() {
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[260px] flex-1">
+        <div className="relative min-w=[260px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar por conteúdo, arte, projeto ou autor…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
         </div>
@@ -655,7 +740,11 @@ export default function FeedbacksPage() {
                 {!selected ? (
                   <Card className="p-6 text-sm text-muted-foreground">Selecione um feedback à esquerda para ver detalhes.</Card>
                 ) : (
-                  <FeedbackDetail fb={selected} onVerNaArte={handleVerNaArte} onCriarTarefa={handleCriarTarefa} onSendReply={async (_f, t) => { await handleSendReply(); }} />
+                  <FeedbackDetail
+                    fb={selected}
+                    onVerNaArte={handleVerNaArte}
+                    onCriarTarefa={handleCriarTarefa}
+                  />
                 )}
               </div>
             </div>

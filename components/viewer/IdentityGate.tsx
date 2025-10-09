@@ -1,6 +1,8 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,40 +20,30 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // chave única (se quiser separar por arte/link)
-  const LS_KEY = "viu.viewer"; // ou `viu.viewer:${arteId}`
-
   useEffect(() => {
     setMounted(true);
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      try {
+    try {
+      const raw = localStorage.getItem("viu.viewer");
+      if (raw) {
         const v = JSON.parse(raw);
-        if (v?.email) onIdentified({ email: v.email, nome: v.nome ?? null });
-      } catch {
-        /* ignore */
+        if (v?.email) onIdentified({ email: v.email, nome: v.nome });
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const isValidEmail = (e: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+    } catch {}
+  }, [onIdentified]);
 
   const handleConfirm = async () => {
     setSubmitting(true);
     setError(null);
     try {
-      const e = email.trim();
-      const n = nome.trim() || null;
-
-      if (!isValidEmail(e)) {
-        throw new Error("Informe um e-mail válido.");
-      }
-
-      // Não chamamos mais RPC aqui. Só persistimos localmente
-      localStorage.setItem(LS_KEY, JSON.stringify({ email: e, nome: n }));
-      onIdentified({ email: e, nome: n });
+      const { data, error } = await supabase.rpc("viewer_identify", {
+        p_token: token,
+        p_arte_id: arteId,
+        p_email: email,
+        p_nome: nome || null,
+      });
+      if (error) throw error;
+      localStorage.setItem("viu.viewer", JSON.stringify({ email: data.email, nome: data.nome }));
+      onIdentified({ email: data.email, nome: data.nome });
     } catch (e: any) {
       setError(e?.message || "Não foi possível identificar você.");
     } finally {
@@ -79,34 +71,15 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground">E-mail</label>
-            <Input
-              type="email"
-              placeholder="voce@empresa.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && isValidEmail(email) && !submitting) {
-                  handleConfirm();
-                }
-              }}
-            />
+            <Input type="email" placeholder="voce@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Nome (opcional)</label>
-            <Input
-              placeholder="Seu nome"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && isValidEmail(email) && !submitting) {
-                  handleConfirm();
-                }
-              }}
-            />
+            <Input placeholder="Seu nome" value={nome} onChange={(e) => setNome(e.target.value)} />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button disabled={!isValidEmail(email) || submitting} onClick={handleConfirm}>
+            <Button disabled={!email || submitting} onClick={handleConfirm}>
               {submitting ? "Confirmando…" : "Confirmar"}
             </Button>
           </div>
