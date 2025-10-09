@@ -1,47 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import {
-  Share2,
-  Search,
-  Copy,
-  ExternalLink,
-  Loader2,
-  EyeOff,
-  Plus,
-  MoreVertical,
-  Trash2,
-  RefreshCw,
-  FileImage,
-  FolderOpen,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
+  Share2, Search, Copy, ExternalLink, Loader2, EyeOff, Plus, MoreVertical,
+  Trash2, RefreshCw, FileImage, FolderOpen, Clock, CheckCircle2, AlertTriangle,
+  MessageCircle, Download, Shield, CalendarPlus, CalendarClock,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 
 /* ===================== Tipos ===================== */
 
@@ -51,201 +27,171 @@ interface LinkCompartilhado {
   tipo: 'ARTE' | 'PROJETO' | string;
   expira_em: string | null;
   somente_leitura: boolean;
+  can_comment?: boolean;
+  can_download?: boolean;
   criado_em: string;
   arte: {
     nome: string;
-    projeto: {
-      nome: string;
-      cliente: {
-        nome: string;
-      };
-    };
+    projeto: { nome: string; cliente: { nome: string } };
   } | null;
   projeto: {
     nome: string;
-    cliente: {
-      nome: string;
-    };
+    cliente: { nome: string };
   } | null;
 }
-
 type SortKey = 'criado_em' | 'expira_em' | 'tipo';
 
-/* ===== Tipos auxiliares (shape cru do Supabase) sem any ===== */
-
 type MaybeArray<T> = T | T[] | null | undefined;
-
-interface RawCliente {
-  nome: unknown;
-}
-interface RawProjeto {
-  nome: unknown;
-  cliente: MaybeArray<RawCliente>;
-}
-interface RawArteEntity {
-  nome: unknown;
-  projeto: MaybeArray<RawProjeto>;
-}
-interface RawProjetoEntity {
-  nome: unknown;
-  cliente: MaybeArray<RawCliente>;
-}
+interface RawCliente { nome: unknown; }
+interface RawProjeto { nome: unknown; cliente: MaybeArray<RawCliente>; }
+interface RawArteEntity { nome: unknown; projeto: MaybeArray<RawProjeto>; }
+interface RawProjetoEntity { nome: unknown; cliente: MaybeArray<RawCliente>; }
 interface RawLink {
-  id: unknown;
-  token: unknown;
-  tipo: unknown;
-  expira_em?: unknown;
-  somente_leitura: unknown;
-  criado_em: unknown;
+  id: unknown; token: unknown; tipo: unknown;
+  expira_em?: unknown; somente_leitura: unknown; criado_em: unknown;
+  can_comment?: unknown; can_download?: unknown;
   arte?: MaybeArray<RawArteEntity>;
   projeto?: MaybeArray<RawProjetoEntity>;
 }
+const toOne = <T,>(val: MaybeArray<T>): T | null => (Array.isArray(val) ? (val[0] ?? null) : (val ?? null)) as any;
 
-/* ===== helper: normaliza 1:1 que pode vir como array ===== */
-const toOne = <T,>(val: MaybeArray<T>): T | null => {
-  if (Array.isArray(val)) return (val[0] ?? null) as T | null;
-  return (val ?? null) as T | null;
-};
+/* ===================== UI helpers ===================== */
 
-/* ===================== UI Auxiliares ===================== */
+const LOADER_LINES = [
+  'Afiando os lápis…',
+  'Abrindo pastas…',
+  'Buscando inspirações…',
+  'Alinhando pixels…',
+] as const;
 
-function TipoLinkBadge({ tipo }: { tipo: string }) {
-  const tipoConfig = {
-    ARTE: {
-      label: 'Arte',
-      icon: FileImage,
-      color: 'bg-blue-100 text-blue-800 border-blue-200',
-    },
-    PROJETO: {
-      label: 'Projeto',
-      icon: FolderOpen,
-      color: 'bg-purple-100 text-purple-800 border-purple-200',
-    },
-  };
-  const config =
-    tipoConfig[tipo as keyof typeof tipoConfig] ??
-    ({ label: tipo, icon: Share2, color: 'bg-gray-100 text-gray-800 border-gray-200' } as const);
-
-  const Icon = config.icon;
+function TipoPill({ tipo }: { tipo: string }) {
+  const map = {
+    ARTE: { label: 'Arte', icon: FileImage, cls: 'bg-blue-100 text-blue-800 border-blue-200' },
+    PROJETO: { label: 'Projeto', icon: FolderOpen, cls: 'bg-purple-100 text-purple-800 border-purple-200' },
+  } as const;
+  const cfg = (map as any)[tipo] ?? { label: tipo, icon: Share2, cls: 'bg-gray-100 text-gray-800 border-gray-200' };
+  const Icon = cfg.icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${config.color}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${cfg.cls}`}>
       <Icon className="h-3 w-3" />
-      {config.label}
+      {cfg.label}
     </span>
   );
 }
 
-function StatusLink({ expira_em }: { expira_em: string | null }) {
+function StatusBadge({ expira_em }: { expira_em: string | null }) {
   if (!expira_em) {
     return (
-      <Badge variant="default" className="flex items-center gap-1">
+      <Badge variant="default" className="h-5 text-[11px] flex items-center gap-1">
         <CheckCircle2 className="h-3 w-3" />
         Permanente
       </Badge>
     );
   }
-  const dataExpiracao = new Date(expira_em);
-  const agora = new Date();
-  const expirado = dataExpiracao < agora;
-  const expiraEm24h = dataExpiracao.getTime() - agora.getTime() < 24 * 60 * 60 * 1000;
+  const exp = new Date(expira_em);
+  const now = new Date();
+  const expired = exp < now;
+  const soon = !expired && (exp.getTime() - now.getTime() < 24 * 60 * 60 * 1000);
 
-  if (expirado) {
+  if (expired) {
     return (
-      <Badge variant="destructive" className="flex items-center gap-1">
-        <AlertTriangle className="h-3 w-3" />
-        Expirado
+      <Badge variant="destructive" className="h-5 text-[11px] flex items-center gap-1">
+        <AlertTriangle className="h-3 w-3" /> Expirado
       </Badge>
     );
   }
-  if (expiraEm24h) {
+  if (soon) {
     return (
-      <Badge variant="secondary" className="flex items-center gap-1">
-        <Clock className="h-3 w-3" />
-        Expira em breve
+      <Badge variant="secondary" className="h-5 text-[11px] flex items-center gap-1">
+        <Clock className="h-3 w-3" /> Expira em breve
       </Badge>
     );
   }
   return (
-    <Badge variant="outline" className="flex items-center gap-1">
-      <Clock className="h-3 w-3" />
-      Ativo
+    <Badge variant="outline" className="h-5 text-[11px] flex items-center gap-1">
+      <Clock className="h-3 w-3" /> Ativo
     </Badge>
   );
 }
 
-function LinkCard({
+function formatDate(dt: string | null) {
+  if (!dt) return 'Nunca';
+  return new Date(dt).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/* ===================== Linha ===================== */
+
+function LinkRow({
   link,
   onCopy,
   onDelete,
   onRegenerate,
+  onToggleReadOnly,
+  onToggleComment,
+  onToggleDownload,
+  onExtendDays,
+  onRemoveExpiration,
 }: {
   link: LinkCompartilhado;
   onCopy: (url: string) => void;
   onDelete: (id: string) => void;
   onRegenerate: (id: string) => void;
+  onToggleReadOnly: (id: string, v: boolean) => void;
+  onToggleComment: (id: string, v: boolean) => void;
+  onToggleDownload: (id: string, v: boolean) => void;
+  onExtendDays: (id: string, days: number) => void;
+  onRemoveExpiration: (id: string) => void;
 }) {
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Nunca';
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const url = `${origin}/l/${link.token}`;
+  const expired = !!(link.expira_em && new Date(link.expira_em) < new Date());
 
-  const formatDateRelative = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    if (diffInHours < 1) return 'Criado agora há pouco';
-    if (diffInHours < 24) return `Criado ${diffInHours}h atrás`;
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `Criado ${diffInDays}d atrás`;
-    return `Criado em ${formatDate(dateString)}`;
-  };
+  const title =
+    link.tipo === 'ARTE' && link.arte ? link.arte.nome :
+    link.tipo === 'PROJETO' && link.projeto ? link.projeto.nome : 'Link Compartilhado';
 
-  const linkUrl = `${window.location.origin}/l/${link.token}`;
-  const isExpired = !!(link.expira_em && new Date(link.expira_em) < new Date());
+  const subtitle =
+    link.tipo === 'ARTE' && link.arte
+      ? `${link.arte.projeto.nome} • ${link.arte.projeto.cliente.nome}`
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.cliente.nome
+      : '';
 
-  const getTitle = () => {
-    if (link.tipo === 'ARTE' && link.arte) return link.arte.nome;
-    if (link.tipo === 'PROJETO' && link.projeto) return link.projeto.nome;
-    return 'Link Compartilhado';
-  };
-
-  const getSubtitle = () => {
-    if (link.tipo === 'ARTE' && link.arte) {
-      return `${link.arte.projeto.nome} • ${link.arte.projeto.cliente.nome}`;
-    }
-    if (link.tipo === 'PROJETO' && link.projeto) {
-      return link.projeto.cliente.nome;
-    }
-    return '';
-  };
+  const leftStripe =
+    link.tipo === 'ARTE' ? 'before:bg-blue-500' :
+    link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-gray-300';
 
   return (
-    <Card className={`hover:shadow-md transition-shadow ${isExpired ? 'opacity-60' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2 flex-1">
-            <div className="flex items-center gap-2">
-              <TipoLinkBadge tipo={link.tipo} />
-              <StatusLink expira_em={link.expira_em} />
-              {link.somente_leitura && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <EyeOff className="h-3 w-3" />
-                  Somente Leitura
-                </Badge>
-              )}
-            </div>
-            <div>
-              <h3 className="font-semibold">{getTitle()}</h3>
-              {getSubtitle() && <p className="text-sm text-muted-foreground">{getSubtitle()}</p>}
-            </div>
+    <div
+      className={`relative rounded-md border bg-card p-3 hover:shadow-sm transition ${expired ? 'opacity-70' : ''} ${leftStripe}
+      before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:rounded-l-md`}
+    >
+      {/* Top row */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <TipoPill tipo={link.tipo} />
+            <StatusBadge expira_em={link.expira_em} />
+            {link.somente_leitura && (
+              <Badge variant="outline" className="h-5 text-[11px] flex items-center gap-1">
+                <EyeOff className="h-3 w-3" /> Somente leitura
+              </Badge>
+            )}
           </div>
+          <div className="truncate font-medium">{title}</div>
+          {!!subtitle && <div className="text-xs text-muted-foreground truncate">{subtitle}</div>}
+        </div>
 
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => onCopy(url)} disabled={expired} title="Copiar link">
+            <Copy className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => window.open(url, '_blank')} disabled={expired} title="Abrir link">
+            <ExternalLink className="h-4 w-4" />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm">
@@ -253,17 +199,21 @@ function LinkCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onCopy(linkUrl)} disabled={isExpired}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copiar Link
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => window.open(linkUrl, '_blank')} disabled={isExpired}>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Abrir Link
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onRegenerate(link.id)}>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Regenerar Token
+                Regenerar token
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onExtendDays(link.id, 7)}>
+                <CalendarPlus className="h-4 w-4 mr-2" />
+                +7 dias
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onExtendDays(link.id, 30)}>
+                <CalendarClock className="h-4 w-4 mr-2" />
+                +30 dias
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRemoveExpiration(link.id)}>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Tornar permanente
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDelete(link.id)} className="text-red-600">
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -272,33 +222,60 @@ function LinkCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
-        {/* URL do Link */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">URL do Link</Label>
+      {/* URL */}
+      <div className="mt-2">
+        <Label className="text-[11px] text-muted-foreground">URL</Label>
+        <div className="flex items-center gap-2">
+          <Input value={url} readOnly className="font-mono text-xs" />
+          <Button size="sm" variant="outline" onClick={() => onCopy(url)} disabled={expired}>
+            <Copy className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Permissões + Datas */}
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Input value={linkUrl} readOnly className="font-mono text-xs" />
-            <Button size="sm" variant="outline" onClick={() => onCopy(linkUrl)} disabled={isExpired}>
-              <Copy className="h-3 w-3" />
-            </Button>
+            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Somente leitura</span>
+            <Switch
+              checked={!!link.somente_leitura}
+              onCheckedChange={(v) => onToggleReadOnly(link.id, v)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Pode comentar</span>
+            <Switch
+              checked={!!link.can_comment}
+              onCheckedChange={(v) => onToggleComment(link.id, v)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Download className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Pode baixar</span>
+            <Switch
+              checked={!!link.can_download}
+              onCheckedChange={(v) => onToggleDownload(link.id, v)}
+            />
           </div>
         </div>
 
-        {/* Informações */}
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
-            <span className="text-muted-foreground">Criado:</span>
-            <p className="font-medium">{formatDateRelative(link.criado_em)}</p>
+            <span className="text-muted-foreground">Criado</span>
+            <div className="font-medium">{formatDate(link.criado_em)}</div>
           </div>
           <div>
-            <span className="text-muted-foreground">Expira:</span>
-            <p className="font-medium">{formatDate(link.expira_em)}</p>
+            <span className="text-muted-foreground">Expira</span>
+            <div className="font-medium">{formatDate(link.expira_em)}</div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -306,8 +283,9 @@ function LinkCard({
 
 export default function LinksPage() {
   const [links, setLinks] = useState<LinkCompartilhado[]>([]);
-  const [filteredLinks, setFilteredLinks] = useState<LinkCompartilhado[]>([]);
+  const [filtered, setFiltered] = useState<LinkCompartilhado[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loaderLine, setLoaderLine] = useState<(typeof LOADER_LINES)[number]>(LOADER_LINES[0]);
   const [error, setError] = useState<string | null>(null);
 
   // Filtros
@@ -316,22 +294,24 @@ export default function LinksPage() {
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [sortBy, setSortBy] = useState<SortKey>('criado_em');
 
-  // (Se quiser um modal de criação, pode reativar depois)
-  // const [showCreateModal, setShowCreateModal] = useState(false);
-  // const [creating, setCreating] = useState(false);
+  // loader frases
+  useEffect(() => {
+    if (!loading) return;
+    const id = setInterval(() => {
+      setLoaderLine((prev) => LOADER_LINES[(LOADER_LINES.indexOf(prev) + 1) % LOADER_LINES.length]);
+    }, 1500);
+    return () => clearInterval(id);
+  }, [loading]);
 
   useEffect(() => {
-    const fetchLinks = async () => {
+    (async () => {
+      setLoading(true);
+      setError(null);
       try {
         const { data, error } = await supabase
           .from('link_compartilhado')
           .select(`
-            id,
-            token,
-            tipo,
-            expira_em,
-            somente_leitura,
-            criado_em,
+            id, token, tipo, expira_em, somente_leitura, criado_em, can_comment, can_download,
             arte:arte_id (
               nome,
               projeto:projeto_id (
@@ -349,14 +329,13 @@ export default function LinksPage() {
         if (error) throw error;
 
         const rawRows = (data ?? []) as RawLink[];
-
         const rows: LinkCompartilhado[] = rawRows.map((r) => {
           const arte = toOne<RawArteEntity>(r.arte ?? null);
-          const projetoDaArte = arte ? toOne<RawProjeto>(arte.projeto) : null;
-          const clienteDaArte = projetoDaArte ? toOne<RawCliente>(projetoDaArte.cliente) : null;
+          const pjArte = arte ? toOne<RawProjeto>(arte.projeto) : null;
+          const cliArte = pjArte ? toOne<RawCliente>(pjArte.cliente) : null;
 
           const projeto = toOne<RawProjetoEntity>(r.projeto ?? null);
-          const clienteDoProjeto = projeto ? toOne<RawCliente>(projeto.cliente) : null;
+          const cliProj = projeto ? toOne<RawCliente>(projeto.cliente) : null;
 
           return {
             id: String(r.id),
@@ -364,217 +343,180 @@ export default function LinksPage() {
             tipo: String(r.tipo) as LinkCompartilhado['tipo'],
             expira_em: r.expira_em != null ? String(r.expira_em) : null,
             somente_leitura: Boolean(r.somente_leitura),
+            can_comment: r.can_comment != null ? Boolean(r.can_comment) : false,
+            can_download: r.can_download != null ? Boolean(r.can_download) : false,
             criado_em: String(r.criado_em),
-            arte: arte
-              ? {
-                  nome: String(arte.nome ?? ''),
-                  projeto: {
-                    nome: String(projetoDaArte?.nome ?? ''),
-                    cliente: { nome: String(clienteDaArte?.nome ?? '') },
-                  },
-                }
-              : null,
-            projeto: projeto
-              ? {
-                  nome: String(projeto.nome ?? ''),
-                  cliente: { nome: String(clienteDoProjeto?.nome ?? '') },
-                }
-              : null,
+            arte: arte ? {
+              nome: String(arte.nome ?? ''),
+              projeto: {
+                nome: String(pjArte?.nome ?? ''),
+                cliente: { nome: String(cliArte?.nome ?? '') },
+              },
+            } : null,
+            projeto: projeto ? {
+              nome: String(projeto.nome ?? ''),
+              cliente: { nome: String(cliProj?.nome ?? '') },
+            } : null,
           };
         });
 
         setLinks(rows);
-      } catch {
-        setError('Não foi possível carregar os links compartilhados.');
+      } catch (e: any) {
+        setError(e?.message ?? 'Não foi possível carregar os links compartilhados.');
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchLinks();
+    })();
   }, []);
 
-  // Aplicar filtros e ordenação
+  // filtros + ordenação
   useEffect(() => {
-    let filtered = links;
+    let arr = [...links];
 
-    // Busca
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      filtered = filtered.filter((link) => {
-        if (link.tipo === 'ARTE' && link.arte) {
-          return (
-            link.arte.nome.toLowerCase().includes(q) ||
-            link.arte.projeto.nome.toLowerCase().includes(q) ||
-            link.arte.projeto.cliente.nome.toLowerCase().includes(q)
-          );
-        }
-        if (link.tipo === 'PROJETO' && link.projeto) {
-          return (
-            link.projeto.nome.toLowerCase().includes(q) ||
-            link.projeto.cliente.nome.toLowerCase().includes(q)
-          );
-        }
-        return link.token.toLowerCase().includes(q);
+      arr = arr.filter((l) => {
+        const t = l.tipo === 'ARTE' ? l.arte?.nome ?? '' : l.projeto?.nome ?? '';
+        const p = l.tipo === 'ARTE' ? l.arte?.projeto.nome ?? '' : l.projeto?.nome ?? '';
+        const c = l.tipo === 'ARTE' ? l.arte?.projeto.cliente.nome ?? '' : l.projeto?.cliente.nome ?? '';
+        return (
+          t.toLowerCase().includes(q) ||
+          p.toLowerCase().includes(q) ||
+          c.toLowerCase().includes(q) ||
+          l.token.toLowerCase().includes(q)
+        );
       });
     }
 
-    // Tipo
-    if (tipoFilter !== 'todos') {
-      filtered = filtered.filter((link) => link.tipo === tipoFilter);
-    }
+    if (tipoFilter !== 'todos') arr = arr.filter((l) => l.tipo === tipoFilter);
 
-    // Status
     if (statusFilter !== 'todos') {
-      const agora = new Date();
-      filtered = filtered.filter((link) => {
-        const expirado = !!(link.expira_em && new Date(link.expira_em) < agora);
-        if (statusFilter === 'ativo') return !expirado;
-        if (statusFilter === 'expirado') return expirado;
-        if (statusFilter === 'permanente') return !link.expira_em;
+      const now = new Date();
+      arr = arr.filter((l) => {
+        const expired = !!(l.expira_em && new Date(l.expira_em) < now);
+        if (statusFilter === 'ativo') return !expired;
+        if (statusFilter === 'expirado') return expired;
+        if (statusFilter === 'permanente') return !l.expira_em;
         return true;
       });
     }
 
-    // Ordenação (copiar antes de ordenar)
-    const ordered = [...filtered].sort((a, b) => {
+    arr.sort((a, b) => {
       switch (sortBy) {
-        case 'criado_em':
-          return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+        case 'criado_em': return +new Date(b.criado_em) - +new Date(a.criado_em);
         case 'expira_em': {
-          const aExp = a.expira_em ? new Date(a.expira_em).getTime() : Infinity; // permanentes por último
-          const bExp = b.expira_em ? new Date(b.expira_em).getTime() : Infinity;
-          return aExp - bExp;
+          const ax = a.expira_em ? +new Date(a.expira_em) : Number.POSITIVE_INFINITY;
+          const bx = b.expira_em ? +new Date(b.expira_em) : Number.POSITIVE_INFINITY;
+          return ax - bx;
         }
-        case 'tipo':
-          return a.tipo.localeCompare(b.tipo);
-        default:
-          return 0;
+        case 'tipo': return a.tipo.localeCompare(b.tipo);
+        default: return 0;
       }
     });
 
-    setFilteredLinks(ordered);
+    setFiltered(arr);
   }, [links, searchTerm, tipoFilter, statusFilter, sortBy]);
 
-  // Ações
+  // ===== Ações =====
+
   const handleCopy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      // opcional: toast de sucesso
-    } catch (e) {
-      console.error('Erro ao copiar link:', e);
-    }
+    try { await navigator.clipboard.writeText(url); } catch {}
   };
 
   const handleDelete = async (id: string) => {
     try {
       await supabase.from('link_compartilhado').delete().eq('id', id);
       setLinks((prev) => prev.filter((l) => l.id !== id));
-    } catch (e) {
-      console.error('Erro ao deletar link:', e);
-    }
+    } catch (e) { /* opcional: toast */ }
   };
 
   const handleRegenerate = async (id: string) => {
     try {
-      const newToken =
-        Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
-
+      const newToken = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       await supabase.from('link_compartilhado').update({ token: newToken }).eq('id', id);
-
       setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, token: newToken } : l)));
-    } catch (e) {
-      console.error('Erro ao regenerar token:', e);
-    }
+    } catch (e) {}
   };
+
+  const updateLink = (id: string, patch: Partial<LinkCompartilhado>) =>
+    setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+
+  const onToggleReadOnly = async (id: string, v: boolean) => {
+    updateLink(id, { somente_leitura: v });
+    const { error } = await supabase.from('link_compartilhado').update({ somente_leitura: v }).eq('id', id);
+    if (error) updateLink(id, { somente_leitura: !v });
+  };
+  const onToggleComment = async (id: string, v: boolean) => {
+    updateLink(id, { can_comment: v });
+    const { error } = await supabase.from('link_compartilhado').update({ can_comment: v }).eq('id', id);
+    if (error) updateLink(id, { can_comment: !v });
+  };
+  const onToggleDownload = async (id: string, v: boolean) => {
+    updateLink(id, { can_download: v });
+    const { error } = await supabase.from('link_compartilhado').update({ can_download: v }).eq('id', id);
+    if (error) updateLink(id, { can_download: !v });
+  };
+
+  const onExtendDays = async (id: string, days: number) => {
+    const item = links.find((l) => l.id === id);
+    const base = item?.expira_em ? new Date(item.expira_em) : new Date();
+    const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+    updateLink(id, { expira_em: next });
+    const { error } = await supabase.from('link_compartilhado').update({ expira_em: next }).eq('id', id);
+    if (error) updateLink(id, { expira_em: item?.expira_em ?? null });
+  };
+
+  const onRemoveExpiration = async (id: string) => {
+    const old = links.find((l) => l.id === id)?.expira_em ?? null;
+    updateLink(id, { expira_em: null });
+    const { error } = await supabase.from('link_compartilhado').update({ expira_em: null }).eq('id', id);
+    if (error) updateLink(id, { expira_em: old });
+  };
+
+  // ===== Render =====
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
+      <div className="flex flex-col gap-3 items-center justify-center h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="ml-2">Carregando links compartilhados...</p>
+        <p className="text-sm text-muted-foreground">{loaderLine}</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <div className="text-center text-destructive">{error}</div>
+      <div className="flex items-center justify-center h-[50vh] text-center">
+        <div>
+          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
+          <p className="text-muted-foreground mb-6">Tenta recarregar? (se persistir, me chama).</p>
+        </div>
       </div>
     );
   }
 
-  const estatisticas = {
-    total: links.length,
-    ativos: links.filter((l) => !l.expira_em || new Date(l.expira_em) > new Date()).length,
-    expirados: links.filter((l) => l.expira_em && new Date(l.expira_em) < new Date()).length,
-    artes: links.filter((l) => l.tipo === 'ARTE').length,
-    projetos: links.filter((l) => l.tipo === 'PROJETO').length,
-    permanentes: links.filter((l) => !l.expira_em).length,
-  };
+  const empty = filtered.length === 0;
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Links Compartilhados</h1>
-          <p className="text-muted-foreground">Gerencie links para compartilhar artes e projetos externamente</p>
+          <h1 className="text-3xl font-bold tracking-tight">Links Compartilhados ✦ </h1>
+          <p className="text-muted-foreground">Gerencie os links públicos de Artes e Projetos</p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Criar Link
+        {/* Escondido por enquanto */}
+        <Button className="hidden">
+          <Plus className="h-4 w-4 mr-2" /> Criar Link
         </Button>
       </div>
 
-      {/* Estatísticas */}
-      <div className="grid gap-4 md:grid-cols-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{estatisticas.total}</div>
-            <p className="text-sm text-muted-foreground">Total</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">{estatisticas.ativos}</div>
-            <p className="text-sm text-muted-foreground">Ativos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">{estatisticas.expirados}</div>
-            <p className="text-sm text-muted-foreground">Expirados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{estatisticas.artes}</div>
-            <p className="text-sm text-muted-foreground">Artes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-purple-600">{estatisticas.projetos}</div>
-            <p className="text-sm text-muted-foreground">Projetos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-gray-600">{estatisticas.permanentes}</div>
-            <p className="text-sm text-muted-foreground">Permanentes</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Filtros */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1 min-w-[260px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, projeto ou cliente..."
+            placeholder="Buscar por nome, projeto, cliente ou token…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -582,9 +524,7 @@ export default function LinksPage() {
         </div>
 
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-[130px]">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="ARTE">Arte</SelectItem>
@@ -593,9 +533,7 @@ export default function LinksPage() {
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="ativo">Ativos</SelectItem>
@@ -605,48 +543,43 @@ export default function LinksPage() {
         </Select>
 
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Ordenar" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Ordenar" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="criado_em">Mais Recente</SelectItem>
-            <SelectItem value="expira_em">Data Expiração</SelectItem>
+            <SelectItem value="criado_em">Mais recente</SelectItem>
+            <SelectItem value="expira_em">Data de expiração</SelectItem>
             <SelectItem value="tipo">Tipo</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Grid de Links */}
-      {filteredLinks.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredLinks.map((link) => (
-            <LinkCard
-              key={link.id}
-              link={link}
+      {/* Lista */}
+      {empty ? (
+        <div className="rounded-md border p-12 text-center">
+          <Share2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Nenhum link encontrado</h3>
+          <p className="text-muted-foreground">
+            {searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
+              ? 'Tente ajustar os filtros de busca.'
+              : 'Quando você gerar links de compartilhamento, eles aparecem aqui.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((l) => (
+            <LinkRow
+              key={l.id}
+              link={l}
               onCopy={handleCopy}
               onDelete={handleDelete}
               onRegenerate={handleRegenerate}
+              onToggleReadOnly={onToggleReadOnly}
+              onToggleComment={onToggleComment}
+              onToggleDownload={onToggleDownload}
+              onExtendDays={onExtendDays}
+              onRemoveExpiration={onRemoveExpiration}
             />
           ))}
         </div>
-      ) : (
-        <Card className="p-12">
-          <div className="text-center">
-            <Share2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum link encontrado</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
-                ? 'Tente ajustar os filtros de busca.'
-                : 'Comece criando seu primeiro link compartilhado.'}
-            </p>
-            {!searchTerm && tipoFilter === 'todos' && statusFilter === 'todos' && (
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Criar Primeiro Link
-              </Button>
-            )}
-          </div>
-        </Card>
       )}
     </div>
   );
