@@ -22,6 +22,12 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
 
   useEffect(() => {
     setMounted(true);
+    (window as any).__viu_modal_open__ = true;           // pausa atalhos globais
+
+    // trava rolagem atrás do modal
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
     try {
       const raw = localStorage.getItem("viu.viewer");
       if (raw) {
@@ -29,6 +35,11 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
         if (v?.email) onIdentified({ email: v.email, nome: v.nome });
       }
     } catch {}
+
+    return () => {
+      (window as any).__viu_modal_open__ = false;
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onIdentified]);
 
   const handleConfirm = async () => {
@@ -54,7 +65,16 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-black/40 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      // bloqueia que atalhos globais capturem as teclas do input
+      onKeyDownCapture={(e) => e.stopPropagation()}
+      onKeyUpCapture={(e) => e.stopPropagation()}
+      onKeyPressCapture={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="w-full max-w-md rounded-xl border bg-background p-6 shadow-xl">
         <h3 className="text-lg font-semibold mb-2">Antes de comentar…</h3>
         <p className="text-sm text-muted-foreground mb-4">
@@ -71,11 +91,25 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground">E-mail</label>
-            <Input type="email" placeholder="voce@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoFocus
+              placeholder="voce@empresa.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Nome (opcional)</label>
-            <Input placeholder="Seu nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+            <Input
+              placeholder="Seu nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
