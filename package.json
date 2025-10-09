@@ -33,6 +33,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.23.22",
     "install": "^0.13.0",
     "lucide-react": "^0.542.0",
     "mime": "^4.1.0",

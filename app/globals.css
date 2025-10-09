@@ -290,3 +290,113 @@
   background: linear-gradient(90deg, oklch(var(--primary)), transparent);
   opacity: .8;
 }
+
+/* === VIU CYBER SKIN =================================================== */
+:root {
+  --viu-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --viu-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-skin="viu-cyber"] {
+  /* cores base – ajuste o hue que quiser */
+  --cy-bg:            246 16% 8%;
+  --cy-surface:       240 10% 11%;
+  --cy-surface-2:     240 10% 14%;
+  --cy-border:        240 8% 22%;
+  --cy-muted:         240 5% 64%;
+  --cy-text:          210 8% 96%;
+  --cy-accent:        168 78% 44%;  /* verde água */
+  --cy-warning:       48 95% 56%;
+  --cy-danger:        0 84% 60%;
+
+  /* raios / notch */
+  --cy-radius:        18px;
+  --cy-notch:         14px;
+
+  /* grid e linhas de detalhe */
+  --cy-line:          color-mix(in oklab, hsl(var(--cy-text) / 12%), transparent);
+  --cy-dots:          radial-gradient(1px 1px at 1px 1px, hsl(var(--cy-line)) 1px, transparent 1px);
+}
+
+/* helpers de cor para Tailwind via var() */
+[data-skin="viu-cyber"] {
+  color: hsl(var(--cy-text));
+  background: hsl(var(--cy-bg));
+}
+
+/* === utilitários visuais ============================================== */
+
+/* cartão “placa” com cantos recortados (notch) via mask */
+.viu-plate {
+  position: relative;
+  background: hsl(var(--cy-surface));
+  border: 1px solid hsl(var(--cy-border));
+  padding: 16px;
+  -webkit-mask: 
+    radial-gradient(16px at var(--cy-notch) var(--cy-notch), #000 98%, transparent 102%) top left,
+    radial-gradient(16px at calc(100% - var(--cy-notch)) var(--cy-notch), #000 98%, transparent 102%) top right,
+    radial-gradient(16px at var(--cy-notch) calc(100% - var(--cy-notch)), #000 98%, transparent 102%) bottom left,
+    radial-gradient(16px at calc(100% - var(--cy-notch)) calc(100% - var(--cy-notch)), #000 98%, transparent 102%) bottom right,
+    linear-gradient(#000,#000);
+  -webkit-mask-composite: source-over, source-over, source-over, source-over, xor;
+          mask-composite: exclude;
+  border-radius: var(--cy-radius);
+  box-shadow: 0 0 0 1px hsl(var(--cy-border)) inset, 0 8px 24px rgba(0,0,0,.25);
+}
+
+/* variante preenchida (hero tile) */
+.viu-plate--accent {
+  background: hsl(var(--cy-accent));
+  color: hsl(210 10% 6%);
+  border-color: color-mix(in oklab, hsl(var(--cy-accent)), black 35%);
+}
+
+/* “orelha”/tab label no topo direito */
+.viu-tabcap {
+  position: absolute; 
+  top: -1px; right: 8px;
+  background: hsl(var(--cy-surface-2));
+  color: hsl(var(--cy-muted));
+  border: 1px solid hsl(var(--cy-border));
+  border-bottom: none;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  padding: 2px 8px;
+  font: 10px/1 var(--viu-font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* fita/stripe decorativa */
+.viu-stripe {
+  --gap: 8px; --thick: 3px;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      hsl(var(--cy-line)) 0,
+      hsl(var(--cy-line)) var(--thick),
+      transparent var(--thick),
+      transparent calc(var(--thick) + var(--gap))
+    );
+}
+
+/* barras/fios finos como HUD */
+.viu-wires {
+  background-image:
+    linear-gradient(to right, hsl(var(--cy-line)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--cy-line)) 1px, transparent 1px);
+  background-size: 14px 1px, 1px 14px;
+  background-position: 0 0, 0 0;
+}
+
+/* caps e tipografia */
+.viu-caps {
+  font: 11px/1 var(--viu-font-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: hsl(var(--cy-muted));
+}
+.viu-digits {
+  font-family: var(--viu-font-mono);
+  font-feature-settings: "tnum" 1, "ss02" 1;
+}
