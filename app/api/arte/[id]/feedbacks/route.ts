@@ -1,15 +1,17 @@
 // app/api/arte/[id]/feedbacks/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 
 /**
  * GET /api/arte/[id]/feedbacks?token=XYZ
  * Retorna todos os feedbacks de uma arte vinculada a um link compartilhado válido.
  */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const { id: arteId } = params;
-  const { searchParams } = new URL(req.url);
-  const token = searchParams.get("token");
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id: arteId } = await context.params; // <= Next 15: params é Promise
+  const token = req.nextUrl.searchParams.get("token");
 
   if (!token) {
     return NextResponse.json({ error: "Token ausente." }, { status: 400 });
@@ -18,10 +20,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const supabase = getSupabaseServer();
 
   try {
-    // 1. Valida o link compartilhado
+    // 1) Valida o link compartilhado
     const { data: link, error: linkError } = await supabase
       .from("link_compartilhado")
-      .select("id, expira_em, arte_id, can_comment, can_download, somente_leitura")
+      .select(
+        "id, tipo, expira_em, arte_id, can_comment, can_download, somente_leitura"
+      )
       .eq("token", token)
       .maybeSingle();
 
@@ -30,12 +34,20 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: "Link inválido." }, { status: 404 });
     }
 
-    // 2. Verifica expiração (se houver)
+    // Garante que o link é do tipo ARTE e aponta para a mesma arte
+    if (link.tipo !== "ARTE" || link.arte_id !== arteId) {
+      return NextResponse.json(
+        { error: "Token não corresponde a esta arte." },
+        { status: 403 }
+      );
+    }
+
+    // 2) Verifica expiração (se houver)
     if (link.expira_em && new Date(link.expira_em) < new Date()) {
       return NextResponse.json({ error: "Link expirado." }, { status: 403 });
     }
 
-    // 3. Busca os feedbacks relacionados à arte
+    // 3) Busca os feedbacks relacionados à arte
     const { data: feedbacks, error: fbError } = await supabase
       .from("feedbacks")
       .select(
@@ -57,9 +69,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     if (fbError) throw fbError;
 
-    return NextResponse.json(feedbacks || []);
+    return NextResponse.json(feedbacks ?? []);
   } catch (err) {
-    console.error("[GET /arte/[id]/feedbacks] erro:", err);
+    console.error("[GET /api/arte/[id]/feedbacks] erro:", err);
     return NextResponse.json(
       { error: "Erro ao buscar feedbacks." },
       { status: 500 }
