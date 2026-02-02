@@ -280,9 +280,9 @@ describe("FeedbackViewer", () => {
     render(
       <FeedbackViewer {...defaultProps} initialFeedbacks={[audioNoTranscription]} />
     );
-    // Should NOT display "Áudio" as transcription
-    const transcriptionBlock = document.querySelector(".bg-muted\\/50");
-    expect(transcriptionBlock).not.toBeInTheDocument();
+    // Should NOT display "Áudio" as transcription text anywhere
+    const transcriptionText = screen.queryByText("Áudio");
+    expect(transcriptionText).not.toBeInTheDocument();
   });
 
   // --- New: TTS button ---
