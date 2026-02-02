@@ -281,7 +281,7 @@ function PasswordInputs({
   const confirmOK = confirm.length > 0 && confirm === password;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="space-y-2">
         <Label>Senha</Label>
         <div className="relative">
@@ -308,34 +308,39 @@ function PasswordInputs({
         </div>
 
         <StrengthBar score={v.score} />
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <li className="flex items-center gap-2">
-            {v.lengthOK ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={v.lengthOK ? "text-foreground" : "text-muted-foreground"}>Mín. 10 caracteres</span>
-          </li>
-          <li className="flex items-center gap-2">
-            {v.lowerOK && v.upperOK ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={(v.lowerOK && v.upperOK) ? "text-foreground" : "text-muted-foreground"}>Maiúsculas e minúsculas</span>
-          </li>
-          <li className="flex items-center gap-2">
-            {v.numberOK ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={v.numberOK ? "text-foreground" : "text-muted-foreground"}>Número</span>
-          </li>
-          <li className="flex items-center gap-2">
-            {v.symbolOK ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={v.symbolOK ? "text-foreground" : "text-muted-foreground"}>Símbolo</span>
-          </li>
-          <li className="flex items-center gap-2">
-            {v.notEmailPart ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={v.notEmailPart ? "text-foreground" : "text-muted-foreground"}>Sem partes do e-mail</span>
-          </li>
-          <li className="flex items-center gap-2">
-            {v.noCommonSeq ? <Check className="h-3.5 w-3.5 text-green-600" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
-            <span className={v.noCommonSeq ? "text-foreground" : "text-muted-foreground"}>Sem sequências óbvias</span>
-          </li>
-        </ul>
-        {v.suggestions.length > 0 && password && (
-          <p className="text-[11px] text-muted-foreground">Dicas: {v.suggestions.join(" ")}</p>
+
+        {password && (
+          <details className="text-[11px] text-muted-foreground">
+            <summary className="cursor-pointer hover:text-foreground transition-colors">
+              Requisitos da senha
+            </summary>
+            <ul className="mt-2 space-y-1 pl-1">
+              <li className="flex items-center gap-1.5">
+                {v.lengthOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={v.lengthOK ? "text-foreground" : "text-muted-foreground"}>Mín. 10 caracteres</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                {v.lowerOK && v.upperOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={(v.lowerOK && v.upperOK) ? "text-foreground" : "text-muted-foreground"}>Maiúsculas e minúsculas</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                {v.numberOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={v.numberOK ? "text-foreground" : "text-muted-foreground"}>Pelo menos um número</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                {v.symbolOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={v.symbolOK ? "text-foreground" : "text-muted-foreground"}>Pelo menos um símbolo</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                {v.notEmailPart ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={v.notEmailPart ? "text-foreground" : "text-muted-foreground"}>Evite partes do e-mail</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                {v.noCommonSeq ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                <span className={v.noCommonSeq ? "text-foreground" : "text-muted-foreground"}>Evite sequências óbvias</span>
+              </li>
+            </ul>
+          </details>
         )}
       </div>
 
@@ -366,9 +371,6 @@ function PasswordInputs({
         {!!confirm && confirm !== password && (
           <p className="text-[11px] text-destructive">As senhas não coincidem.</p>
         )}
-        <p className="text-xs text-muted-foreground">
-          Dica: use uma frase longa com números e símbolos. Ex: <em>Coelho!Salta#12</em>
-        </p>
       </div>
     </div>
   );
@@ -389,20 +391,6 @@ function Stepper({
         {isLastStep ? (submitting ? "Criando…" : "Criar conta") : "Continuar"}
       </Button>
     </div>
-  );
-}
-
-function SocialGoogle({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
-  return (
-    <Button type="button" variant="outline" className="w-full gap-2" onClick={onClick} disabled={disabled}>
-      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-        <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.9 0-12.5-5.6-12.5-12.5S17.1 11 24 11c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 5.4 29.6 3.3 24 3.3 12.4 3.3 3 12.7 3 24.3S12.4 45.3 24 45.3c11.3 0 21-8.2 21-21 0-1.6-.2-3.1-.4-4.8z"/>
-        <path fill="#FF3D00" d="M6.3 14.7l6.6 4.9C14.8 16.5 19 14 24 14c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 7.4 29.6 5.3 24 5.3c-7.1 0-13.3 3.6-17 9.4z"/>
-        <path fill="#4CAF50" d="M24 43.3c5.2 0 9.6-1.7 12.8-4.7l-6-4.9C29.1 35.3 26.7 36 24 36c-5.3 0-9.7-3.4-11.4-8.1l-6.6 5C9.8 39.5 16.4 43.3 24 43.3z"/>
-        <path fill="#1976D2" d="M45 24.3c0-1.3-.1-2.6-.4-3.8H24v8h11.3c-.7 3.4-2.8 6.2-5.8 8.1l6 4.9C39.9 38.9 45 32.4 45 24.3z"/>
-      </svg>
-      Continuar com Google
-    </Button>
   );
 }
 
@@ -530,42 +518,22 @@ export default function CadastroPage() {
         {/* Card SEM a classe .card (pra não herdar o grid de fundo) */}
         <Card className="rounded-xl border bg-card">
           <CardHeader className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
-                ← Voltar
-              </Button>
-              <div className="opacity-0 pointer-events-none select-none">←</div>
-            </div>
-
             <CardTitle className="text-2xl">Criar conta</CardTitle>
-            <CardDescription>Use Google ou avance pelos passos abaixo.</CardDescription>
+            <CardDescription>Preencha os campos abaixo para começar.</CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-6">
-            {/* Google sempre visível */}
-            <SocialGoogle onClick={handleGoogle} disabled={sending} />
-
-            {/* divisor */}
-            <div className="relative flex items-center my-1">
-              <Separator className="flex-1" />
-              <span className="px-3 text-xs text-muted-foreground">ou</span>
-              <Separator className="flex-1" />
-            </div>
-
+          <CardContent className="space-y-5">
             {/* Step 1: tipo */}
             {step === STEPS.ROLE && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Label>Você é?</Label>
                 <RoleSelector value={tipo} onChange={setTipo} />
-                <p className="text-xs text-muted-foreground">
-                  Clientes acessam materiais via links compartilhados. Designers têm dashboard completo.
-                </p>
               </div>
             )}
 
             {/* Step 2: email + avatar */}
             {step === STEPS.EMAIL_AVATAR && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <EmailInput
                   value={email}
                   onChange={(v, ok) => { setEmail(v); setEmailValid(ok); }}
@@ -623,6 +591,22 @@ export default function CadastroPage() {
                 Entrar
               </Link>
             </p>
+
+            <div className="relative flex items-center">
+              <Separator className="flex-1" />
+              <span className="px-3 text-xs text-muted-foreground">ou</span>
+              <Separator className="flex-1" />
+            </div>
+
+            <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleGoogle} disabled={sending}>
+              <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.9 0-12.5-5.6-12.5-12.5S17.1 11 24 11c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 5.4 29.6 3.3 24 3.3 12.4 3.3 3 12.7 3 24.3S12.4 45.3 24 45.3c11.3 0 21-8.2 21-21 0-1.6-.2-3.1-.4-4.8z"/>
+                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.9C14.8 16.5 19 14 24 14c3.2 0 6.1 1.2 8.3 3.2l5.7-5.7C34.6 7.4 29.6 5.3 24 5.3c-7.1 0-13.3 3.6-17 9.4z"/>
+                <path fill="#4CAF50" d="M24 43.3c5.2 0 9.6-1.7 12.8-4.7l-6-4.9C29.1 35.3 26.7 36 24 36c-5.3 0-9.7-3.4-11.4-8.1l-6.6 5C9.8 39.5 16.4 43.3 24 43.3z"/>
+                <path fill="#1976D2" d="M45 24.3c0-1.3-.1-2.6-.4-3.8H24v8h11.3c-.7 3.4-2.8 6.2-5.8 8.1l6 4.9C39.9 38.9 45 32.4 45 24.3z"/>
+              </svg>
+              Continuar com Google
+            </Button>
           </CardFooter>
         </Card>
       </form>
