@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     // ----------- JSON (texto) -----------
     if (contentType.includes("application/json")) {
-      const { token, arteId, tipo, conteudo, viewer } = await req.json();
+      const { token, arteId, tipo, conteudo, viewer, posicao_x, posicao_y } = await req.json();
 
       // valida link
       const { data: link } = await supabase
@@ -42,16 +42,20 @@ export async function POST(req: Request) {
       if (!guest) throw new Error("Falha ao identificar viewer");
 
       // cria feedback
+      const insertData: Record<string, unknown> = {
+        conteudo,
+        tipo,
+        arte_id: arteId,
+        autor_externo_id: guest.id,
+        autor_email: guest.email,
+        autor_nome: guest.nome,
+      };
+      if (posicao_x != null) insertData.posicao_x = posicao_x;
+      if (posicao_y != null) insertData.posicao_y = posicao_y;
+
       const { data: feedback, error } = await supabase
         .from("feedbacks")
-        .insert({
-          conteudo,
-          tipo,
-          arte_id: arteId,
-          autor_externo_id: guest.id,
-          autor_email: guest.email,
-          autor_nome: guest.nome,
-        })
+        .insert(insertData)
         .select("*")
         .single();
 
@@ -113,16 +117,22 @@ export async function POST(req: Request) {
 
       const { data: pub } = await supabase.storage.from("feedbacks").getPublicUrl(up.path);
 
+      const audioInsert: Record<string, unknown> = {
+        tipo: "AUDIO",
+        arquivo: pub.publicUrl,
+        arte_id: arteId,
+        autor_externo_id: guest.id,
+        autor_email: guest.email,
+        autor_nome: guest.nome,
+      };
+      const posX = form.get("posicao_x");
+      const posY = form.get("posicao_y");
+      if (posX) audioInsert.posicao_x = parseFloat(String(posX));
+      if (posY) audioInsert.posicao_y = parseFloat(String(posY));
+
       const { data: feedback, error } = await supabase
         .from("feedbacks")
-        .insert({
-          tipo: "AUDIO",
-          arquivo: pub.publicUrl,
-          arte_id: arteId,
-          autor_externo_id: guest.id,
-          autor_email: guest.email,
-          autor_nome: guest.nome,
-        })
+        .insert(audioInsert)
         .select("*")
         .single();
 
