@@ -19,11 +19,11 @@ function makeFormRequest(file: Blob, filename = "audio.webm") {
   });
 }
 
-function makeRawRequest(body: ArrayBuffer) {
+function makeRawRequest(body: ArrayBuffer, contentType = "audio/webm") {
   return new Request("http://localhost/api/transcribe", {
     method: "POST",
     body,
-    headers: { "Content-Type": "application/octet-stream" },
+    headers: { "Content-Type": contentType },
   });
 }
 
@@ -105,5 +105,58 @@ describe("POST /api/transcribe", () => {
     expect(json.error).toContain("OPENAI_API_KEY");
 
     process.env.OPENAI_API_KEY = original;
+  });
+
+  it("rejects non-audio file types in form-data", async () => {
+    const blob = new Blob(["fake-video"], { type: "video/mp4" });
+    const res = await POST(makeFormRequest(blob, "video.mp4"));
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Tipo de arquivo inválido");
+  });
+
+  it("rejects executable files in form-data", async () => {
+    const blob = new Blob(["fake-exe"], { type: "application/x-msdownload" });
+    const res = await POST(makeFormRequest(blob, "malware.exe"));
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Tipo de arquivo inválido");
+  });
+
+  it("accepts various audio formats", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: "test", language: "pt" }),
+    });
+
+    const audioTypes = [
+      "audio/webm",
+      "audio/mp3",
+      "audio/mpeg",
+      "audio/wav",
+      "audio/ogg",
+    ];
+
+    for (const type of audioTypes) {
+      const blob = new Blob(["audio"], { type });
+      const res = await POST(makeFormRequest(blob, `audio.${type.split('/')[1]}`));
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("rejects non-audio content type in raw body", async () => {
+    const buf = new ArrayBuffer(10);
+    const req = new Request("http://localhost/api/transcribe", {
+      method: "POST",
+      body: buf,
+      headers: { "Content-Type": "video/mp4" },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Tipo de arquivo inválido");
   });
 });
