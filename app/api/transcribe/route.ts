@@ -1,11 +1,27 @@
 import { NextResponse } from "next/server";
 
+// Allowed audio MIME types
+const ALLOWED_AUDIO_TYPES = [
+  "audio/webm",
+  "audio/mp3",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/wave",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/flac",
+  "audio/m4a",
+  "audio/x-m4a",
+];
+
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") || "";
 
     let audioBuffer: ArrayBuffer;
     let filename = "audio.webm";
+    let fileType = "";
 
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
@@ -13,9 +29,26 @@ export async function POST(req: Request) {
       if (!file) {
         return NextResponse.json({ error: "Arquivo de áudio ausente" }, { status: 400 });
       }
+      
+      // Validate file type
+      fileType = file.type;
+      if (!ALLOWED_AUDIO_TYPES.includes(fileType)) {
+        return NextResponse.json(
+          { error: "Tipo de arquivo inválido. Apenas arquivos de áudio são permitidos." },
+          { status: 400 }
+        );
+      }
+      
       audioBuffer = await file.arrayBuffer();
       filename = file.name || filename;
     } else {
+      // For raw body, validate content-type header
+      if (contentType && !ALLOWED_AUDIO_TYPES.some(type => contentType.includes(type))) {
+        return NextResponse.json(
+          { error: "Tipo de arquivo inválido. Apenas arquivos de áudio são permitidos." },
+          { status: 400 }
+        );
+      }
       audioBuffer = await req.arrayBuffer();
     }
 
