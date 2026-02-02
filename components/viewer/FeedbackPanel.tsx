@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Volume2, FileText, MapPin } from "lucide-react";
 
 type FeedbackItem = {
   id: string;
   conteudo: string;
   tipo: "TEXTO" | "AUDIO";
   arquivo?: string | null;
+  transcricao?: string | null;
   status: string;
   criado_em: string;
   autor_nome?: string | null;
   autor_email?: string | null;
   arte_versao_id?: string | null;
+  posicao_x?: number | null;
+  posicao_y?: number | null;
 };
 
 type Aprovacao = {
@@ -48,6 +53,43 @@ export default function FeedbackPanel({
 }: Props) {
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>(initialFeedbacks);
   const [loading, setLoading] = useState(false);
+  const [ttsPlaying, setTtsPlaying] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleTTS = useCallback(async (feedbackId: string, text: string) => {
+    if (ttsPlaying === feedbackId) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setTtsPlaying(null);
+      return;
+    }
+    try {
+      setTtsPlaying(feedbackId);
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: "nova" }),
+      });
+      if (!res.ok) {
+        toast.error("Falha ao gerar áudio do texto.");
+        setTtsPlaying(null);
+        return;
+      }
+      const audioBlob = await res.blob();
+      const url = URL.createObjectURL(audioBlob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        setTtsPlaying(null);
+        audioRef.current = null;
+      };
+      audio.play();
+    } catch {
+      toast.error("Não foi possível reproduzir o áudio.");
+      setTtsPlaying(null);
+    }
+  }, [ttsPlaying]);
 
   async function loadFeedbacks() {
     try {
@@ -181,7 +223,10 @@ export default function FeedbackPanel({
                   {listaFeedbacks.map((f) => (
                     <div key={f.id} className="rounded-md border p-2">
                       <div className="flex justify-between">
-                        <span className="text-xs font-medium">
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          {f.posicao_x != null && (
+                            <MapPin className="h-3 w-3 text-blue-500" />
+                          )}
                           {f.autor_nome || f.autor_email || "Anônimo"}
                         </span>
                         <span
@@ -193,15 +238,45 @@ export default function FeedbackPanel({
                       </div>
 
                       {f.tipo === "AUDIO" ? (
-                        <audio
-                          src={f.arquivo || ""}
-                          controls
-                          className="mt-1 w-full"
-                        />
+                        <div className="mt-1 space-y-1">
+                          <audio
+                            src={f.arquivo || ""}
+                            controls
+                            className="w-full"
+                          />
+                          {(f.transcricao || f.conteudo) &&
+                            f.conteudo !== "Áudio" && (
+                              <div className="flex items-start gap-1 text-[11px] bg-muted/50 rounded p-1.5">
+                                <FileText className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                                <p className="whitespace-pre-wrap text-muted-foreground">
+                                  {f.transcricao || f.conteudo}
+                                </p>
+                              </div>
+                            )}
+                        </div>
                       ) : (
-                        <p className="text-xs mt-1 whitespace-pre-wrap">
-                          {f.conteudo || "(sem texto)"}
-                        </p>
+                        <div className="flex items-start justify-between gap-1 mt-1">
+                          <p className="text-xs whitespace-pre-wrap flex-1">
+                            {f.conteudo || "(sem texto)"}
+                          </p>
+                          {f.conteudo && (
+                            <button
+                              onClick={() => handleTTS(f.id, f.conteudo)}
+                              className={`shrink-0 p-0.5 rounded hover:bg-muted transition-colors ${
+                                ttsPlaying === f.id
+                                  ? "text-blue-500 animate-pulse"
+                                  : "text-muted-foreground"
+                              }`}
+                              title={
+                                ttsPlaying === f.id
+                                  ? "Parar áudio"
+                                  : "Ouvir comentário"
+                              }
+                            >
+                              <Volume2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       <div className="mt-1 flex justify-end">

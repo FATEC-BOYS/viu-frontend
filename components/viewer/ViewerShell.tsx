@@ -6,6 +6,7 @@ import IdentityGate from "@/components/viewer/IdentityGate";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import FeedbackPanel from "@/components/viewer/FeedbackPanel";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -90,14 +91,14 @@ export default function ViewerShell({
           const j = await res.json();
           msg = j?.error || msg;
         } catch {}
-        alert(msg);
+        toast.error(msg);
         return;
       }
       // Opcional: trocar aba automaticamente para Aprovações
       setActiveTab("aprovacoes");
     } catch (e) {
       console.error("[ViewerShell] erro fechar para aprovação:", e);
-      alert("Falha ao fechar para aprovação.");
+      toast.error("Falha ao fechar para aprovação.");
     }
   }
 
