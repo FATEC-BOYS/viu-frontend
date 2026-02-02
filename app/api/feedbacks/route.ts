@@ -127,8 +127,8 @@ export async function POST(req: Request) {
       };
       const posX = form.get("posicao_x");
       const posY = form.get("posicao_y");
-      if (posX) audioInsert.posicao_x = parseFloat(String(posX));
-      if (posY) audioInsert.posicao_y = parseFloat(String(posY));
+      if (posX != null && posX !== "") audioInsert.posicao_x = parseFloat(String(posX));
+      if (posY != null && posY !== "") audioInsert.posicao_y = parseFloat(String(posY));
 
       const { data: feedback, error } = await supabase
         .from("feedbacks")
