@@ -20,7 +20,6 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { getBaseUrl } from '@/lib/baseUrl'
 
 // Onboarding steps
 import StepCliente from '@/components/dashboard/StepCliente'
@@ -198,12 +197,13 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">{authIssue}</p>
           <div className="mt-4">
             <Button
-              onClick={() =>
+              onClick={() => {
+                const origin = typeof window !== 'undefined' ? window.location.origin : '';
                 supabase.auth.signInWithOAuth({
                   provider: 'google',
-                  options: { redirectTo: `${getBaseUrl()}/auth/callback` },
+                  options: { redirectTo: `${origin}/auth/callback` },
                 })
-              }
+              }}
             >
               Entrar com Google
             </Button>

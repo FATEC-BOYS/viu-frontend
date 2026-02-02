@@ -4,7 +4,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { getBaseUrl } from '@/lib/baseUrl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +20,8 @@ export default function RecuperarPage() {
     setMsg(null);
 
     try {
-      const redirectTo = `${getBaseUrl()}/auth/callback?type=recovery&next=/reset`;
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const redirectTo = `${origin}/auth/callback?type=recovery&next=/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
       if (error) {
