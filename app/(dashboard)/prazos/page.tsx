@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { getBaseUrl } from '@/lib/baseUrl';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -302,12 +301,13 @@ export default function PrazosPage() {
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-center">
         <p className="text-sm text-muted-foreground">{authIssue}</p>
         <Button
-          onClick={() =>
+          onClick={() => {
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
             supabase.auth.signInWithOAuth({
               provider: 'google',
-              options: { redirectTo: `${getBaseUrl()}/auth/callback` },
+              options: { redirectTo: `${origin}/auth/callback` },
             })
-          }
+          }}
         >
           Entrar com Google
         </Button>
