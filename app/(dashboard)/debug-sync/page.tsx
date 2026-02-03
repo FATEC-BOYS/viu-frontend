@@ -33,11 +33,17 @@ export default function DebugSyncPage() {
       return;
     }
 
-    // Verificar se está em desenvolvimento
-    const isDev = process.env.NODE_ENV === 'development';
+    // Verificar se está em desenvolvimento (localhost ou NODE_ENV)
+    const isDev =
+      process.env.NODE_ENV === 'development' ||
+      (typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1'));
 
     if (isDev) {
+      console.log('🔓 Modo desenvolvimento detectado - acesso liberado');
       setHasAccess(true);
+      setLoading(false);
       return;
     }
 
