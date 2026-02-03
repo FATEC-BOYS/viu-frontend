@@ -57,24 +57,31 @@ export async function POST(req: Request) {
     console.log('🔄 [API] Sincronizando usuário...', payload);
 
     // 1. Garantir que usuário existe na tabela usuarios do Supabase
-    const { error: upsertErr } = await supabase
+    const upsertData = {
+      id: user.id,
+      email: user.email!,
+      nome,
+      tipo: (meta.tipo as 'DESIGNER' | 'CLIENTE') || 'DESIGNER',
+      avatar: avatar ?? null,
+      ativo: true,
+    };
+
+    console.log('🔄 [API] Tentando upsert na tabela usuarios:', upsertData);
+
+    const { data: upsertResult, error: upsertErr } = await supabase
       .from('usuarios')
-      .upsert(
-        {
-          id: user.id,
-          email: user.email!,
-          nome,
-          tipo: (meta.tipo as 'DESIGNER' | 'CLIENTE') || 'DESIGNER',
-          avatar: avatar ?? null,
-          ativo: true,
-        },
-        { onConflict: 'id' }
-      );
+      .upsert(upsertData, { onConflict: 'id' })
+      .select();
 
     if (upsertErr) {
-      console.warn('⚠️ Erro ao criar usuário na tabela usuarios:', upsertErr);
+      console.error('❌ [API] Erro ao criar usuário na tabela usuarios:', {
+        code: upsertErr.code,
+        message: upsertErr.message,
+        details: upsertErr.details,
+        hint: upsertErr.hint,
+      });
     } else {
-      console.log('✅ Usuário criado/atualizado na tabela usuarios');
+      console.log('✅ [API] Usuário criado/atualizado na tabela usuarios:', upsertResult);
     }
 
     // 2. Sincronizar com backend (Prisma)
@@ -105,6 +112,14 @@ export async function POST(req: Request) {
           success: false,
           error: 'Falha ao sincronizar com backend',
           supabaseSync: !upsertErr,
+          supabaseError: upsertErr
+            ? {
+                code: upsertErr.code,
+                message: upsertErr.message,
+                details: upsertErr.details,
+                hint: upsertErr.hint,
+              }
+            : null,
           backendStatus: response.status,
           backendResponse: responseData,
         },
@@ -116,6 +131,14 @@ export async function POST(req: Request) {
       success: true,
       message: 'Usuário sincronizado com sucesso',
       supabaseSync: !upsertErr,
+      supabaseError: upsertErr
+        ? {
+            code: upsertErr.code,
+            message: upsertErr.message,
+            details: upsertErr.details,
+            hint: upsertErr.hint,
+          }
+        : null,
       backendSync: true,
       data: responseData,
     });
