@@ -38,17 +38,42 @@ export async function syncUserWithBackend(user: User): Promise<SyncResponse> {
 
     const provider: string = user.app_metadata?.provider ?? 'email';
 
+    const payload = {
+      supabaseId: user.id,
+      email: user.email,
+      nome,
+      avatar,
+      provider,
+    };
+
+    console.log('🔄 Iniciando sincronização com backend...', {
+      url: `${BACKEND_URL}/auth/supabase/sync`,
+      payload,
+    });
+
     const response = await fetch(`${BACKEND_URL}/auth/supabase/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        supabaseId: user.id,
-        email: user.email,
-        nome,
-        avatar,
-        provider,
-      }),
+      body: JSON.stringify(payload),
     });
+
+    console.log('📡 Resposta HTTP:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Erro HTTP da API:', {
+        status: response.status,
+        body: errorText,
+      });
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+      };
+    }
 
     const data = await response.json();
 

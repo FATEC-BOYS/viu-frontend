@@ -1,5 +1,39 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Variáveis de Ambiente
+
+### Desenvolvimento Local
+
+Crie um arquivo `.env.local` na raiz do projeto com as seguintes variáveis:
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=sua_url_aqui
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anonima_aqui
+SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
+
+# OpenAI (para TTS e transcrição)
+OPENAI_API_KEY=sk-proj-...
+```
+
+### Vercel (Produção)
+
+Para configurar as variáveis de ambiente no Vercel:
+
+1. Acesse seu projeto no dashboard do Vercel
+2. Vá em **Settings** > **Environment Variables**
+3. Adicione cada variável:
+   - **Key**: Nome da variável (ex: `OPENAI_API_KEY`)
+   - **Value**: Valor da variável (ex: `sk-proj-...`)
+   - **Environments**: Selecione Production, Preview e/ou Development
+
+4. Após adicionar, faça um novo deploy ou force redeploy para aplicar as mudanças
+
+**Importante**:
+- Variáveis com prefixo `NEXT_PUBLIC_` são expostas no cliente (navegador)
+- Variáveis sem prefixo são acessíveis apenas no servidor (API routes)
+- Use `process.env.NOME_DA_VARIAVEL` para acessar as variáveis no código
+
 ## Getting Started
 
 First, run the development server:
