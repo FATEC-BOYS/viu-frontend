@@ -57,7 +57,14 @@ export default function DebugSyncPage() {
     setSyncResult(null);
 
     try {
-      const result = await syncUserWithBackend(user);
+      // Usar o novo endpoint que faz sincronização completa
+      const response = await fetch('/api/sync-current-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      const result = await response.json();
       setSyncResult(result);
 
       // Recarregar dados

@@ -4,6 +4,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
+import { syncUserWithBackend } from '@/lib/syncWithBackend';
 import { useRouter } from 'next/navigation';
 
 export type UserProfile = {
@@ -120,6 +121,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (existing) {
         setProfile(existing as UserProfile);
+        // Sincroniza com backend mesmo se perfil já existir
+        syncUserWithBackend(u).catch((e) =>
+          console.warn('Sincronização backend falhou (ignorado):', e)
+        );
         return;
       }
 
@@ -149,6 +154,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       setProfile(inserted as UserProfile);
+
+      // Sincroniza com backend após criar perfil
+      syncUserWithBackend(u).catch((e) =>
+        console.warn('Sincronização backend falhou (ignorado):', e)
+      );
     } catch (e) {
       console.warn('ensureProfile exceção (tolerada):', e);
       setProfile(null);
