@@ -205,7 +205,7 @@ export default function DebugSyncPage() {
             {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuario_auth
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-            Registro na tabela usuarios do Supabase
+            Registro na tabela usuario_auth do Supabase
           </p>
           {usuariosTable ? (
             usuariosTable.error ? (
