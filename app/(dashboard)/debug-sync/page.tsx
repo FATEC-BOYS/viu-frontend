@@ -142,6 +142,40 @@ export default function DebugSyncPage() {
     }
   };
 
+  const handleVerify = async () => {
+    if (!user) return;
+
+    setSyncing(true);
+    setSyncResult(null);
+
+    try {
+      const response = await fetch(`/api/verify-sync?userId=${user.id}`);
+      const data = await response.json();
+      setSyncResult(data);
+
+      console.log('🔍 Resultado da verificação:', data);
+
+      if (data.summary?.allSynced) {
+        alert('✅ Todos os dados estão sincronizados!');
+      } else {
+        const missing = [];
+        if (!data.summary?.supabaseAuthOk) missing.push('Supabase Auth');
+        if (!data.summary?.usuarioAuthOk) missing.push('usuario_auth');
+        if (!data.summary?.backendOk) missing.push('Backend');
+        alert(`⚠️ Faltam dados em: ${missing.join(', ')}`);
+      }
+
+      // Recarregar dados
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao verificar:', error);
+      setSyncResult({ error: String(error) });
+      alert(`❌ Erro: ${error}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -205,7 +239,7 @@ export default function DebugSyncPage() {
             {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuario_auth
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-            Registro na tabela usuarios do Supabase
+            Registro na tabela usuario_auth do Supabase
           </p>
           {usuariosTable ? (
             usuariosTable.error ? (
@@ -274,9 +308,17 @@ export default function DebugSyncPage() {
           </Button>
 
           <Button
-            onClick={handleApiTest}
+            onClick={handleVerify}
             disabled={syncing}
             variant="secondary"
+          >
+            {syncing ? '🔍 Verificando...' : '🔍 Verificar Dados (Service Role)'}
+          </Button>
+
+          <Button
+            onClick={handleApiTest}
+            disabled={syncing}
+            variant="outline"
           >
             {syncing ? '🧪 Testando...' : '🧪 Testar via API'}
           </Button>
