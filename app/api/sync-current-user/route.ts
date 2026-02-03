@@ -66,22 +66,22 @@ export async function POST(req: Request) {
       ativo: true,
     };
 
-    console.log('🔄 [API] Tentando upsert na tabela usuarios:', upsertData);
+    console.log('🔄 [API] Tentando upsert na tabela usuario_auth:', upsertData);
 
     const { data: upsertResult, error: upsertErr } = await supabase
-      .from('usuarios')
+      .from('usuario_auth')
       .upsert(upsertData, { onConflict: 'id' })
       .select();
 
     if (upsertErr) {
-      console.error('❌ [API] Erro ao criar usuário na tabela usuarios:', {
+      console.error('❌ [API] Erro ao criar usuário na tabela usuario_auth:', {
         code: upsertErr.code,
         message: upsertErr.message,
         details: upsertErr.details,
         hint: upsertErr.hint,
       });
     } else {
-      console.log('✅ [API] Usuário criado/atualizado na tabela usuarios:', upsertResult);
+      console.log('✅ [API] Usuário criado/atualizado na tabela usuario_auth:', upsertResult);
     }
 
     // 2. Sincronizar com backend (Prisma)

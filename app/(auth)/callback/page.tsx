@@ -103,17 +103,17 @@ export default function AuthCallbackPage() {
           if (upMetaErr) console.warn('updateUser metadata warning:', upMetaErr.message);
         }
 
-        // 5) Upsert em `usuarios` (idempotente)
+        // 5) Upsert em `usuario_auth` (vincula com Supabase Auth)
         {
           const { error: upsertErr } = await supabase
-            .from('usuarios')
+            .from('usuario_auth')
             .upsert(
               {
                 id: user.id,                 // == auth.uid()
                 email: user.email!,
                 nome,
                 tipo,
-                avatar: avatar ?? null,      // coluna correta
+                avatar: avatar ?? null,
                 ativo: true,
               },
               { onConflict: 'id' }
@@ -121,20 +121,7 @@ export default function AuthCallbackPage() {
 
           if (upsertErr) {
             // Não bloqueia o fluxo; apenas loga
-            console.warn('usuarios upsert warning:', upsertErr.message);
-          }
-        }
-
-        // 6) Garante vínculo em `usuario_auth` (auth_user_id -> usuario_id)
-        {
-          const { error: linkErr } = await supabase
-            .from('usuario_auth')
-            .upsert(
-              { auth_user_id: user.id, usuario_id: user.id },
-              { onConflict: 'auth_user_id' }
-            );
-          if (linkErr) {
-            console.warn('usuario_auth upsert warning:', linkErr.message);
+            console.warn('usuario_auth upsert warning:', upsertErr.message);
           }
         }
 

@@ -68,9 +68,9 @@ export default function DebugSyncPage() {
         app_metadata: user.app_metadata,
       });
 
-      // 2. Verificar tabela usuarios
+      // 2. Verificar tabela usuario_auth (vinculada ao Supabase Auth)
       const { data, error } = await supabase
-        .from('usuarios')
+        .from('usuario_auth')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
@@ -202,7 +202,7 @@ export default function DebugSyncPage() {
 
         <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
           <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-            {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuarios
+            {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuario_auth
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
             Registro na tabela usuarios do Supabase
@@ -322,7 +322,7 @@ export default function DebugSyncPage() {
           </div>
 
           <div>
-            <h4 className="font-semibold mb-2">Tabela usuarios:</h4>
+            <h4 className="font-semibold mb-2">Tabela usuario_auth:</h4>
             <pre className="text-xs bg-gray-100 dark:bg-gray-900 p-4 rounded overflow-auto max-h-60">
               {JSON.stringify(usuariosTable, null, 2)}
             </pre>
