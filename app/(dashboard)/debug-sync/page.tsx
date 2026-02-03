@@ -14,10 +14,45 @@ export default function DebugSyncPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
-    loadData();
+    checkAccess();
   }, [user]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      loadData();
+    }
+  }, [hasAccess, user]);
+
+  const checkAccess = async () => {
+    if (!user) {
+      setHasAccess(false);
+      setLoading(false);
+      return;
+    }
+
+    // Verificar se está em desenvolvimento
+    const isDev = process.env.NODE_ENV === 'development';
+
+    if (isDev) {
+      setHasAccess(true);
+      return;
+    }
+
+    // Em produção, verificar via API
+    try {
+      const response = await fetch('/api/check-debug-access');
+      const data = await response.json();
+      setHasAccess(data.hasAccess);
+    } catch (error) {
+      console.error('Erro ao verificar acesso:', error);
+      setHasAccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -119,6 +154,24 @@ export default function DebugSyncPage() {
     return (
       <div className="p-8">
         <p className="text-red-500">Você precisa estar logado!</p>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <div className="border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-6 rounded">
+          <h2 className="text-2xl font-bold text-red-700 dark:text-red-400 mb-2">
+            🔒 Acesso Negado
+          </h2>
+          <p className="text-red-600 dark:text-red-300 mb-4">
+            Esta página é restrita a administradores do sistema.
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Se você precisa acessar esta funcionalidade, entre em contato com o administrador.
+          </p>
+        </div>
       </div>
     );
   }

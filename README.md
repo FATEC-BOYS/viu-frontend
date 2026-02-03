@@ -14,7 +14,15 @@ SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
 
 # OpenAI (para TTS e transcrição)
 OPENAI_API_KEY=sk-proj-...
+
+# Debug Access (emails separados por vírgula, opcional em dev)
+ADMIN_EMAILS=seu@email.com,outro@email.com
 ```
+
+**Nota sobre ADMIN_EMAILS**:
+- Em desenvolvimento, a página `/debug-sync` é acessível para todos os usuários logados
+- Em produção, apenas emails listados em `ADMIN_EMAILS` podem acessar
+- Deixe vazio para desabilitar acesso em produção
 
 ### Vercel (Produção)
 
