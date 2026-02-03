@@ -71,7 +71,6 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [authIssue, setAuthIssue] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const [displayName, setDisplayName] = useState<string>('você')
 
@@ -87,7 +86,6 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true)
-      setError(null)
       setAuthIssue(null)
 
       const {
@@ -109,38 +107,44 @@ export default function DashboardPage() {
       setDisplayName(nameGuess)
 
       try {
-        const [projetosQ, feedbacksQ, tarefasQ, clientesQ] = await Promise.all([
+        // Buscar dados sem throwOnError para não quebrar a página
+        const [projetosQ, feedbacksQ, tarefasQ, clientesQ] = await Promise.allSettled([
           supabase
             .from('projetos')
-            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`)
-            .throwOnError(),
+            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`),
           supabase
             .from('feedbacks')
             .select(`id, conteudo, criado_em, autor:autor_id ( nome )`)
             .order('criado_em', { ascending: false })
-            .limit(10)
-            .throwOnError(),
+            .limit(10),
           supabase
             .from('tarefas')
             .select(`id, titulo, status, prioridade, prazo, projeto:projeto_id ( nome )`)
             .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
             .order('prazo', { ascending: true, nullsFirst: false })
-            .limit(10)
-            .throwOnError(),
+            .limit(10),
           supabase
             .from('usuarios')
             .select('*', { count: 'exact', head: true })
             .eq('tipo', 'CLIENTE'),
         ])
 
-        const projetosData = (projetosQ.data || []) as Projeto[]
-        const feedbacksData = (feedbacksQ.data || []) as Feedback[]
-        const tarefasData = (tarefasQ.data || []) as Tarefa[]
+        // Extrair dados ou usar arrays vazios em caso de erro
+        const projetosData = (projetosQ.status === 'fulfilled' && projetosQ.value.data) || []
+        const feedbacksData = (feedbacksQ.status === 'fulfilled' && feedbacksQ.value.data) || []
+        const tarefasData = (tarefasQ.status === 'fulfilled' && tarefasQ.value.data) || []
+        const clientesCount = (clientesQ.status === 'fulfilled' && clientesQ.value.count) || 0
 
-        setProjetos(projetosData)
-        setFeedbacks(feedbacksData)
-        setTarefas(tarefasData)
-        setClientesCount(clientesQ.count ?? 0)
+        // Log de erros para debug (sem quebrar a página)
+        if (projetosQ.status === 'rejected') console.warn('Erro ao buscar projetos:', projetosQ.reason)
+        if (feedbacksQ.status === 'rejected') console.warn('Erro ao buscar feedbacks:', feedbacksQ.reason)
+        if (tarefasQ.status === 'rejected') console.warn('Erro ao buscar tarefas:', tarefasQ.reason)
+        if (clientesQ.status === 'rejected') console.warn('Erro ao contar clientes:', clientesQ.reason)
+
+        setProjetos(projetosData as Projeto[])
+        setFeedbacks(feedbacksData as Feedback[])
+        setTarefas(tarefasData as Tarefa[])
+        setClientesCount(clientesCount)
 
         const totalArtes = projetosData.reduce((acc, p) => acc + (p.artes?.length || 0), 0)
         const artesAprovadas = projetosData.reduce(
@@ -157,8 +161,10 @@ export default function DashboardPage() {
           tarefasPendentes: tarefasData.length,
         })
       } catch (e: any) {
-        console.error('Erro ao buscar dados do dashboard:', e)
-        setError(e?.message || 'Erro ao carregar dados do dashboard')
+        // Erro crítico - apenas log, mas não quebra a página
+        console.error('Erro crítico ao buscar dados do dashboard:', e)
+        // Não setamos error aqui para não mostrar tela de erro
+        // Em vez disso, mostramos dashboard vazio
       } finally {
         setLoading(false)
       }
@@ -212,12 +218,7 @@ export default function DashboardPage() {
       </div>
     )
 
-  if (error)
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center text-destructive">{error}</div>
-      </div>
-    )
+  // Removido: não mostrar erro para usuário novo com banco vazio
 
   const projetosEmAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO')
 
