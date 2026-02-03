@@ -36,15 +36,17 @@ export async function GET() {
       .eq('id', user.id)
       .maybeSingle();
 
-    if (dbError || !userData) {
-      console.error('Erro ao verificar tipo do usuário:', dbError);
-      return NextResponse.json({ hasAccess: false });
+    // Se encontrou o registro, verificar se é ADMIN
+    if (userData && !dbError) {
+      const hasAccess = userData.tipo === 'ADMIN';
+      return NextResponse.json({ hasAccess });
     }
 
-    // Permitir acesso se tipo for ADMIN
-    const hasAccess = userData.tipo === 'ADMIN';
+    // FALLBACK: Se não encontrou registro (primeira sincronização),
+    // permitir acesso temporário para que possa criar o registro
+    console.log('⚠️ usuario_auth não encontrado, permitindo acesso temporário para primeira sincronização');
+    return NextResponse.json({ hasAccess: true, temporaryAccess: true });
 
-    return NextResponse.json({ hasAccess });
   } catch (error) {
     console.error('Erro ao verificar acesso debug:', error);
     return NextResponse.json({ hasAccess: false });
