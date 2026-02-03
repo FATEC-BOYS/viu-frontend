@@ -67,6 +67,12 @@ export default function DebugSyncPage() {
       const result = await response.json();
       setSyncResult(result);
 
+      // Salvar prismaUserId no localStorage se sincronização foi bem-sucedida
+      if (result.success && result.data?.data?.id) {
+        localStorage.setItem('prismaUserId', result.data.data.id);
+        console.log('✅ prismaUserId salvo no localStorage:', result.data.data.id);
+      }
+
       // Recarregar dados
       await loadData();
 
