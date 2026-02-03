@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { syncUserWithBackend } from '@/lib/syncWithBackend';
 
 type Tipo = 'DESIGNER' | 'CLIENTE';
 
@@ -137,7 +138,10 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 7) Destino final
+        // 7) Sincroniza com backend (Prisma)
+        await syncUserWithBackend(user);
+
+        // 8) Destino final
         const fallback = tipo === 'CLIENTE' ? '/links' : '/dashboard';
         router.replace(nextParam || fallback);
       } catch (e) {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { syncUserWithBackend } from '@/lib/syncWithBackend';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -50,7 +51,10 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.session) {
+      if (data.session && data.user) {
+        // Sincroniza com backend (Prisma)
+        await syncUserWithBackend(data.user);
+
         // redireciona respeitando o next se existir
         router.push(nextParam || '/dashboard');
       } else {
