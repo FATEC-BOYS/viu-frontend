@@ -14,10 +14,45 @@ export default function DebugSyncPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
-    loadData();
+    checkAccess();
   }, [user]);
+
+  useEffect(() => {
+    if (hasAccess) {
+      loadData();
+    }
+  }, [hasAccess, user]);
+
+  const checkAccess = async () => {
+    if (!user) {
+      setHasAccess(false);
+      setLoading(false);
+      return;
+    }
+
+    // Verificar se está em desenvolvimento
+    const isDev = process.env.NODE_ENV === 'development';
+
+    if (isDev) {
+      setHasAccess(true);
+      return;
+    }
+
+    // Em produção, verificar via API
+    try {
+      const response = await fetch('/api/check-debug-access');
+      const data = await response.json();
+      setHasAccess(data.hasAccess);
+    } catch (error) {
+      console.error('Erro ao verificar acesso:', error);
+      setHasAccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -33,9 +68,9 @@ export default function DebugSyncPage() {
         app_metadata: user.app_metadata,
       });
 
-      // 2. Verificar tabela usuarios
+      // 2. Verificar tabela usuario_auth (vinculada ao Supabase Auth)
       const { data, error } = await supabase
-        .from('usuarios')
+        .from('usuario_auth')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
@@ -123,6 +158,24 @@ export default function DebugSyncPage() {
     );
   }
 
+  if (!hasAccess) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <div className="border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 p-6 rounded">
+          <h2 className="text-2xl font-bold text-red-700 dark:text-red-400 mb-2">
+            🔒 Acesso Negado
+          </h2>
+          <p className="text-red-600 dark:text-red-300 mb-4">
+            Esta página é restrita a administradores do sistema.
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Se você precisa acessar esta funcionalidade, entre em contato com o administrador.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">🔧 Debug: Sincronização de Usuário</h1>
@@ -149,7 +202,7 @@ export default function DebugSyncPage() {
 
         <div className="border rounded-lg p-4 bg-white dark:bg-gray-800">
           <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-            {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuarios
+            {usuariosTable && !usuariosTable.error ? '✅' : '❌'} Tabela usuario_auth
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
             Registro na tabela usuarios do Supabase
@@ -269,7 +322,7 @@ export default function DebugSyncPage() {
           </div>
 
           <div>
-            <h4 className="font-semibold mb-2">Tabela usuarios:</h4>
+            <h4 className="font-semibold mb-2">Tabela usuario_auth:</h4>
             <pre className="text-xs bg-gray-100 dark:bg-gray-900 p-4 rounded overflow-auto max-h-60">
               {JSON.stringify(usuariosTable, null, 2)}
             </pre>

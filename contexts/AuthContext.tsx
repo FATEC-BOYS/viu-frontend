@@ -108,9 +108,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const ensureProfile = async (u: User) => {
     try {
-      // tenta obter perfil
+      // tenta obter perfil de usuario_auth (vinculado ao Supabase Auth)
       const { data: existing, error: selErr } = await supabase
-        .from('usuarios')
+        .from('usuario_auth')
         .select('id, nome, email, avatar, tipo')
         .eq('id', u.id)
         .maybeSingle();
@@ -134,8 +134,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const fallbackEmail = u.email ?? null;
 
       const { data: inserted, error: insErr } = await supabase
-        .from('usuarios')
-        .insert([
+        .from('usuario_auth')
+        .upsert([
           {
             id: u.id,
             nome: fallbackNome,
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             avatar: (u.user_metadata as any)?.avatar_url ?? null,
             tipo: 'DESIGNER',
           },
-        ])
+        ], { onConflict: 'id' })
         .select('id, nome, email, avatar, tipo')
         .single();
 
