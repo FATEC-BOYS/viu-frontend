@@ -9,19 +9,12 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import {
-  FolderOpen,
-  Clock,
-  MessageSquare,
-  CalendarDays,
-  Rocket,
-} from 'lucide-react'
+import { FolderOpen, Clock, MessageSquare, CalendarDays, Rocket } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/contexts/AuthContext'
+import { api } from '@/lib/api'
 
-// Onboarding steps
 import StepCliente from '@/components/dashboard/StepCliente'
 import StepProjeto from '@/components/dashboard/StepProjeto'
 import StepTime from '@/components/dashboard/StepTime'
@@ -30,17 +23,13 @@ import StepFeedback from '@/components/dashboard/StepFeedback'
 import StepAprovacao from '@/components/dashboard/StepAprovacao'
 import StepConcluido from '@/components/dashboard/StepConcluido'
 
-// ============================
-// Tipos
-// ============================
-
 type Projeto = {
   id: string
   nome: string
   status: string
   prazo?: string | null
   cliente?: { nome?: string | null } | null
-  artes?: { id: string; nome: string; status_atual: string | null }[]
+  _count?: { artes?: number }
 }
 
 type Feedback = {
@@ -59,21 +48,12 @@ type Tarefa = {
   projeto?: { nome?: string | null } | null
 }
 
-// ============================
-// Página
-// ============================
-
 export default function DashboardPage() {
+  const { user, loading: authLoading } = useAuth()
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
-  const [clientesCount, setClientesCount] = useState<number>(0)
-
   const [loading, setLoading] = useState(true)
-  const [authIssue, setAuthIssue] = useState<string | null>(null)
-
-  const [displayName, setDisplayName] = useState<string>('você')
-
   const [metricas, setMetricas] = useState({
     totalProjetos: 0,
     projetosAtivos: 0,
@@ -84,153 +64,111 @@ export default function DashboardPage() {
   })
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    if (authLoading) return
+    const fetchData = async () => {
       setLoading(true)
-      setAuthIssue(null)
-
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser()
-      if (userErr) console.error('Falha ao obter usuário:', userErr)
-      if (!user) {
-        setAuthIssue('Você precisa estar autenticado para ver o dashboard. Faça login e tente novamente.')
-        setLoading(false)
-        return
-      }
-
-      const nameGuess =
-        (user.user_metadata as any)?.full_name ||
-        (user.user_metadata as any)?.name ||
-        user.email?.split('@')?.[0] ||
-        'você'
-      setDisplayName(nameGuess)
-
       try {
-        // Buscar dados sem throwOnError para não quebrar a página
-        const [projetosQ, feedbacksQ, tarefasQ, clientesQ] = await Promise.allSettled([
-          supabase
-            .from('projetos')
-            .select(`id, nome, status, prazo, cliente:cliente_id ( nome ), artes (id, nome, status_atual)`),
-          supabase
-            .from('feedbacks')
-            .select(`id, conteudo, criado_em, autor:autor_id ( nome )`)
-            .order('criado_em', { ascending: false })
-            .limit(10),
-          supabase
-            .from('tarefas')
-            .select(`id, titulo, status, prioridade, prazo, projeto:projeto_id ( nome )`)
-            .in('status', ['PENDENTE', 'EM_ANDAMENTO'])
-            .order('prazo', { ascending: true, nullsFirst: false })
-            .limit(10),
-          supabase
-            .from('usuarios')
-            .select('*', { count: 'exact', head: true })
-            .eq('tipo', 'CLIENTE'),
+        const [projetosRes, feedbacksRes, tarefasRes] = await Promise.allSettled([
+          api.get<{ data: any[] }>('/projetos?limit=10'),
+          api.get<{ data: any[] }>('/feedbacks?limit=10').catch(() => ({ data: [] as any[] })),
+          api
+            .get<{ data: any[] }>('/tarefas?status=PENDENTE&limit=10')
+            .catch(() => ({ data: [] as any[] })),
         ])
 
-        // Extrair dados ou usar arrays vazios em caso de erro
-        const projetosData = (projetosQ.status === 'fulfilled' && projetosQ.value.data) || []
-        const feedbacksData = (feedbacksQ.status === 'fulfilled' && feedbacksQ.value.data) || []
-        const tarefasData = (tarefasQ.status === 'fulfilled' && tarefasQ.value.data) || []
-        const clientesCount = (clientesQ.status === 'fulfilled' && clientesQ.value.count) || 0
+        const projetosData: Projeto[] =
+          projetosRes.status === 'fulfilled'
+            ? (projetosRes.value.data ?? []).map((p: any) => ({
+                id: p.id,
+                nome: p.nome,
+                status: p.status,
+                prazo: p.prazo ?? null,
+                cliente: p.cliente ? { nome: p.cliente.nome } : null,
+                _count: p._count,
+              }))
+            : []
 
-        // Log de erros para debug (sem quebrar a página)
-        if (projetosQ.status === 'rejected') console.warn('Erro ao buscar projetos:', projetosQ.reason)
-        if (feedbacksQ.status === 'rejected') console.warn('Erro ao buscar feedbacks:', feedbacksQ.reason)
-        if (tarefasQ.status === 'rejected') console.warn('Erro ao buscar tarefas:', tarefasQ.reason)
-        if (clientesQ.status === 'rejected') console.warn('Erro ao contar clientes:', clientesQ.reason)
+        const feedbacksData: Feedback[] =
+          feedbacksRes.status === 'fulfilled'
+            ? (feedbacksRes.value.data ?? []).map((f: any) => ({
+                id: f.id,
+                conteudo: f.conteudo,
+                criado_em: f.criadoEm ?? f.criado_em ?? '',
+                autor: f.autor ? { nome: f.autor.nome } : null,
+              }))
+            : []
 
-        setProjetos(projetosData as Projeto[])
-        setFeedbacks(feedbacksData as Feedback[])
-        setTarefas(tarefasData as Tarefa[])
-        setClientesCount(clientesCount)
+        const tarefasData: Tarefa[] =
+          tarefasRes.status === 'fulfilled'
+            ? (tarefasRes.value.data ?? []).map((t: any) => ({
+                id: t.id,
+                titulo: t.titulo,
+                status: t.status,
+                prioridade: t.prioridade ?? 'MEDIA',
+                prazo: t.prazo ?? null,
+                projeto: t.projeto ? { nome: t.projeto.nome } : null,
+              }))
+            : []
 
-        const totalArtes = projetosData.reduce((acc, p) => acc + (p.artes?.length || 0), 0)
-        const artesAprovadas = projetosData.reduce(
-          (acc, p) => acc + (p.artes?.filter((a) => a.status_atual === 'APROVADO').length || 0),
+        setProjetos(projetosData)
+        setFeedbacks(feedbacksData)
+        setTarefas(tarefasData)
+
+        const totalArtes = projetosData.reduce(
+          (acc, p) => acc + (p._count?.artes ?? 0),
           0
         )
-
         setMetricas({
           totalProjetos: projetosData.length,
           projetosAtivos: projetosData.filter((p) => p.status === 'EM_ANDAMENTO').length,
           totalArtes,
-          artesAprovadas,
+          artesAprovadas: 0,
           feedbacksRecentes: feedbacksData.length,
           tarefasPendentes: tarefasData.length,
         })
-      } catch (e: any) {
-        // Erro crítico - apenas log, mas não quebra a página
-        console.error('Erro crítico ao buscar dados do dashboard:', e)
-        // Não setamos error aqui para não mostrar tela de erro
-        // Em vez disso, mostramos dashboard vazio
+      } catch (e) {
+        console.error('Erro ao buscar dados do dashboard:', e)
       } finally {
         setLoading(false)
       }
     }
+    fetchData()
+  }, [authLoading])
 
-    fetchDashboardData()
-  }, [])
+  const displayName =
+    user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
-  // ============================
-  // Regras de visibilidade do Onboarding
-  // ============================
-  const { totalArtes, artesAprovadas } = metricas
-
-  const temCliente = clientesCount > 0
   const temProjeto = projetos.length > 0
   const temProjetoConcluido = useMemo(
-    () => projetos.some(p => ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(p.status?.toUpperCase?.() ?? '')),
+    () =>
+      projetos.some((p) =>
+        ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(
+          p.status?.toUpperCase?.() ?? ''
+        )
+      ),
     [projetos]
   )
-  const temArteAprovada = totalArtes > 0 && artesAprovadas > 0
-
-  const onboardingConcluido = temCliente && (temProjetoConcluido || (temProjeto && temArteAprovada))
+  const onboardingConcluido = temProjetoConcluido || (temProjeto && metricas.artesAprovadas > 0)
   const mostrarOnboarding = !onboardingConcluido
 
-  if (loading)
+  if (loading || authLoading)
     return (
       <div className="flex items-center justify-center h-screen">
         <span className="sr-only">Carregando…</span>
       </div>
     )
 
-  if (authIssue)
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center max-w-sm">
-          <p className="text-sm text-muted-foreground">{authIssue}</p>
-          <div className="mt-4">
-            <Button
-              onClick={() => {
-                const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                supabase.auth.signInWithOAuth({
-                  provider: 'google',
-                  options: { redirectTo: `${origin}/auth/callback` },
-                })
-              }}
-            >
-              Entrar com Google
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-
-  // Removido: não mostrar erro para usuário novo com banco vazio
-
   const projetosEmAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO')
-
-  // Prazos próximos — só com projetos que têm prazo
   const proximosPrazos = [...projetos]
-    .filter(p => p.prazo)
-    .sort((a, b) => new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime())
+    .filter((p) => p.prazo)
+    .sort(
+      (a, b) =>
+        new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime()
+    )
     .slice(0, 6)
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header com carisma */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
@@ -250,7 +188,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Onboarding */}
       {mostrarOnboarding && (
         <section className="space-y-4">
           <StepCliente />
@@ -263,10 +200,8 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Dashboard 3×2 — todos os cards com mesma “altura” e rolagem interna */}
       {!mostrarOnboarding && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* 1. Hoje */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Hoje</CardTitle>
@@ -280,9 +215,9 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-muted-foreground">{metricas.totalProjetos} no total</p>
                 </div>
                 <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Artes aprovadas</p>
-                  <p className="text-2xl font-semibold">{metricas.artesAprovadas}</p>
-                  <p className="text-[11px] text-muted-foreground">{metricas.totalArtes} no total</p>
+                  <p className="text-xs text-muted-foreground">Artes</p>
+                  <p className="text-2xl font-semibold">{metricas.totalArtes}</p>
+                  <p className="text-[11px] text-muted-foreground">no total</p>
                 </div>
                 <div className="rounded-md border p-3">
                   <p className="text-xs text-muted-foreground">Feedbacks recentes</p>
@@ -298,7 +233,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 2. Atividade recente */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Atividade recente</CardTitle>
@@ -307,24 +241,32 @@ export default function DashboardPage() {
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 h-full overflow-auto pr-1">
                 {feedbacks.slice(0, 10).map((fb) => (
-                  <div key={fb.id} className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition">
+                  <div
+                    key={fb.id}
+                    className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition"
+                  >
                     <div className="w-8 h-8 bg-primary/10 rounded-full grid place-items-center">
                       <MessageSquare className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{fb.autor?.nome || 'Alguém'} comentou</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{fb.conteudo}</p>
+                      <p className="text-sm font-medium truncate">
+                        {fb.autor?.nome || 'Alguém'} comentou
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {fb.conteudo}
+                      </p>
                     </div>
                   </div>
                 ))}
                 {feedbacks.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">Sem novidades por aqui 🙂</div>
+                  <div className="text-sm text-muted-foreground text-center py-6">
+                    Sem novidades por aqui 🙂
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* 3. Ações rápidas */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Ações rápidas</CardTitle>
@@ -332,18 +274,29 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1">
               <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm"><Link href="/projetos/novo">Novo projeto</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/artes/nova">Enviar arte</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/links">Gerar link</Link></Button>
-                <Button asChild size="sm" variant="ghost"><Link href="/feedbacks">Ver feedbacks</Link></Button>
+                <Button asChild size="sm">
+                  <Link href="/projetos/novo">Novo projeto</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/artes/nova">Enviar arte</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/links">Gerar link</Link>
+                </Button>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href="/feedbacks">Ver feedbacks</Link>
+                </Button>
               </div>
               <div className="mt-4 rounded-md border p-3 text-xs text-muted-foreground">
-                Dica: arraste e solte arquivos na página de <Link href="/artes" className="underline underline-offset-4">Artes</Link>.
+                Dica: arraste e solte arquivos na página de{' '}
+                <Link href="/artes" className="underline underline-offset-4">
+                  Artes
+                </Link>
+                .
               </div>
             </CardContent>
           </Card>
 
-          {/* 4. Projetos em andamento */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
@@ -354,38 +307,38 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
               <div className="grid gap-3 max-h-full overflow-auto pr-1">
-                {projetosEmAndamento.slice(0, 8).map((projeto) => {
-                  const total = projeto.artes?.length || 0
-                  const aprovadas = projeto.artes?.filter((a) => a.status_atual === 'APROVADO').length || 0
-                  const progresso = total > 0 ? Math.round((aprovadas / total) * 100) : 0
-
-                  return (
-                    <div key={projeto.id} className="rounded-lg border p-3 hover:shadow-sm transition">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <h4 className="font-medium truncate">{projeto.nome}</h4>
-                          <p className="text-xs text-muted-foreground truncate">
-                            Cliente: {projeto.cliente?.nome || '—'}
-                          </p>
-                        </div>
-                        <Badge variant="secondary" className="shrink-0">{projeto.status}</Badge>
+                {projetosEmAndamento.slice(0, 8).map((projeto) => (
+                  <div
+                    key={projeto.id}
+                    className="rounded-lg border p-3 hover:shadow-sm transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-medium truncate">{projeto.nome}</h4>
+                        <p className="text-xs text-muted-foreground truncate">
+                          Cliente: {projeto.cliente?.nome || '—'}
+                        </p>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span>{aprovadas}/{total} artes</span>
-                        <span className="text-muted-foreground">
-                          <Clock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
-                          {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '—'}
-                        </span>
-                      </div>
-                      {total > 0 && <Progress value={progresso} className="h-2 mt-2" />}
-                      <div className="mt-2 flex justify-end">
-                        <Button asChild size="sm" variant="ghost" className="h-7 px-2">
-                          <Link href={`/projetos/${projeto.id}`}>Abrir</Link>
-                        </Button>
-                      </div>
+                      <Badge variant="secondary" className="shrink-0">
+                        {projeto.status}
+                      </Badge>
                     </div>
-                  )
-                })}
+                    <div className="mt-2 flex items-center justify-between text-xs">
+                      <span>{projeto._count?.artes ?? 0} artes</span>
+                      <span className="text-muted-foreground">
+                        <Clock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
+                        {projeto.prazo
+                          ? new Date(projeto.prazo).toLocaleDateString('pt-BR')
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button asChild size="sm" variant="ghost" className="h-7 px-2">
+                        <Link href={`/projetos/${projeto.id}`}>Abrir</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
                 {projetosEmAndamento.length === 0 && (
                   <div className="text-sm text-muted-foreground text-center py-6">
                     Nenhum projeto em andamento
@@ -395,7 +348,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 5. Tarefas urgentes */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
@@ -407,18 +359,29 @@ export default function DashboardPage() {
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 max-h-full overflow-auto pr-1">
                 {tarefas.slice(0, 10).map((tarefa) => (
-                  <div key={tarefa.id} className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition">
+                  <div
+                    key={tarefa.id}
+                    className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
-                        <p className="text-xs text-muted-foreground truncate">{tarefa.projeto?.nome}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {tarefa.projeto?.nome}
+                        </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">{tarefa.prioridade}</Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {tarefa.prioridade}
+                      </Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="text-[10px]">{tarefa.status}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {tarefa.status}
+                      </Badge>
                       <span className="text-[11px] text-muted-foreground">
-                        {tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR') : '—'}
+                        {tarefa.prazo
+                          ? new Date(tarefa.prazo).toLocaleDateString('pt-BR')
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -432,7 +395,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 6. Próximos prazos (novo) */}
           <Card className="h-full flex flex-col min-h-[360px]">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
@@ -444,30 +406,31 @@ export default function DashboardPage() {
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 max-h-full overflow-auto pr-1">
                 {proximosPrazos.length > 0 ? (
-                  proximosPrazos.map((p) => {
-                    const total = p.artes?.length || 0
-                    const aprovadas = p.artes?.filter((a) => a.status_atual === 'APROVADO').length || 0
-                    const pct = total > 0 ? Math.round((aprovadas / total) * 100) : 0
-                    return (
-                      <div key={p.id} className="rounded-md border p-3 hover:bg-muted/40 transition">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{p.nome}</p>
-                            <p className="text-xs text-muted-foreground truncate">Cliente: {p.cliente?.nome || '—'}</p>
-                          </div>
-                          <Badge variant="secondary" className="shrink-0">
-                            {p.prazo ? new Date(p.prazo).toLocaleDateString('pt-BR') : '—'}
-                          </Badge>
+                  proximosPrazos.map((p) => (
+                    <div
+                      key={p.id}
+                      className="rounded-md border p-3 hover:bg-muted/40 transition"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{p.nome}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            Cliente: {p.cliente?.nome || '—'}
+                          </p>
                         </div>
-                        {total > 0 && <Progress value={pct} className="h-2 mt-2" />}
-                        <div className="mt-2 flex justify-end">
-                          <Button asChild size="sm" variant="ghost" className="h-7 px-2">
-                            <Link href={`/projetos/${p.id}`}>Abrir</Link>
-                          </Button>
-                        </div>
+                        <Badge variant="secondary" className="shrink-0">
+                          {p.prazo
+                            ? new Date(p.prazo).toLocaleDateString('pt-BR')
+                            : '—'}
+                        </Badge>
                       </div>
-                    )
-                  })
+                      <div className="mt-2 flex justify-end">
+                        <Button asChild size="sm" variant="ghost" className="h-7 px-2">
+                          <Link href={`/projetos/${p.id}`}>Abrir</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))
                 ) : (
                   <div className="text-sm text-muted-foreground text-center py-6">
                     Sem prazos cadastrados

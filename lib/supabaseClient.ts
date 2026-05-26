@@ -1,8 +1,10 @@
-'use client';
-
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-// Se você tem tipos gerados pelo supabase:
-// import type { Database } from '@/lib/database.types';
-// export const supabase = createClientComponentClient<Database>();
-
-export const supabase = createClientComponentClient();
+'use client'
+// Supabase removido — use lib/api.ts para todas as operações
+export const supabase = new Proxy({} as any, {
+  get(_t, prop) {
+    if (prop === 'then') return undefined
+    throw new Error(
+      `Supabase foi removido. Use a API REST do backend (lib/api.ts). Propriedade acessada: ${String(prop)}`
+    )
+  },
+})
