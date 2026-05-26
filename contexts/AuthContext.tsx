@@ -1,199 +1,102 @@
-// contexts/AuthContext.tsx
-'use client';
+'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabaseClient';
-import { syncUserWithBackend } from '@/lib/syncWithBackend';
-import { useRouter } from 'next/navigation';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { api } from '@/lib/api'
 
 export type UserProfile = {
-  id: string;
-  nome: string | null;
-  email: string | null;
-  avatar?: string | null;
-  tipo: 'DESIGNER' | 'CLIENTE';
-};
-
-type AuthContextType = {
-  session: Session | null;
-  user: User | null;
-  profile: UserProfile | null;
-  signOut: () => Promise<void>;
-  loading: boolean;
-};
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-type AuthProviderProps = { children: ReactNode };
-
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [safeMode, setSafeMode] = useState(false); // lido via window (sem Suspense)
-  const router = useRouter();
-
-  // Lê ?safe=1 apenas no cliente (evita Suspense no 404/layout)
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      setSafeMode(sp.get('safe') === '1');
-    } catch {
-      setSafeMode(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-
-    const init = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (!alive) return;
-
-        if (error) {
-          console.error('Erro ao obter sessão:', error);
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-        } else {
-          const sess = data?.session ?? null;
-          setSession(sess);
-          setUser(sess?.user ?? null);
-
-          // Em links públicos (sem sessão), isso nem roda; não quebra os viewers.
-          if (sess?.user && !safeMode) {
-            ensureProfile(sess.user).catch((e) =>
-              console.warn('ensureProfile falhou (ignorado):', e)
-            );
-          }
-        }
-      } catch (e) {
-        console.error('Init auth falhou:', e);
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    init();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!alive) return;
-      setSession(newSession);
-      const u = newSession?.user ?? null;
-      setUser(u);
-
-      if (u && !safeMode) {
-        ensureProfile(u).catch((e) =>
-          console.warn('ensureProfile (onAuthStateChange) falhou (ignorado):', e)
-        );
-      } else {
-        setProfile(null);
-      }
-      // nunca deixe a UI presa em loading
-      setLoading(false);
-    });
-
-    return () => {
-      alive = false;
-      listener?.subscription.unsubscribe();
-    };
-    // safeMode controla apenas se buscamos/criamos perfil
-  }, [safeMode]);
-
-  const ensureProfile = async (u: User) => {
-    try {
-      // tenta obter perfil de usuario_auth (vinculado ao Supabase Auth)
-      const { data: existing, error: selErr } = await supabase
-        .from('usuario_auth')
-        .select('id, nome, email, avatar, tipo')
-        .eq('id', u.id)
-        .maybeSingle();
-
-      if (selErr) {
-        console.warn('Erro ao buscar perfil (tolerado):', selErr);
-      }
-
-      if (existing) {
-        setProfile(existing as UserProfile);
-        // Sincroniza com backend mesmo se perfil já existir
-        syncUserWithBackend(u).catch((e) =>
-          console.warn('Sincronização backend falhou (ignorado):', e)
-        );
-        return;
-      }
-
-      // cria perfil básico (tolerante a falhas/RLS)
-      const fallbackNome =
-        (u.user_metadata as any)?.name ?? u.email?.split('@')[0] ?? 'Usuário';
-      const fallbackEmail = u.email ?? null;
-
-      const { data: inserted, error: insErr } = await supabase
-        .from('usuario_auth')
-        .upsert([
-          {
-            id: u.id,
-            nome: fallbackNome,
-            email: fallbackEmail,
-            avatar: (u.user_metadata as any)?.avatar_url ?? null,
-            tipo: 'DESIGNER',
-          },
-        ], { onConflict: 'id' })
-        .select('id, nome, email, avatar, tipo')
-        .single();
-
-      if (insErr) {
-        console.warn('Erro ao criar perfil (tolerado):', insErr);
-        setProfile(null);
-        return;
-      }
-
-      setProfile(inserted as UserProfile);
-
-      // Sincroniza com backend após criar perfil
-      syncUserWithBackend(u).catch((e) =>
-        console.warn('Sincronização backend falhou (ignorado):', e)
-      );
-    } catch (e) {
-      console.warn('ensureProfile exceção (tolerada):', e);
-      setProfile(null);
-    }
-  };
-
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.warn('signOut supabase falhou (segue mesmo assim):', e);
-    }
-
-    // limpa storages (garante logout manual)
-    try {
-      Object.keys(localStorage).forEach((k) => {
-        if (k.startsWith('sb-')) localStorage.removeItem(k);
-      });
-      sessionStorage.clear();
-      indexedDB.deleteDatabase('Supabase');
-    } catch {}
-
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-    router.push('/login');
-  };
-
-  const value: AuthContextType = { session, user, profile, signOut, loading };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  id: string
+  nome: string
+  email: string
+  avatar?: string | null
+  tipo: 'DESIGNER' | 'CLIENTE'
 }
 
-export const useAuth = (): AuthContextType => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
-  return ctx;
-};
+type AuthContextType = {
+  user: UserProfile | null
+  token: string | null
+  signIn: (email: string, senha: string) => Promise<void>
+  signOut: () => void
+  loading: boolean
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const TOKEN_KEY = 'viu_token'
+const USER_KEY = 'viu_user'
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const segment = token.split('.')[1]
+    return JSON.parse(atob(segment.replace(/-/g, '+').replace(/_/g, '/')))
+  } catch {
+    return null
+  }
+}
+
+function loadFromStorage(): { token: string | null; user: UserProfile | null } {
+  if (typeof window === 'undefined') return { token: null, user: null }
+  const token = localStorage.getItem(TOKEN_KEY)
+  const raw = localStorage.getItem(USER_KEY)
+  if (!token || !raw) return { token: null, user: null }
+
+  const payload = decodeJwtPayload(token)
+  const exp = payload?.exp as number | undefined
+  if (!exp || exp * 1000 < Date.now()) {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    return { token: null, user: null }
+  }
+
+  try {
+    return { token, user: JSON.parse(raw) as UserProfile }
+  } catch {
+    return { token: null, user: null }
+  }
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+
+  useEffect(() => {
+    const { token: t, user: u } = loadFromStorage()
+    setToken(t)
+    setUser(u)
+    setLoading(false)
+  }, [])
+
+  const signIn = useCallback(async (email: string, senha: string) => {
+    const res = await api.post<{ data: { token: string; usuario: UserProfile }; success: boolean }>(
+      '/auth/login',
+      { email, senha }
+    )
+    const { token: newToken, usuario } = res.data
+    localStorage.setItem(TOKEN_KEY, newToken)
+    localStorage.setItem(USER_KEY, JSON.stringify(usuario))
+    setToken(newToken)
+    setUser(usuario)
+  }, [])
+
+  const signOut = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    setToken(null)
+    setUser(null)
+    router.push('/login')
+  }, [router])
+
+  return (
+    <AuthContext.Provider value={{ user, token, signIn, signOut, loading }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth(): AuthContextType {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth deve ser usado dentro de um AuthProvider')
+  return ctx
+}
