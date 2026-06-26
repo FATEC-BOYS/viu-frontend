@@ -1,51 +1,58 @@
-// app/reset/page.tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const router = useRouter()
+  const search = useSearchParams()
+  const token = search.get('token')
+
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [sending, setSending] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
 
   const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
+    e.preventDefault()
+    setMsg(null)
 
     if (password.length < 8) {
-      setMsg('A senha deve ter pelo menos 8 caracteres.');
-      return;
+      setMsg('A senha deve ter pelo menos 8 caracteres.')
+      return
     }
     if (password !== confirm) {
-      setMsg('As senhas não conferem.');
-      return;
+      setMsg('As senhas não conferem.')
+      return
+    }
+    if (!token) {
+      setMsg('Link inválido ou expirado.')
+      return
     }
 
     try {
-      setSending(true);
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        console.error(error);
-        setMsg('Não foi possível atualizar a senha.');
-        return;
-      }
-      setMsg('Senha atualizada com sucesso. Redirecionando…');
-      setTimeout(() => router.replace('/login?reset=ok'), 900);
-    } catch (err) {
-      console.error(err);
-      setMsg('Erro inesperado ao atualizar a senha.');
+      setSending(true)
+      await api.post('/auth/reset-password', { token, password })
+      setMsg('Senha atualizada com sucesso. Redirecionando…')
+      setTimeout(() => router.replace('/login?reset=ok'), 900)
+    } catch {
+      setMsg('Não foi possível atualizar a senha. O link pode ter expirado.')
     } finally {
-      setSending(false);
+      setSending(false)
     }
-  };
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -81,9 +88,11 @@ export default function ResetPasswordPage() {
               />
             </div>
 
-            {msg && <p className="text-sm text-center text-muted-foreground">{msg}</p>}
+            {msg && (
+              <p className="text-sm text-center text-muted-foreground">{msg}</p>
+            )}
 
-            <Button type="submit" className="w-full" disabled={sending}>
+            <Button type="submit" className="w-full" disabled={sending || !token}>
               {sending ? 'Salvando…' : 'Salvar nova senha'}
             </Button>
           </form>
@@ -98,5 +107,5 @@ export default function ResetPasswordPage() {
         </CardFooter>
       </Card>
     </div>
-  );
+  )
 }

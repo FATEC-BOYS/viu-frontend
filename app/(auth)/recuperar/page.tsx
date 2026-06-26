@@ -1,42 +1,39 @@
-// app/recuperar/page.tsx
-'use client';
+'use client'
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState } from 'react'
+import Link from 'next/link'
+import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function RecuperarPage() {
-  const [email, setEmail] = useState('');
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [email, setEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSending(true);
-    setMsg(null);
+    e.preventDefault()
+    setSending(true)
+    setMsg(null)
 
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectTo = `${origin}/auth/callback?type=recovery&next=/reset`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-
-      if (error) {
-        console.error('resetPasswordForEmail:', error);
-        setMsg('Não foi possível enviar o e-mail de recuperação.');
-      } else {
-        setMsg('Se este e-mail existir, você receberá um link para redefinir a senha.');
-      }
-    } catch (err) {
-      console.error(err);
-      setMsg('Ocorreu um erro ao solicitar a recuperação.');
+      await api.post('/auth/forgot-password', { email })
+    } catch {
+      // resposta deliberadamente ambígua — não revela se o e-mail existe
     } finally {
-      setSending(false);
+      setMsg('Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha.')
+      setSending(false)
     }
-  };
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -73,9 +70,11 @@ export default function RecuperarPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center text-sm">
-          <Link href="/login" className="text-primary hover:underline">Voltar para o login</Link>
+          <Link href="/login" className="text-primary hover:underline">
+            Voltar para o login
+          </Link>
         </CardFooter>
       </Card>
     </div>
-  );
+  )
 }
