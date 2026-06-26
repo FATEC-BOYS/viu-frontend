@@ -10,14 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 import {
   User as UserIcon,
   Calendar, Edit, Save, X, Loader2,
-  Shield, Bell, Lock, Trash2, Download,
+  Shield, Lock, Trash2, Download,
   BarChart3, Award, Clock, CheckCircle2,
 } from 'lucide-react'
 
@@ -94,12 +92,6 @@ export default function PerfilPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({ nome: '', email: '', telefone: '' })
-
-  const [configuracoes, setConfiguracoes] = useState({
-    notificacoesPush: true,
-    notificacoesEmail: true,
-    visibilidadePerfil: 'publico' as string,
-  })
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -294,65 +286,6 @@ export default function PerfilPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Configurações
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">Notificações</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Notificações Push</p>
-                        <p className="text-sm text-muted-foreground">Receba notificações no navegador</p>
-                      </div>
-                      <Switch
-                        checked={configuracoes.notificacoesPush}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesPush: checked }))}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Notificações por Email</p>
-                        <p className="text-sm text-muted-foreground">Receba resumos por email</p>
-                      </div>
-                      <Switch
-                        checked={configuracoes.notificacoesEmail}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesEmail: checked }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium mb-3">Privacidade</h4>
-                  <div>
-                    <Label>Visibilidade do Perfil</Label>
-                    <Select
-                      value={configuracoes.visibilidadePerfil}
-                      onValueChange={(value) => setConfiguracoes((p) => ({ ...p, visibilidadePerfil: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="publico">Público</SelectItem>
-                        <SelectItem value="privado">Privado</SelectItem>
-                        <SelectItem value="equipe">Apenas Equipe</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-6">
