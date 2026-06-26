@@ -336,14 +336,16 @@ export default function PerfilPage() {
                   Alterar Senha
                 </a>
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button variant="outline" className="w-full justify-start" disabled>
                 <Download className="h-4 w-4 mr-2" />
                 Exportar Dados
+                <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
               <Separator />
-              <Button variant="destructive" className="w-full justify-start">
+              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir Conta
+                <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
             </CardContent>
           </Card>
