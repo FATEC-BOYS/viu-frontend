@@ -228,12 +228,19 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
-                <Avatar className="w-24 h-24">
-                  <AvatarImage src={usuario.avatar || undefined} alt={usuario.nome} />
-                  <AvatarFallback className="text-lg font-semibold">
-                    {getInitials(usuario.nome)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="w-24 h-24">
+                    <AvatarImage src={usuario.avatar || undefined} alt={usuario.nome} />
+                    <AvatarFallback className="text-lg font-semibold">
+                      {getInitials(usuario.nome)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {editMode && (
+                    <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-muted-foreground">
+                      upload em breve
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <h2 className="text-xl font-semibold">{usuario.nome}</h2>
                   <p className="text-muted-foreground">{usuario.email}</p>
