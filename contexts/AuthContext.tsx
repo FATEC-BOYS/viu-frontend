@@ -10,6 +10,7 @@ export type UserProfile = {
   email: string
   avatar?: string | null
   tipo: 'DESIGNER' | 'CLIENTE'
+  emailVerificado?: boolean
 }
 
 type AuthContextType = {

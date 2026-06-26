@@ -391,8 +391,7 @@ export default function CadastroPage() {
         tipo: tipo ?? 'DESIGNER',
       });
 
-      await signIn(email, password);
-      router.replace('/dashboard');
+      router.replace('/verificar-email');
     } catch (err: any) {
       setMsg(err?.message ?? 'Erro inesperado ao cadastrar.');
     } finally {
