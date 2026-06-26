@@ -25,6 +25,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const TOKEN_KEY = 'viu_token'
 const USER_KEY = 'viu_user'
+const REFRESH_KEY = 'viu_refresh_token'
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -70,20 +72,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = useCallback(async (email: string, senha: string) => {
-    const res = await api.post<{ data: { token: string; usuario: UserProfile }; success: boolean }>(
+    const res = await api.post<{ data: { token: string; refreshToken: string; usuario: UserProfile }; success: boolean }>(
       '/auth/login',
       { email, senha }
     )
-    const { token: newToken, usuario } = res.data
+    const { token: newToken, refreshToken, usuario } = res.data
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(usuario))
+    if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
     setToken(newToken)
     setUser(usuario)
   }, [])
 
   const signOut = useCallback(() => {
+    const currentToken = localStorage.getItem(TOKEN_KEY)
+    if (currentToken) {
+      fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
+      }).catch(() => {})
+    }
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(REFRESH_KEY)
     setToken(null)
     setUser(null)
     router.push('/login')
