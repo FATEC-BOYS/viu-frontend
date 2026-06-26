@@ -14,25 +14,49 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MailCheck } from 'lucide-react'
 
 export default function RecuperarPage() {
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSending(true)
-    setMsg(null)
 
     try {
       await api.post('/auth/forgot-password', { email })
     } catch {
       // resposta deliberadamente ambígua — não revela se o e-mail existe
     } finally {
-      setMsg('Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha.')
       setSending(false)
+      setSent(true)
     }
+  }
+
+  if (sent) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-md card">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-2">
+              <MailCheck className="h-10 w-10 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Verifique seu e-mail</CardTitle>
+            <CardDescription>
+              Se <strong>{email}</strong> estiver cadastrado, você receberá um link
+              de redefinição em breve. Verifique também a pasta de spam.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex justify-center text-sm">
+            <Link href="/login" className="text-primary hover:underline">
+              Voltar para o login
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -57,12 +81,6 @@ export default function RecuperarPage() {
                 disabled={sending}
               />
             </div>
-
-            {msg && (
-              <p className="text-sm text-center text-muted-foreground" aria-live="polite">
-                {msg}
-              </p>
-            )}
 
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? 'Enviando...' : 'Enviar link de recuperação'}
