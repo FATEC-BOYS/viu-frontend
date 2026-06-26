@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
-  ChevronLeft, PanelRightClose, PanelLeftOpen
+  ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -202,6 +202,7 @@ export function Sidebar() {
       collapsible: true,
       items: [
         { title: 'Perfil', href: '/perfil', icon: User },
+        { title: 'Sessões', href: '/sessoes', icon: Monitor },
         { title: 'Links Compartilhados', href: '/links', icon: LinkIcon },
         { title: 'Configurações', href: '/configuracoes', icon: Settings }
       ]
