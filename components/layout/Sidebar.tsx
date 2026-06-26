@@ -14,7 +14,8 @@ import {
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ✅ Tooltip do shadcn (se não tiver, me avisa que troco por title nativo)
 import {
@@ -126,7 +127,7 @@ export function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  // busca contadores “reais”
+  // busca contadores via REST API
   useEffect(() => {
     let alive = true;
 
@@ -134,51 +135,27 @@ export function Sidebar() {
       if (fetchingRef.current) return;
       fetchingRef.current = true;
       try {
-        // garante sessão (importante p/ RLS e row-level filters)
-        await supabase.auth.getUser();
-
-        // Tarefas PENDENTE/EM_ANDAMENTO
-        const { count: tarefasPendentes } = await supabase
-          .from('tarefas')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['PENDENTE', 'EM_ANDAMENTO']);
-
-        // Feedbacks últimos 7 dias
-        const dataLimite = new Date();
-        dataLimite.setDate(dataLimite.getDate() - 7);
-        const { count: feedbacksPendentes } = await supabase
-          .from('feedbacks')
-          .select('*', { count: 'exact', head: true })
-          .gte('criado_em', dataLimite.toISOString())
-          .in('status', ['ABERTO', 'EM_ANALISE']);
-
-        // Notificações não lidas
-        const { count: notificacoesNaoLidas } = await supabase
-          .from('notificacoes')
-          .select('*', { count: 'exact', head: true })
-          .eq('lida', false);
-
-        // Projetos em andamento com prazo nos próximos 7 dias
-        const dataFutura = new Date();
-        dataFutura.setDate(dataFutura.getDate() + 7);
-        const { count: projetsVencendo } = await supabase
-          .from('projetos')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'EM_ANDAMENTO')
-          .lte('prazo', dataFutura.toISOString());
+        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos] = await Promise.allSettled([
+          api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
+          api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
+          api.get<{ pagination: { total: number } }>('/feedbacks?limit=1'),
+          api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
+          api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
+        ]);
 
         if (!alive) return;
 
+        const total = (r: PromiseSettledResult<{ pagination: { total: number } }>) =>
+          r.status === 'fulfilled' ? (r.value.pagination?.total ?? 0) : 0;
+
         setContadores({
-          tarefasPendentes: tarefasPendentes ?? 0,
-          feedbacksPendentes: feedbacksPendentes ?? 0,
-          notificacoesNaoLidas: notificacoesNaoLidas ?? 0,
-          projetsVencendo: projetsVencendo ?? 0
+          tarefasPendentes: total(resPendentes) + total(resEmAndamento),
+          feedbacksPendentes: total(resFeedbacks),
+          notificacoesNaoLidas: total(resNotificacoes),
+          projetsVencendo: total(resProjetos),
         });
       } catch (err) {
         console.error('Erro ao buscar contadores:', err);
-        if (!alive) return;
-        setContadores((prev) => ({ ...prev }));
       } finally {
         fetchingRef.current = false;
       }
@@ -187,18 +164,9 @@ export function Sidebar() {
     fetchContadores();
     const interval = setInterval(fetchContadores, 5 * 60 * 1000);
 
-    const chan = supabase
-      .channel('sidebar-counters')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tarefas' }, fetchContadores)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'feedbacks' }, fetchContadores)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notificacoes' }, fetchContadores)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projetos' }, fetchContadores)
-      .subscribe();
-
     return () => {
       alive = false;
       clearInterval(interval);
-      supabase.removeChannel(chan);
     };
   }, []);
 
@@ -422,20 +390,9 @@ function NavItemRow({
 // --- footer isolado --------------------------------------------------------
 
 function SidebarUser({ collapsed }: { collapsed: boolean }) {
-  const [email, setEmail] = useState<string>('—');
-  const [nome, setNome] = useState<string>('—');
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const u = data?.user;
-      if (!alive) return;
-      setEmail(u?.email ?? '—');
-      setNome((u?.user_metadata as any)?.name ?? 'Usuário');
-    })();
-    return () => { alive = false; };
-  }, []);
+  const { user } = useAuth();
+  const nome = user?.nome ?? 'Usuário';
+  const email = user?.email ?? '—';
 
   return (
     <div className={cn("border-t p-2", collapsed && "p-2")}>
