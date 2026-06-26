@@ -10,14 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 import {
   User as UserIcon,
   Calendar, Edit, Save, X, Loader2,
-  Shield, Bell, Lock, Trash2, Download,
+  Shield, Lock, Trash2, Download,
   BarChart3, Award, Clock, CheckCircle2,
 } from 'lucide-react'
 
@@ -94,12 +92,6 @@ export default function PerfilPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({ nome: '', email: '', telefone: '' })
-
-  const [configuracoes, setConfiguracoes] = useState({
-    notificacoesPush: true,
-    notificacoesEmail: true,
-    visibilidadePerfil: 'publico' as string,
-  })
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -236,12 +228,19 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
-                <Avatar className="w-24 h-24">
-                  <AvatarImage src={usuario.avatar || undefined} alt={usuario.nome} />
-                  <AvatarFallback className="text-lg font-semibold">
-                    {getInitials(usuario.nome)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="w-24 h-24">
+                    <AvatarImage src={usuario.avatar || undefined} alt={usuario.nome} />
+                    <AvatarFallback className="text-lg font-semibold">
+                      {getInitials(usuario.nome)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {editMode && (
+                    <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-muted-foreground">
+                      upload em breve
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <h2 className="text-xl font-semibold">{usuario.nome}</h2>
                   <p className="text-muted-foreground">{usuario.email}</p>
@@ -294,65 +293,6 @@ export default function PerfilPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Configurações
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">Notificações</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Notificações Push</p>
-                        <p className="text-sm text-muted-foreground">Receba notificações no navegador</p>
-                      </div>
-                      <Switch
-                        checked={configuracoes.notificacoesPush}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesPush: checked }))}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Notificações por Email</p>
-                        <p className="text-sm text-muted-foreground">Receba resumos por email</p>
-                      </div>
-                      <Switch
-                        checked={configuracoes.notificacoesEmail}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesEmail: checked }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h4 className="font-medium mb-3">Privacidade</h4>
-                  <div>
-                    <Label>Visibilidade do Perfil</Label>
-                    <Select
-                      value={configuracoes.visibilidadePerfil}
-                      onValueChange={(value) => setConfiguracoes((p) => ({ ...p, visibilidadePerfil: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="publico">Público</SelectItem>
-                        <SelectItem value="privado">Privado</SelectItem>
-                        <SelectItem value="equipe">Apenas Equipe</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="space-y-6">
@@ -403,14 +343,16 @@ export default function PerfilPage() {
                   Alterar Senha
                 </a>
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button variant="outline" className="w-full justify-start" disabled>
                 <Download className="h-4 w-4 mr-2" />
                 Exportar Dados
+                <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
               <Separator />
-              <Button variant="destructive" className="w-full justify-start">
+              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir Conta
+                <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
             </CardContent>
           </Card>
