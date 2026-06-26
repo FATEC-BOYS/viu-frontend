@@ -17,6 +17,7 @@ type AuthContextType = {
   user: UserProfile | null
   token: string | null
   signIn: (email: string, senha: string) => Promise<void>
+  completeTwoFactorLogin: (userId: string, code: string) => Promise<void>
   signOut: () => void
   loading: boolean
 }
@@ -58,6 +59,12 @@ function loadFromStorage(): { token: string | null; user: UserProfile | null } {
   }
 }
 
+function storeSession(token: string, refreshToken: string | undefined, usuario: UserProfile) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, JSON.stringify(usuario))
+  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [user, setUser] = useState<UserProfile | null>(null)
@@ -72,14 +79,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = useCallback(async (email: string, senha: string) => {
+    const res = await api.post<{
+      data: { token?: string; refreshToken?: string; usuario?: UserProfile; requires2FA?: boolean; userId?: string }
+      success: boolean
+    }>('/auth/login', { email, senha })
+
+    const data = res.data
+    if (data.requires2FA) {
+      const err: any = new Error('2FA_REQUIRED')
+      err.userId = data.userId
+      throw err
+    }
+
+    storeSession(data.token!, data.refreshToken, data.usuario!)
+    setToken(data.token!)
+    setUser(data.usuario!)
+  }, [])
+
+  const completeTwoFactorLogin = useCallback(async (userId: string, code: string) => {
     const res = await api.post<{ data: { token: string; refreshToken: string; usuario: UserProfile }; success: boolean }>(
-      '/auth/login',
-      { email, senha }
+      '/auth/2fa-login',
+      { userId, code }
     )
     const { token: newToken, refreshToken, usuario } = res.data
-    localStorage.setItem(TOKEN_KEY, newToken)
-    localStorage.setItem(USER_KEY, JSON.stringify(usuario))
-    if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
+    storeSession(newToken, refreshToken, usuario)
     setToken(newToken)
     setUser(usuario)
   }, [])
@@ -101,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, token, signIn, signOut, loading }}>
+    <AuthContext.Provider value={{ user, token, signIn, completeTwoFactorLogin, signOut, loading }}>
       {children}
     </AuthContext.Provider>
   )

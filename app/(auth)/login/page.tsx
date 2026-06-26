@@ -1,29 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
+import { ShieldCheck } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const search = useSearchParams();
   const nextParam = search.get('next');
-  const { signIn } = useAuth();
+  const { signIn, completeTwoFactorLogin } = useAuth();
+
+  const [step, setStep] = useState<'login' | '2fa'>('login');
+  const [pendingUserId, setPendingUserId] = useState('');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -31,16 +31,88 @@ export default function LoginPage() {
     e.preventDefault();
     setSending(true);
     setMsg(null);
-
     try {
       await signIn(email, password);
       router.push(nextParam || '/dashboard');
     } catch (err: any) {
+      if (err.message === '2FA_REQUIRED') {
+        setPendingUserId(err.userId);
+        setStep('2fa');
+        return;
+      }
       setMsg(err?.message ?? 'E-mail ou senha inválidos.');
     } finally {
       setSending(false);
     }
   };
+
+  const handle2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    setMsg(null);
+    try {
+      await completeTwoFactorLogin(pendingUserId, code);
+      router.push(nextParam || '/dashboard');
+    } catch (err: any) {
+      setMsg(err?.message ?? 'Código inválido. Tente novamente.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (step === '2fa') {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-2 text-center">
+            <div className="flex justify-center mb-2">
+              <ShieldCheck className="h-10 w-10 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Verificação em dois fatores</CardTitle>
+            <CardDescription>
+              Digite o código de 6 dígitos do seu aplicativo autenticador (ou um código de backup).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handle2FA} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="code">Código</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  maxLength={10}
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\s/g, ''))}
+                  disabled={sending}
+                  className="text-center text-lg tracking-widest"
+                  autoFocus
+                />
+              </div>
+              {msg && (
+                <p className="text-sm text-center text-destructive" aria-live="polite">{msg}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={sending || code.length < 6}>
+                {sending ? 'Verificando...' : 'Verificar'}
+              </Button>
+            </form>
+          </CardContent>
+          <CardFooter className="justify-center">
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline"
+              onClick={() => { setStep('login'); setCode(''); setMsg(null); }}
+            >
+              Voltar para o login
+            </button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -52,11 +124,9 @@ export default function LoginPage() {
             </Button>
             <div className="opacity-0 pointer-events-none select-none">←</div>
           </div>
-
           <CardTitle className="text-2xl">Bem-vindo de volta!</CardTitle>
           <CardDescription>Entre para acessar sua conta.</CardDescription>
         </CardHeader>
-
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -72,7 +142,6 @@ export default function LoginPage() {
                 disabled={sending}
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <Input
@@ -86,19 +155,14 @@ export default function LoginPage() {
                 disabled={sending}
               />
             </div>
-
             {msg && (
-              <p className="text-sm text-center text-destructive" aria-live="polite">
-                {msg}
-              </p>
+              <p className="text-sm text-center text-destructive" aria-live="polite">{msg}</p>
             )}
-
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
         </CardContent>
-
         <CardFooter className="flex justify-between text-sm">
           <Link href="/recuperar" className="text-muted-foreground hover:underline">
             Esqueci minha senha
@@ -109,5 +173,13 @@ export default function LoginPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }
