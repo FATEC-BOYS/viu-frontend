@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 
 import { listArtesOverview, type ArteOverview, type ArteStatus } from "@/lib/artes";
+import { listProjetos } from "@/lib/projects";
 import { ArteQuickLookSheet } from "@/components/artes/ArteQuickLookSheet";
 import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
 import ArteWizard from "@/components/artes/ArteWizard";
@@ -245,6 +246,7 @@ function ArteCard({
 /* ===================== Página (Inner) ===================== */
 function ArtesPageInner() {
   const { getParam, setParam, setParams } = useURLHelpers();
+  const { user } = useAuth();
   const router = useRouter();
 
   // Quick Look
@@ -327,25 +329,25 @@ function ArtesPageInner() {
   // ========= Wizard =========
   const [openWizard, setOpenWizard] = useState(false);
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [projectsForChooser, setProjectsForChooser] = useState<{ id: string; nome: string }[]>([]);
   const [choosingProject, setChoosingProject] = useState(false);
 
   async function handleOpenNewArte() {
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id ?? null;
-    setCurrentUserId(uid);
-
     let resolvedProjectId: string | null = null;
+
     if (projetoFilter && projetoFilter !== "todos") {
-      const { data: p } = await supabase.from("projetos").select("id").ilike("nome", projetoFilter).limit(1).maybeSingle();
-      if (p?.id) resolvedProjectId = p.id;
+      try {
+        const { rows } = await listProjetos({ search: projetoFilter, limit: 1 });
+        if (rows[0]?.id) resolvedProjectId = rows[0].id;
+      } catch { /* noop */ }
     }
 
     if (!resolvedProjectId) {
       setChoosingProject(true);
-      const { data: list } = await supabase.from("projetos").select("id, nome").order("criado_em", { ascending: false });
-      setProjectsForChooser(list || []);
+      try {
+        const { rows } = await listProjetos({ limit: 100 });
+        setProjectsForChooser(rows.map((p) => ({ id: p.id, nome: p.nome })));
+      } catch { /* noop */ }
     } else {
       setWizardProjectId(resolvedProjectId);
     }
@@ -602,7 +604,7 @@ function ArtesPageInner() {
             <DialogTitle>Criar nova arte</DialogTitle>
           </DialogHeader>
 
-          {!currentUserId ? (
+          {!user ? (
             <div className="text-sm text-muted-foreground">
               Você precisa estar logado para criar uma arte.
             </div>
@@ -622,10 +624,9 @@ function ArtesPageInner() {
                 </SelectContent>
               </Select>
             </div>
-          ) : wizardProjectId && currentUserId ? (
+          ) : wizardProjectId ? (
             <ArteWizard
               projetoId={wizardProjectId}
-              userId={currentUserId}
               onFinished={() => {
                 setOpenWizard(false);
                 setWizardProjectId(null);

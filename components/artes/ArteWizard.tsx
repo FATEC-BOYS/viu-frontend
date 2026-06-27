@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -11,55 +11,49 @@ import StepUpload from "./wizard/StepUpload";
 import StepOptions from "./wizard/StepOptions";
 import {
   Step,
-  randomId,
   sanitizeFilename,
-  parseStorageError,
   mimeMatchesSelection,
 } from "./wizard/helpers";
-import { createSharedLink } from "../artes/_actions";
 
 export type ArteWizardProps = {
   projetoId: string;
-  userId: string;
-  bucketName?: string; // default "artes"
   onFinished?: (arteId: string) => void;
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (backend enforces per-category)
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
-export default function ArteWizard({
-  projetoId,
-  userId,
-  bucketName = "artes",
-  onFinished,
-}: ArteWizardProps) {
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("viu_token");
+}
+
+export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Passo 1
+  // Step 1
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [mime, setMime] = useState<string>("image/png"); // default PNG
+  const [mime, setMime] = useState<string>("image/png");
 
-  // Passo 2
+  // Step 2
   const [file, setFile] = useState<File | null>(null);
   const [previewLocal, setPreviewLocal] = useState<string | null>(null);
 
   // Arte criada
   const [arteId, setArteId] = useState<string | null>(null);
 
-  // Passo 3
+  // Step 3
   const [notificarAoEnviar, setNotificarAoEnviar] = useState(true);
   const [gerarLinkPublico, setGerarLinkPublico] = useState(false);
   const [somenteLeitura, setSomenteLeitura] = useState(true);
   const [expiraDias, setExpiraDias] = useState<number>(7);
   const [preToken, setPreToken] = useState<string | null>(null);
 
-  const canStep1 = useMemo(
-    () => !!projetoId && !!userId && nome.trim().length > 0,
-    [projetoId, userId, nome]
-  );
+  const canStep1 = useMemo(() => !!projetoId && nome.trim().length > 0, [projetoId, nome]);
   const canStep2 = useMemo(() => !!file, [file]);
 
   function next(s: Step) {
@@ -67,119 +61,82 @@ export default function ArteWizard({
     setStep(s);
   }
 
-  /* ---------- Step 1: continuar ---------- */
   async function step1Continue() {
-    if (!canStep1) {
-      setErr("Informe ao menos o nome da arte.");
-      return;
-    }
+    if (!canStep1) { setErr("Informe ao menos o nome da arte."); return; }
     next(2);
   }
 
-  /* ---------- Step 2: upload + insert ---------- */
+  /* ---------- Step 2: upload multipart → POST /artes/upload ---------- */
   async function createArteWithUpload() {
-    if (!file) {
-      setErr("Selecione um arquivo.");
-      return;
-    }
-
-    // validação de tipo e tamanho
+    if (!file) { setErr("Selecione um arquivo."); return; }
     if (!mimeMatchesSelection(mime, file)) {
-      setErr(`Tipo/Extensão do arquivo não confere com o formato escolhido.`);
+      setErr("Tipo/Extensão do arquivo não confere com o formato escolhido.");
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setErr(`Arquivo excede 20MB (${(file.size / 1024 / 1024).toFixed(1)}MB).`);
+      setErr(`Arquivo excede 100MB (${(file.size / 1024 / 1024).toFixed(1)}MB).`);
       return;
     }
 
     setBusy(true);
     setErr(null);
     try {
-      const newArteId = randomId();
-      const versao = 1;
-      const ext = (file.name.split(".").pop() || "").toLowerCase() || "bin";
-      const safeName = sanitizeFilename(file.name || `arquivo.${ext}`);
-      const path = `${projetoId}/${newArteId}/v${versao}/${safeName}`;
-      const finalMime = file.type || mime || "application/octet-stream";
+      const form = new FormData();
+      form.set("file", file, file.name);
+      form.set("nome", nome.trim());
+      form.set("projetoId", projetoId);
+      if (descricao.trim()) form.set("descricao", descricao.trim());
 
-      // 1) upload no Storage
-      const { error: upErr } = await supabase.storage
-        .from(bucketName)
-        .upload(path, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-      if (upErr) throw upErr;
+      const token = getToken();
+      const res = await fetch(`${BASE_URL}/artes/upload`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
 
-      // 2) insert na tabela artes
-      const { data, error: insErr } = await supabase
-        .from("artes")
-        .insert({
-          id: newArteId,
-          projeto_id: projetoId,
-          autor_id: userId,
-          nome: nome.trim(),
-          descricao: descricao.trim() || null,
-          arquivo: path, // 👈 guardando o path no bucket
-          tipo: finalMime,
-          tamanho: file.size,
-          versao,
-          status: "EM_ANALISE",
-        })
-        .select("id")
-        .single();
-      if (insErr) throw insErr;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? `Erro ${res.status}`);
+      }
 
-      setArteId(data.id);
+      const body = await res.json();
+      const id = body?.data?.id;
+      if (!id) throw new Error("Resposta inesperada do servidor.");
+
+      setArteId(id);
       next(3);
     } catch (e: any) {
-      console.error(e);
-      setErr(
-        `Falha ao enviar arquivo ou salvar a arte: ${parseStorageError(e)}`
-      );
+      setErr(e?.message || "Falha ao enviar arquivo.");
     } finally {
       setBusy(false);
     }
   }
 
-  /* ---------- Step 3: finalizar (usa Server Action p/ criar o link) ---------- */
+  /* ---------- Step 3: opcionais (link público) ---------- */
   async function finalizeCreate() {
+    if (!arteId) { setErr("arteId ausente. Tente novamente."); return; }
     setBusy(true);
     setErr(null);
     try {
-      if (!arteId) throw new Error("arteId ausente. Tente novamente.");
-
-      // Cria link público NO SERVIDOR (bypass RLS)
       if (gerarLinkPublico) {
-        if (!preToken) {
-          throw new Error(
-            "Token do link ausente. Ative 'Gerar link público' para criar um token."
-          );
+        const token = getToken();
+        const expiraEm = new Date(Date.now() + expiraDias * 24 * 60 * 60 * 1000).toISOString();
+        const res = await fetch(`${BASE_URL}/links`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ arteId, expiraEm, somenteLeitura }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.message ?? "Falha ao criar link.");
         }
-
-        await createSharedLink({
-          token: preToken,
-          arteId,
-          expiraDias,
-          somenteLeitura,
-        });
-      }
-
-      // Notificação (best-effort; pode ficar no client)
-      if (notificarAoEnviar) {
-        await supabase.from("notificacoes").insert({
-          titulo: "Arte criada",
-          conteudo: `${nome.trim()} — versão 1`,
-          tipo: "ARTE",
-          canal: "SISTEMA",
-          usuario_id: userId,
-        });
       }
 
       onFinished?.(arteId);
     } catch (e: any) {
-      console.error(e);
       setErr(e?.message || "Falha ao finalizar a criação.");
     } finally {
       setBusy(false);
@@ -188,29 +145,17 @@ export default function ArteWizard({
 
   return (
     <div className="w-full">
-      {/* Stepper */}
       <div className="mb-4 grid grid-cols-3 gap-2 text-xs">
-        <div
-          className={`rounded-full py-1 text-center ${
-            step >= 1 ? "bg-primary text-primary-foreground" : "bg-muted"
-          }`}
-        >
-          1. Detalhes
-        </div>
-        <div
-          className={`rounded-full py-1 text-center ${
-            step >= 2 ? "bg-primary text-primary-foreground" : "bg-muted"
-          }`}
-        >
-          2. Upload
-        </div>
-        <div
-          className={`rounded-full py-1 text-center ${
-            step >= 3 ? "bg-primary text-primary-foreground" : "bg-muted"
-          }`}
-        >
-          3. Opções
-        </div>
+        {(["1. Detalhes", "2. Upload", "3. Opções"] as const).map((label, i) => (
+          <div
+            key={label}
+            className={`rounded-full py-1 text-center ${
+              step >= i + 1 ? "bg-primary text-primary-foreground" : "bg-muted"
+            }`}
+          >
+            {label}
+          </div>
+        ))}
       </div>
 
       {err && (
@@ -222,26 +167,16 @@ export default function ArteWizard({
       <div className="min-h-[320px] md:min-h-[300px] flex flex-col">
         {step === 1 && (
           <StepDetails
-            nome={nome}
-            descricao={descricao}
-            mime={mime}
-            setNome={setNome}
-            setDescricao={setDescricao}
-            setMime={setMime}
+            nome={nome} descricao={descricao} mime={mime}
+            setNome={setNome} setDescricao={setDescricao} setMime={setMime}
           />
         )}
-
         {step === 2 && (
           <StepUpload
-            mime={mime}
-            busy={busy}
-            file={file}
-            setFile={setFile}
-            setErr={setErr}
-            onPreview={setPreviewLocal}
+            mime={mime} busy={busy} file={file}
+            setFile={setFile} setErr={setErr} onPreview={setPreviewLocal}
           />
         )}
-
         {step === 3 && (
           <>
             <StepOptions
@@ -266,14 +201,9 @@ export default function ArteWizard({
         )}
       </div>
 
-      {/* Footer */}
       <div className="sticky bottom-0 mt-6 flex items-center justify-between gap-2 border-t bg-background p-4">
         {step > 1 ? (
-          <Button
-            variant="secondary"
-            onClick={() => setStep((step - 1) as Step)}
-            disabled={busy}
-          >
+          <Button variant="secondary" onClick={() => setStep((step - 1) as Step)} disabled={busy}>
             Voltar
           </Button>
         ) : (
@@ -282,21 +212,19 @@ export default function ArteWizard({
 
         {step === 1 && (
           <Button onClick={step1Continue} disabled={busy || !canStep1}>
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Continuar
           </Button>
         )}
-
         {step === 2 && (
           <Button onClick={createArteWithUpload} disabled={busy || !canStep2}>
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Continuar
           </Button>
         )}
-
         {step === 3 && (
           <Button onClick={finalizeCreate} disabled={busy}>
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar
           </Button>
         )}
