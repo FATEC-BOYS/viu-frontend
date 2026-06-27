@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card'
@@ -16,7 +17,7 @@ import {
   User as UserIcon,
   Calendar, Edit, Save, X, Loader2,
   Shield, Lock, Trash2, Download,
-  BarChart3, Award, Clock, CheckCircle2,
+  BarChart3, Award, Clock, CheckCircle2, Camera,
 } from 'lucide-react'
 
 interface UsuarioPerfil {
@@ -84,12 +85,16 @@ async function fetchTotal(path: string): Promise<number> {
 }
 
 export default function PerfilPage() {
+  const { updateUser } = useAuth()
   const [usuario, setUsuario] = useState<UsuarioPerfil | null>(null)
   const [estatisticas, setEstatisticas] = useState<EstatisticasUsuario | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState({ nome: '', email: '', telefone: '' })
 
@@ -167,6 +172,42 @@ export default function PerfilPage() {
     setEditMode(false)
   }
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !usuario) return
+
+    const preview = URL.createObjectURL(file)
+    setAvatarPreview(preview)
+    setAvatarUploading(true)
+    setError(null)
+
+    try {
+      const formPayload = new FormData()
+      formPayload.append('file', file)
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('viu_token') : null
+      const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
+      const res = await fetch(`${BASE_URL}/usuarios/${usuario.id}/avatar`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formPayload,
+      })
+
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.message ?? `Erro ${res.status}`)
+
+      const newAvatar: string | null = body.data?.avatar ?? null
+      setUsuario((prev) => prev ? { ...prev, avatar: newAvatar } : prev)
+      updateUser({ avatar: newAvatar })
+    } catch (err: any) {
+      setError(err?.message || 'Falha ao enviar avatar')
+      setAvatarPreview(null)
+    } finally {
+      setAvatarUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const formatDate = (s: string) =>
     new Date(s).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 
@@ -228,18 +269,33 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
-                <div className="relative">
+                <div className="relative group/avatar">
                   <Avatar className="w-24 h-24">
-                    <AvatarImage src={usuario.avatar || undefined} alt={usuario.nome} />
+                    <AvatarImage src={avatarPreview ?? usuario.avatar ?? undefined} alt={usuario.nome} />
                     <AvatarFallback className="text-lg font-semibold">
                       {getInitials(usuario.nome)}
                     </AvatarFallback>
                   </Avatar>
-                  {editMode && (
-                    <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-muted-foreground">
-                      upload em breve
-                    </span>
-                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={avatarUploading}
+                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity disabled:cursor-not-allowed"
+                    aria-label="Alterar foto de perfil"
+                  >
+                    {avatarUploading
+                      ? <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      : <Camera className="h-6 w-6 text-white" />}
+                  </button>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
                 </div>
                 <div className="space-y-1">
                   <h2 className="text-xl font-semibold">{usuario.nome}</h2>
