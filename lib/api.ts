@@ -72,7 +72,12 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   }
 
   const body = await res.json()
-  if (!res.ok) throw new Error(body.message ?? `Erro ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(body.message ?? `Erro ${res.status}`) as Error & { status: number; body: unknown }
+    err.status = res.status
+    err.body = body
+    throw err
+  }
   return body
 }
 

@@ -154,7 +154,7 @@ export async function getProjeto(id: string): Promise<Projeto> {
   return mapProjeto(res.data)
 }
 
-export async function createProjeto(payload: ProjetoInput) {
+export async function createProjeto(payload: ProjetoInput & { skipBriefingEval?: boolean }) {
   const errs = validateProjetoInput(payload)
   if (errs.length) throw new Error(errs.join(' | '))
   const designerId = getCurrentUserId()
@@ -167,6 +167,7 @@ export async function createProjeto(payload: ProjetoInput) {
     prazo: payload.prazo ?? null,
     clienteId: payload.cliente_id,
     designerId,
+    ...(payload.skipBriefingEval ? { skipBriefingEval: true } : {}),
   })
   return mapProjeto(res.data)
 }
