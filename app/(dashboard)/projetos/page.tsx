@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -126,7 +125,7 @@ export default function ProjetosPage() {
   }), [rows]);
 
   // CRUD
-  const onCreate = async (values: ProjetoInput) => {
+  const onCreate = async (values: ProjetoInput & { skipBriefingEval?: boolean }) => {
     setBusy(true);
     try {
       const novo = await createProjeto(values);
@@ -134,6 +133,8 @@ export default function ProjetosPage() {
       toast.success("Projeto criado. Bora brilhar ✨");
       setOpenModal(false);
     } catch (e: any) {
+      // 422 briefing eval errors are handled by the modal — propagate without toast
+      if ((e as any)?.status === 422) throw e;
       toast.error(e?.message ?? "Erro ao criar projeto"); throw e;
     } finally { setBusy(false); }
   };
@@ -154,18 +155,12 @@ export default function ProjetosPage() {
     if (!confirm("Jogar fora? Tem certeza? Ainda dá tempo de desfazer…")) return;
     setBusy(true);
     try {
-      const [{ count: artesCount, error: aErr }, { count: tarefasCount, error: tErr }] = await Promise.all([
-        supabase.from("artes").select("id", { count: "exact", head: true }).eq("projeto_id", id),
-        supabase.from("tarefas").select("id", { count: "exact", head: true }).eq("projeto_id", id),
-      ]);
-      if (aErr || tErr) throw aErr || tErr;
-      if ((artesCount ?? 0) > 0 || (tarefasCount ?? 0) > 0) {
-        toast.error("Não é possível excluir: existem artes e/ou tarefas vinculadas."); return;
-      }
       setRows((prev) => prev.filter((p) => p.id !== id));
       await deleteProjeto(id);
       toast.success("Projeto excluído!");
     } catch (e: any) {
+      // Rollback optimistic remove on failure
+      await reload();
       toast.error(e?.message ?? "Erro ao excluir");
     } finally { setBusy(false); }
   };
