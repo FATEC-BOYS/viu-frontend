@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -40,20 +40,6 @@ interface LinkCompartilhado {
   } | null;
 }
 type SortKey = 'criado_em' | 'expira_em' | 'tipo';
-
-type MaybeArray<T> = T | T[] | null | undefined;
-interface RawCliente { nome: unknown; }
-interface RawProjeto { nome: unknown; cliente: MaybeArray<RawCliente>; }
-interface RawArteEntity { nome: unknown; projeto: MaybeArray<RawProjeto>; }
-interface RawProjetoEntity { nome: unknown; cliente: MaybeArray<RawCliente>; }
-interface RawLink {
-  id: unknown; token: unknown; tipo: unknown;
-  expira_em?: unknown; somente_leitura: unknown; criado_em: unknown;
-  can_comment?: unknown; can_download?: unknown;
-  arte?: MaybeArray<RawArteEntity>;
-  projeto?: MaybeArray<RawProjetoEntity>;
-}
-const toOne = <T,>(val: MaybeArray<T>): T | null => (Array.isArray(val) ? (val[0] ?? null) : (val ?? null)) as any;
 
 /* ===================== UI helpers ===================== */
 
@@ -308,58 +294,25 @@ export default function LinksPage() {
       setLoading(true);
       setError(null);
       try {
-        const { data, error } = await supabase
-          .from('link_compartilhado')
-          .select(`
-            id, token, tipo, expira_em, somente_leitura, criado_em, can_comment, can_download,
-            arte:arte_id (
-              nome,
-              projeto:projeto_id (
-                nome,
-                cliente:cliente_id (nome)
-              )
-            ),
-            projeto:projeto_id (
-              nome,
-              cliente:cliente_id (nome)
-            )
-          `)
-          .order('criado_em', { ascending: false });
-
-        if (error) throw error;
-
-        const rawRows = (data ?? []) as RawLink[];
-        const rows: LinkCompartilhado[] = rawRows.map((r) => {
-          const arte = toOne<RawArteEntity>(r.arte ?? null);
-          const pjArte = arte ? toOne<RawProjeto>(arte.projeto) : null;
-          const cliArte = pjArte ? toOne<RawCliente>(pjArte.cliente) : null;
-
-          const projeto = toOne<RawProjetoEntity>(r.projeto ?? null);
-          const cliProj = projeto ? toOne<RawCliente>(projeto.cliente) : null;
-
-          return {
-            id: String(r.id),
-            token: String(r.token),
-            tipo: String(r.tipo) as LinkCompartilhado['tipo'],
-            expira_em: r.expira_em != null ? String(r.expira_em) : null,
-            somente_leitura: Boolean(r.somente_leitura),
-            can_comment: r.can_comment != null ? Boolean(r.can_comment) : false,
-            can_download: r.can_download != null ? Boolean(r.can_download) : false,
-            criado_em: String(r.criado_em),
-            arte: arte ? {
-              nome: String(arte.nome ?? ''),
-              projeto: {
-                nome: String(pjArte?.nome ?? ''),
-                cliente: { nome: String(cliArte?.nome ?? '') },
-              },
-            } : null,
-            projeto: projeto ? {
-              nome: String(projeto.nome ?? ''),
-              cliente: { nome: String(cliProj?.nome ?? '') },
-            } : null,
-          };
-        });
-
+        const res = await api.get<{ data: any[] }>('/links');
+        const rows: LinkCompartilhado[] = (res.data ?? []).map((r: any) => ({
+          id: String(r.id),
+          token: String(r.token),
+          tipo: String(r.tipo) as LinkCompartilhado['tipo'],
+          expira_em: r.expiraEm ?? r.expira_em ?? null,
+          somente_leitura: Boolean(r.somenteLeitura ?? r.somente_leitura),
+          can_comment: false,
+          can_download: false,
+          criado_em: r.criadoEm ?? r.criado_em ?? '',
+          arte: r.arte ? {
+            nome: String(r.arte.nome ?? ''),
+            projeto: {
+              nome: String(r.arte.projeto?.nome ?? ''),
+              cliente: { nome: String(r.arte.projeto?.cliente?.nome ?? '') },
+            },
+          } : null,
+          projeto: null,
+        }));
         setLinks(rows);
       } catch (e: any) {
         setError(e?.message ?? 'Não foi possível carregar os links compartilhados.');
@@ -425,52 +378,40 @@ export default function LinksPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      await supabase.from('link_compartilhado').delete().eq('id', id);
+      await api.delete(`/links/${id}`);
       setLinks((prev) => prev.filter((l) => l.id !== id));
-    } catch (e) { /* opcional: toast */ }
+    } catch {}
   };
 
-  const handleRegenerate = async (id: string) => {
-    try {
-      const newToken = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      await supabase.from('link_compartilhado').update({ token: newToken }).eq('id', id);
-      setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, token: newToken } : l)));
-    } catch (e) {}
+  const handleRegenerate = (_id: string) => {
+    // Regenerar token não tem endpoint dedicado no backend — no-op
   };
 
-  const updateLink = (id: string, patch: Partial<LinkCompartilhado>) =>
+  const patchLink = (id: string, patch: Partial<LinkCompartilhado>) =>
     setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
   const onToggleReadOnly = async (id: string, v: boolean) => {
-    updateLink(id, { somente_leitura: v });
-    const { error } = await supabase.from('link_compartilhado').update({ somente_leitura: v }).eq('id', id);
-    if (error) updateLink(id, { somente_leitura: !v });
+    patchLink(id, { somente_leitura: v });
+    try { await api.put(`/links/${id}`, { somenteLeitura: v }); }
+    catch { patchLink(id, { somente_leitura: !v }); }
   };
-  const onToggleComment = async (id: string, v: boolean) => {
-    updateLink(id, { can_comment: v });
-    const { error } = await supabase.from('link_compartilhado').update({ can_comment: v }).eq('id', id);
-    if (error) updateLink(id, { can_comment: !v });
-  };
-  const onToggleDownload = async (id: string, v: boolean) => {
-    updateLink(id, { can_download: v });
-    const { error } = await supabase.from('link_compartilhado').update({ can_download: v }).eq('id', id);
-    if (error) updateLink(id, { can_download: !v });
-  };
+  const onToggleComment = (_id: string, _v: boolean) => { /* can_comment não existe no backend */ };
+  const onToggleDownload = (_id: string, _v: boolean) => { /* can_download não existe no backend */ };
 
   const onExtendDays = async (id: string, days: number) => {
     const item = links.find((l) => l.id === id);
     const base = item?.expira_em ? new Date(item.expira_em) : new Date();
     const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-    updateLink(id, { expira_em: next });
-    const { error } = await supabase.from('link_compartilhado').update({ expira_em: next }).eq('id', id);
-    if (error) updateLink(id, { expira_em: item?.expira_em ?? null });
+    patchLink(id, { expira_em: next });
+    try { await api.put(`/links/${id}`, { expiraEm: next }); }
+    catch { patchLink(id, { expira_em: item?.expira_em ?? null }); }
   };
 
   const onRemoveExpiration = async (id: string) => {
     const old = links.find((l) => l.id === id)?.expira_em ?? null;
-    updateLink(id, { expira_em: null });
-    const { error } = await supabase.from('link_compartilhado').update({ expira_em: null }).eq('id', id);
-    if (error) updateLink(id, { expira_em: old });
+    patchLink(id, { expira_em: null });
+    try { await api.put(`/links/${id}`, { expiraEm: null }); }
+    catch { patchLink(id, { expira_em: old }); }
   };
 
   // ===== Render =====
