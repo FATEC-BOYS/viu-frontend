@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,7 +12,7 @@ type Props = {
   onIdentified: (viewer: { email: string; nome?: string | null }) => void;
 };
 
-export default function IdentityGate({ token, arteId, onIdentified }: Props) {
+export default function IdentityGate({ token: _token, arteId: _arteId, onIdentified }: Props) {
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState("");
   const [nome, setNome] = useState("");
@@ -22,9 +21,8 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
 
   useEffect(() => {
     setMounted(true);
-    (window as any).__viu_modal_open__ = true;           // pausa atalhos globais
+    (window as any).__viu_modal_open__ = true;
 
-    // trava rolagem atrás do modal
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -43,18 +41,17 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
   }, [onIdentified]);
 
   const handleConfirm = async () => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Informe um e-mail válido.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const { data, error } = await supabase.rpc("viewer_identify", {
-        p_token: token,
-        p_arte_id: arteId,
-        p_email: email,
-        p_nome: nome || null,
-      });
-      if (error) throw error;
-      localStorage.setItem("viu.viewer", JSON.stringify({ email: data.email, nome: data.nome }));
-      onIdentified({ email: data.email, nome: data.nome });
+      // Identificação local — o backend valida a identidade ao submeter feedback via token
+      const viewer = { email: email.trim().toLowerCase(), nome: nome.trim() || null };
+      localStorage.setItem("viu.viewer", JSON.stringify(viewer));
+      onIdentified(viewer);
     } catch (e: any) {
       setError(e?.message || "Não foi possível identificar você.");
     } finally {
@@ -69,7 +66,6 @@ export default function IdentityGate({ token, arteId, onIdentified }: Props) {
       className="fixed inset-0 z-[1000] grid place-items-center bg-black/40 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      // bloqueia que atalhos globais capturem as teclas do input
       onKeyDownCapture={(e) => e.stopPropagation()}
       onKeyUpCapture={(e) => e.stopPropagation()}
       onKeyPressCapture={(e) => e.stopPropagation()}

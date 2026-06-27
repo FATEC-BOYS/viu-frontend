@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,64 +11,36 @@ import { PartyPopper, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepConcluido() {
+  const { user } = useAuth()
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
   const [latestProjectId, setLatestProjectId] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!user) return
     let live = true
+    async function check() {
+      try {
+        const projetosRes = await api.get<{ data: { id: string; status: string }[]; pagination: { total: number } }>('/projetos?limit=1')
+        if (!live) return
+        const projeto = projetosRes.data?.[0]
+        setLatestProjectId(projeto?.id ?? null)
+        if (!projeto) { setState('locked'); setLoading(false); return }
 
-    async function checkFinalizado() {
-      const { data: user } = await supabase.auth.getUser()
-      const userId = user?.user?.id
-      if (!userId) return
+        if (projeto.status === 'CONCLUIDO') { setState('done'); setLoading(false); return }
 
-      // Projeto mais recente do designer
-      const { data: projetos } = await supabase
-        .from('projetos')
-        .select('id, status')
-        .eq('designer_id', userId)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-
-      const projeto = projetos?.[0]
-      const projetoId = projeto?.id
-      setLatestProjectId(projetoId ?? null)
-
-      if (!projetoId) {
-        setState('locked')
-        setLoading(false)
-        return
-      }
-
-      // Se o projeto já está concluído, acabou 🎉
-      if (projeto.status === 'CONCLUIDO') {
-        setState('done')
-        setLoading(false)
-        return
-      }
-
-      // Caso contrário, verificar se alguma arte do projeto está aprovada
-      const { data: artesAprovadas, error } = await supabase
-        .from('artes')
-        .select('id')
-        .eq('projeto_id', projetoId)
-        .eq('status_atual', 'APROVADO')
-        .limit(1)
-
-      if (error) {
-        console.error('Erro ao verificar artes aprovadas', error)
+        const artesRes = await api.get<{ pagination: { total: number } }>(`/artes?projetoId=${projeto.id}&status=APROVADO&limit=1`)
+        if (!live) return
+        setState((artesRes.pagination?.total ?? 0) > 0 ? 'done' : 'active')
+      } catch {
         setState('active')
-      } else {
-        setState((artesAprovadas?.length ?? 0) > 0 ? 'done' : 'active')
+      } finally {
+        if (live) setLoading(false)
       }
-
-      setLoading(false)
     }
-
-    checkFinalizado()
+    check()
     return () => { live = false }
-  }, [])
+  }, [user])
 
   const isLocked = state === 'locked'
   const isDone = state === 'done'

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,68 +11,38 @@ import { MessageSquareText, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepFeedback() {
+  const { user } = useAuth()
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) return
     let live = true
+    async function check() {
+      try {
+        // Pré-requisito: ter um projeto com pelo menos uma arte
+        const projetosRes = await api.get<{ data: { id: string }[]; pagination: { total: number } }>('/projetos?limit=1')
+        if (!live) return
+        const projetoId = projetosRes.data?.[0]?.id
+        if (!projetoId) { setState('locked'); setLoading(false); return }
 
-    async function checkFeedback() {
-      const { data: user } = await supabase.auth.getUser()
-      const userId = user?.user?.id
-      if (!userId) return
+        const artesRes = await api.get<{ pagination: { total: number } }>(`/artes?projetoId=${projetoId}&limit=1`)
+        if (!live) return
+        if ((artesRes.pagination?.total ?? 0) === 0) { setState('locked'); setLoading(false); return }
 
-      // Projeto mais recente do designer
-      const { data: projetos } = await supabase
-        .from('projetos')
-        .select('id')
-        .eq('designer_id', userId)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-
-      const projetoId = projetos?.[0]?.id
-      if (!projetoId) {
-        setState('locked')
-        setLoading(false)
-        return
+        // Há feedbacks?
+        const fbRes = await api.get<{ pagination: { total: number } }>('/feedbacks?limit=1')
+        if (!live) return
+        setState((fbRes.pagination?.total ?? 0) > 0 ? 'done' : 'active')
+      } catch {
+        setState('active')
+      } finally {
+        if (live) setLoading(false)
       }
-
-      // Artes do projeto
-      const { data: artes } = await supabase
-        .from('artes')
-        .select('id')
-        .eq('projeto_id', projetoId)
-
-      const arteIds = (artes ?? []).map(a => a.id)
-      if (arteIds.length === 0) {
-        setState('locked')
-        setLoading(false)
-        return
-      }
-
-      // Há feedbacks nessas artes?
-      const { count: fbCount } = await supabase
-        .from('feedbacks')
-        .select('*', { count: 'exact', head: true })
-        .in('arte_id', arteIds)
-
-      // Ou já existe link compartilhado com permissão para comentar?
-      const { count: linkCount } = await supabase
-        .from('link_compartilhado')
-        .select('*', { count: 'exact', head: true })
-        .eq('projeto_id', projetoId)
-        .eq('can_comment', true)
-
-      const hasFeedbackOrLink = (fbCount ?? 0) > 0 || (linkCount ?? 0) > 0
-
-      if (!live) return
-      setState(hasFeedbackOrLink ? 'done' : 'active')
-      setLoading(false)
     }
-
-    checkFeedback()
+    check()
     return () => { live = false }
-  }, [])
+  }, [user])
 
   const isLocked = state === 'locked'
   const isDone = state === 'done'
@@ -96,7 +67,7 @@ export default function StepFeedback() {
               {isLocked
                 ? 'Envie uma arte primeiro para compartilhar e receber comentários.'
                 : isDone
-                ? 'Feedback recebido (ou link já gerado)! Próxima parada: aprovação ✅'
+                ? 'Feedback recebido! Próxima parada: aprovação ✅'
                 : 'Compartilhe um link de review e receba comentários direto na peça.'}
             </CardDescription>
             {!isDone && (

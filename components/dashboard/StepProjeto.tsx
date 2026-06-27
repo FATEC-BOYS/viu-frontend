@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,48 +11,32 @@ import { FolderPlus, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepProjeto() {
+  const { user } = useAuth()
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) return
     let live = true
-    async function checkProjetos() {
-      const { data: user } = await supabase.auth.getUser()
-      const userId = user?.user?.id
-      if (!userId) return
-
-      // Verifica se há pelo menos um cliente cadastrado
-      const { count: clientesCount } = await supabase
-        .from('usuarios')
-        .select('*', { count: 'exact', head: true })
-        .eq('tipo', 'CLIENTE')
-
-      if (!clientesCount || clientesCount === 0) {
-        setState('locked')
-        setLoading(false)
-        return
-      }
-
-      // Verifica se já existem projetos do designer atual
-      const { count, error } = await supabase
-        .from('projetos')
-        .select('*', { count: 'exact', head: true })
-        .eq('designer_id', userId)
-
-      if (!live) return
-      if (error) {
-        console.error('Erro ao verificar projetos', error)
+    async function check() {
+      try {
+        const [clientesRes, projetosRes] = await Promise.all([
+          api.get<{ pagination: { total: number } }>('/usuarios?tipo=CLIENTE&limit=1'),
+          api.get<{ pagination: { total: number } }>('/projetos?limit=1'),
+        ])
+        if (!live) return
+        const hasClientes = (clientesRes.pagination?.total ?? 0) > 0
+        const hasProjetos = (projetosRes.pagination?.total ?? 0) > 0
+        setState(!hasClientes ? 'locked' : hasProjetos ? 'done' : 'active')
+      } catch {
         setState('active')
-      } else {
-        setState(count && count > 0 ? 'done' : 'active')
+      } finally {
+        if (live) setLoading(false)
       }
-      setLoading(false)
     }
-    checkProjetos()
-    return () => {
-      live = false
-    }
-  }, [])
+    check()
+    return () => { live = false }
+  }, [user])
 
   const isLocked = state === 'locked'
   const isDone = state === 'done'

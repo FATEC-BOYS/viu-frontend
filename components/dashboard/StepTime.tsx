@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,54 +11,29 @@ import { Users, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepTime() {
+  const { user } = useAuth()
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) return
     let live = true
-
-    async function checkParticipantes() {
-      const { data: user } = await supabase.auth.getUser()
-      const userId = user?.user?.id
-      if (!userId) return
-
-      // Busca o projeto mais recente do designer
-      const { data: projetos } = await supabase
-        .from('projetos')
-        .select('id')
-        .eq('designer_id', userId)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-
-      const projetoId = projetos?.[0]?.id
-      if (!projetoId) {
+    async function check() {
+      try {
+        // Verifica se há algum projeto (pré-requisito para convidar time)
+        // Não há endpoint de participantes no backend — step sempre 'active' se projeto existe
+        const res = await api.get<{ pagination: { total: number } }>('/projetos?limit=1')
+        if (!live) return
+        setState((res.pagination?.total ?? 0) > 0 ? 'active' : 'locked')
+      } catch {
         setState('locked')
-        setLoading(false)
-        return
+      } finally {
+        if (live) setLoading(false)
       }
-
-      // Verifica se há participantes (além do próprio designer)
-      const { count, error } = await supabase
-        .from('projeto_participantes')
-        .select('*', { count: 'exact', head: true })
-        .eq('projeto_id', projetoId)
-        .neq('usuario_id', userId)
-
-      if (!live) return
-      if (error) {
-        console.error('Erro ao verificar participantes', error)
-        setState('active')
-      } else {
-        setState(count && count > 0 ? 'done' : 'active')
-      }
-      setLoading(false)
     }
-
-    checkParticipantes()
-    return () => {
-      live = false
-    }
-  }, [])
+    check()
+    return () => { live = false }
+  }, [user])
 
   const isLocked = state === 'locked'
   const isDone = state === 'done'

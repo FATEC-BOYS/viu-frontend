@@ -2,44 +2,37 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Lock, UserPlus, CheckCircle } from 'lucide-react'
+import { UserPlus, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepCliente() {
-  const [state, setState] = useState<'locked' | 'active' | 'done'>('active')
+  const { user } = useAuth()
+  const [state, setState] = useState<'active' | 'done'>('active')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) return
     let live = true
-    async function checkClientes() {
-      const { data: user } = await supabase.auth.getUser()
-      if (!user?.user) return
-
-      const { count, error } = await supabase
-        .from('usuarios')
-        .select('*', { count: 'exact', head: true })
-        .eq('tipo', 'CLIENTE')
-
-      if (!live) return
-      if (error) {
-        console.error('Erro ao verificar clientes', error)
+    async function check() {
+      try {
+        const res = await api.get<{ pagination: { total: number } }>('/usuarios?tipo=CLIENTE&limit=1')
+        if (!live) return
+        setState((res.pagination?.total ?? 0) > 0 ? 'done' : 'active')
+      } catch {
         setState('active')
-      } else {
-        setState(count && count > 0 ? 'done' : 'active')
+      } finally {
+        if (live) setLoading(false)
       }
-      setLoading(false)
     }
-    checkClientes()
-    return () => {
-      live = false
-    }
-  }, [])
+    check()
+    return () => { live = false }
+  }, [user])
 
-  const isLocked = state === 'locked'
   const isDone = state === 'done'
 
   return (
@@ -64,7 +57,7 @@ export default function StepCliente() {
                 : 'Projetos precisam de um dono do outro lado. Cadastre um cliente pra chamar de seu 😉'}
             </CardDescription>
             {!isDone && (
-              <Button asChild disabled={isLocked}>
+              <Button asChild>
                 <Link href="/clientes/novo">Cadastrar cliente</Link>
               </Button>
             )}

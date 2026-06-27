@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
+import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { X } from "lucide-react";
 
 type Props = { open: boolean; onOpenChange: (v: boolean) => void; onCreated?: (clienteId: string) => void; };
@@ -31,43 +32,8 @@ function formatTodayISO(date?: Date) {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 function slugify(s: string) {
-  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "").slice(0, 40);
-}
-
-/** === DEBUG/ERROS RICOS === */
-function asError(e: unknown): Error {
-  if (e instanceof Error) return e;
-  try { return new Error(JSON.stringify(e)); } catch { return new Error(String(e)); }
-}
-function fail(label: string, payload?: any): never {
-  // eslint-disable-next-line no-console
-  console.error(`[${label}]`, payload ?? "(sem payload)");
-  const msg =
-    (payload?.message as string) ||
-    (payload?.error?.message as string) ||
-    (typeof payload === "string" ? payload : "") ||
-    label;
-  throw new Error(`${label}: ${msg}`);
-}
-function hasRealError(err: any) {
-  if (!err) return false;
-  if (typeof err === "string") return err.trim().length > 0;
-  if (typeof err === "object") {
-    const keys = Object.keys(err);
-    if (keys.length === 0) return false; // {} não é erro real
-    return Boolean(err.message || err.code || err.details || err.hint);
-  }
-  return true;
-}
-function assertOk<T>(label: string, res: { data: T; error: any }) {
-  if (hasRealError(res?.error)) fail(label, res.error);
-  if (res?.data === undefined || res?.data === null) {
-    // eslint-disable-next-line no-console
-    console.error(`[${label}] sem data`, res);
-    fail(label, { message: "Resposta sem data." });
-  }
-  return res.data;
 }
 
 const steps = [
@@ -78,6 +44,7 @@ const steps = [
 ] as const;
 
 export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const progress = Math.round(((step + 1) / steps.length) * 100);
   const current = steps[step];
@@ -96,7 +63,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   const [criarProjeto, setCriarProjeto] = useState(false);
   const [proj, setProj] = useState<ProjetoForm>({ nome: "", prazo: formatTodayISO(), orcamento: "" });
 
-  // Step 2 — Contatos (opcional)
+  // Step 2 — Contatos (opcional — sem endpoint dedicado no backend)
   const [addContatos, setAddContatos] = useState(false);
   const [contatos, setContatos] = useState<Contato[]>([]);
   const addContato = () => setContatos((prev) => [...prev, { nome: "", email: "", telefone: "" }]);
@@ -107,7 +74,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   const isLast = step === steps.length - 1;
   const isFirst = step === 0;
 
-  // atalhos
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -122,7 +88,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     return () => window.removeEventListener("keydown", onKey);
   }, [open, step, isFirst, isLast, submitting]);
 
-  // preview avatar
   useEffect(() => {
     if (!avatarFile) { setAvatarPreview(""); return; }
     const url = URL.createObjectURL(avatarFile);
@@ -149,24 +114,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   }
   const handleNext = () => { if (validateStep(step)) setStep((s) => Math.min(s + 1, steps.length - 1)); };
 
-  async function uploadAvatarIfNeeded(authUserId: string): Promise<string> {
-    if (!avatarFile) return avatarUrl?.trim() ?? "";
-
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
-    if (!allowed.includes(avatarFile.type)) fail("Upload do avatar", { message: "Formato não suportado (PNG, JPG, WEBP, GIF)." });
-    if (avatarFile.size > 4 * 1024 * 1024) fail("Upload do avatar", { message: "Avatar muito grande (máx. 4 MB)." });
-
-    const ext = avatarFile.name.split(".").pop()?.toLowerCase() || "png";
-    const uuid = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
-    const key = `${authUserId}/clientes/${uuid}-${slugify(nome || "cliente")}.${ext}`;
-
-    const uploadRes = await supabase.storage.from("avatars").upload(key, avatarFile, { upsert: true, contentType: avatarFile.type });
-    assertOk("Upload do avatar", uploadRes as any);
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(key);
-    return data?.publicUrl ?? "";
-  }
-
   const onSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (submitting) return;
@@ -175,87 +122,58 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     try {
       setSubmitting(true);
 
-      // 0) AUTH
-      const authRes = await supabase.auth.getUser();
-      const authUser = authRes?.data?.user;
-      if (!authUser) fail("Autenticação", authRes);
+      // 1) Cria o usuário cliente via REST API
+      // Gera senha temporária — o cliente pode redefinir via "esqueci minha senha"
+      const tempPassword = `Viu@${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      const clienteRes = await api.post<{ data: { id: string } }>('/usuarios', {
+        nome: nome.trim(),
+        email: email.trim(),
+        senha: tempPassword,
+        telefone: telefone || undefined,
+        tipo: "CLIENTE",
+      });
+      const clienteId = clienteRes.data?.id;
+      if (!clienteId) throw new Error("Não retornou id do cliente.");
 
-      // 1) UPLOAD (se necessário)
-      let finalAvatarUrl = avatarUrl?.trim() ?? "";
-      try {
-        finalAvatarUrl = await uploadAvatarIfNeeded(authUser.id);
-      } catch (e) {
-        const err = asError(e);
-        toast.error(err.message);
-        // segue sem avatar se falhar
+      // 2) Upload de avatar (se arquivo selecionado)
+      if (avatarFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", avatarFile);
+          const token = typeof window !== "undefined" ? localStorage.getItem("viu_token") : null;
+          const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
+          await fetch(`${BASE_URL}/usuarios/${clienteId}/avatar`, {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
+          });
+        } catch {
+          // avatar falhou mas o cliente foi criado — segue
+        }
       }
 
-      // 2) MAPEAR auth_user -> usuarios.id (designer)
-      const mapRes = await supabase.from("usuario_auth").select("usuario_id").eq("auth_user_id", authUser.id).single();
-      const mapData = assertOk<{ usuario_id: string }>("Mapeamento usuario_auth", mapRes as any);
-      const designerUsuarioId = mapData?.usuario_id as string;
-      if (!designerUsuarioId) fail("Mapeamento usuario_auth", { message: "usuario_id não encontrado para o usuário logado." });
-
-      // 3) CRIAR CLIENTE
-      const clienteRes = await supabase
-        .from("usuarios")
-        .insert({
-          nome: nome.trim(),
-          email: email.trim(),
-          telefone: telefone || null,
-          avatar: finalAvatarUrl || null,
-          tipo: "CLIENTE",
-          ativo,
-        })
-        .select("id")
-        .single();
-
-      const cliente = assertOk<{ id: string }>("Criar cliente", clienteRes as any);
-      if (!cliente?.id) {
-        // eslint-disable-next-line no-console
-        console.error("[Criar cliente] resposta inesperada", clienteRes);
-        fail("Criar cliente", { message: "Não retornou id do cliente." });
-      }
-      const clienteId = cliente.id;
-
-      // 4) PROJETO OPCIONAL
+      // 3) Projeto opcional
       if (criarProjeto && proj.nome.trim()) {
         const orcCents = centsFromBRLString(proj.orcamento);
         const prazoISO = proj.prazo ? new Date(proj.prazo).toISOString() : null;
-
-        const projRes = await supabase.from("projetos").insert({
+        await api.post('/projetos', {
           nome: proj.nome.trim(),
           descricao: null,
           status: "EM_ANDAMENTO",
-          orcamento: orcCents || null,
+          orcamento: orcCents || undefined,
           prazo: prazoISO,
-          designer_id: designerUsuarioId,
-          cliente_id: clienteId,
+          clienteId,
         });
-        assertOk("Criar projeto inicial", projRes as any);
       }
 
-      // 5) CONTATOS OPCIONAIS
-      if (addContatos && contatos.length > 0) {
-        const rows = contatos.map((ct) => ({
-          owner_id: designerUsuarioId,
-          contato_usuario_id: null,
-          email: ct.email.trim(),
-          nome: ct.nome.trim(),
-          tipo: "CLIENTE",
-        }));
-        const ctRes = await supabase.from("contatos").insert(rows);
-        assertOk("Criar contatos", ctRes as any);
-      }
+      // 4) Contatos opcionais — sem endpoint dedicado no backend ainda
+      // TODO: implementar endpoint POST /contatos quando disponível no backend
 
       toast.success("Cliente criado com sucesso!");
       onCreated?.(clienteId);
       handleClose();
-    } catch (err) {
-      const e = asError(err);
-      // eslint-disable-next-line no-console
-      console.error(e);
-      toast.error(e.message || "Não foi possível concluir o cadastro.");
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível concluir o cadastro.");
     } finally {
       setSubmitting(false);
     }
@@ -274,7 +192,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetAll(); onOpenChange(v); }}>
       <DialogContent className="max-w-xl">
-        {/* close topo-direito */}
         <DialogClose asChild>
           <Button variant="ghost" size="icon" className="absolute right-2 top-2" title="Fechar">
             <X className="h-4 w-4" />
@@ -299,7 +216,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
           <Progress value={progress} />
         </div>
 
-        {/* FORM */}
         <form onSubmit={onSubmit} className="space-y-6">
           {/* 0 - Cliente */}
           {step === 0 && (
@@ -467,7 +383,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
             </div>
           )}
 
-          {/* Footer */}
           <DialogFooter className="flex items-center justify-end gap-2">
             {!isFirst && (
               <Button type="button" variant="outline" onClick={() => setStep((s) => s - 1)} disabled={submitting}>

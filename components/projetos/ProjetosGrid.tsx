@@ -2,41 +2,33 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import ProjetoModal from "./ProjetoModal";
 import { toast } from "sonner";
 import type { ProjetoInput } from "@/lib/projects";
 
 export default function ProjetosGrid({ initial }: { initial: any[] }) {
+  const { user } = useAuth();
   const [projetos, setProjetos] = useState(initial);
   const [open, setOpen] = useState(false);
 
   async function handleCreate(values: ProjetoInput) {
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const designerId = auth?.user?.id;
-      if (!designerId) throw new Error("Usuário não autenticado.");
+      if (!user?.id) throw new Error("Usuário não autenticado.");
 
-      // converte R$ -> centavos
       const orcamentoCentavos = Math.round((values.orcamento ?? 0) * 100);
 
-      const { data, error } = await supabase
-        .from("projetos")
-        .insert({
-          nome: values.nome,
-          descricao: values.descricao ?? null,
-          status: values.status,
-          prazo: values.prazo ?? null,     // string ISO ou null
-          orcamento: orcamentoCentavos,    // centavos
-          designer_id: designerId,         // obrigatório
-          cliente_id: values.cliente_id,
-        })
-        .select("*")
-        .single();
+      const data = await api.post('/projetos', {
+        nome: values.nome,
+        descricao: values.descricao ?? null,
+        status: values.status,
+        prazo: values.prazo ?? null,
+        orcamento: orcamentoCentavos,
+        clienteId: values.cliente_id,
+      });
 
-      if (error) throw error;
-
-      setProjetos((prev: any[]) => [data, ...prev]); // optimistic pós-retorno
+      setProjetos((prev: any[]) => [data, ...prev]);
       toast.success("Projeto criado com sucesso!");
       setOpen(false);
     } catch (e: any) {

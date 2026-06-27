@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,51 +11,32 @@ import { ImagePlus, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function StepArte() {
+  const { user } = useAuth()
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!user) return
     let live = true
+    async function check() {
+      try {
+        const projetosRes = await api.get<{ data: { id: string }[]; pagination: { total: number } }>('/projetos?limit=1')
+        if (!live) return
+        const projetoId = projetosRes.data?.[0]?.id
+        if (!projetoId) { setState('locked'); setLoading(false); return }
 
-    async function checkArtes() {
-      const { data: user } = await supabase.auth.getUser()
-      const userId = user?.user?.id
-      if (!userId) return
-
-      // Projeto mais recente do designer
-      const { data: projetos } = await supabase
-        .from('projetos')
-        .select('id')
-        .eq('designer_id', userId)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-
-      const projetoId = projetos?.[0]?.id
-      if (!projetoId) {
-        setState('locked')
-        setLoading(false)
-        return
-      }
-
-      // Verifica se já existe alguma arte no projeto
-      const { count, error } = await supabase
-        .from('artes')
-        .select('*', { count: 'exact', head: true })
-        .eq('projeto_id', projetoId)
-
-      if (!live) return
-      if (error) {
-        console.error('Erro ao verificar artes', error)
+        const artesRes = await api.get<{ pagination: { total: number } }>(`/artes?projetoId=${projetoId}&limit=1`)
+        if (!live) return
+        setState((artesRes.pagination?.total ?? 0) > 0 ? 'done' : 'active')
+      } catch {
         setState('active')
-      } else {
-        setState(count && count > 0 ? 'done' : 'active')
+      } finally {
+        if (live) setLoading(false)
       }
-      setLoading(false)
     }
-
-    checkArtes()
+    check()
     return () => { live = false }
-  }, [])
+  }, [user])
 
   const isLocked = state === 'locked'
   const isDone = state === 'done'

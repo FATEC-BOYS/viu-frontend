@@ -1,8 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mic, Square, Upload } from "lucide-react";
+import { Loader2, Mic, Square } from "lucide-react";
+
+// TODO: O upload de áudio deve ser feito via POST /feedbacks com FormData (multipart).
+// O backend precisa expor um endpoint que aceite o arquivo webm e retorne a URL pública/path.
+// Este componente é dead code (não importado em lugar nenhum) — implementar ao ativar.
 
 type Props = {
   arteId: string;
@@ -38,16 +41,17 @@ export default function AudioRecorder({ arteId, onUploaded, disabled }: Props) {
     try {
       const blob = new Blob(chunksRef.current, { type: "audio/webm" });
       const file = new File([blob], "feedback.webm", { type: "audio/webm" });
-      const key = `feedbacks/${arteId}/${Date.now()}.webm`;
-      const { error } = await supabase.storage.from("viewer-uploads").upload(key, file, {
-        upsert: false,
-        contentType: "audio/webm",
-      });
-      if (error) throw error;
-      const { data: pub } = supabase.storage.from("viewer-uploads").getPublicUrl(key);
-      onUploaded(pub.publicUrl, key);
+      const formData = new FormData();
+      formData.append("arteId", arteId);
+      formData.append("file", file);
+      // TODO: implementar chamada ao backend
+      // const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+      // const res = await fetch(`${BASE_URL}/feedbacks/audio`, { method: "POST", body: formData,
+      //   headers: { Authorization: `Bearer ${localStorage.getItem("viu_token")}` } });
+      // const data = await res.json();
+      // onUploaded(data.url, data.path);
+      console.warn("AudioRecorder: upload de áudio ainda não implementado no backend");
     } catch (e) {
-      // TODO: toast
       console.error(e);
     } finally {
       setUploading(false);
