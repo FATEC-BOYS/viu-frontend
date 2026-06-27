@@ -1,59 +1,34 @@
-// app/api/link-debug/[token]/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { createClient } from "@supabase/supabase-js";
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
 export async function GET(_req: Request, ctx: any) {
   const p = ctx?.params;
   const { token } = p && typeof p.then === "function" ? await p : p || {};
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    const res = await fetch(`${BACKEND_URL}/preview/${token}`, { cache: "no-store" });
+    const body = await res.json().catch(() => null);
 
-  if (!url || !serviceKey) {
-    return new Response(
-      JSON.stringify({ error: "Supabase environment variables not configured" }),
-      { status: 500, headers: { "content-type": "application/json" } }
-    );
-  }
+    const out: any = { status: res.status, ok: res.ok };
 
-  // sanity: inspeciona metadados da chave (sem vazar segredo)
-  const meta = (() => {
-    try {
-      const payload = JSON.parse(
-        Buffer.from(serviceKey.split(".")[1], "base64").toString("utf8")
-      );
-      return { ref: payload?.ref ?? null, role: payload?.role ?? null };
-    } catch {
-      return null;
+    if (res.ok && body?.data) {
+      const { arte, somenteLeitura } = body.data;
+      out.link = { token, somenteLeitura };
+      out.arte = arte ? { id: arte.id, nome: arte.nome, arquivo: arte.arquivo } : null;
+    } else {
+      out.error = body?.message ?? "Link não encontrado ou expirado";
     }
-  })();
 
-  const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
-
-  const nowIso = new Date().toISOString();
-  const sel = await supabase
-    .from("link_compartilhado")
-    .select("id, token, expira_em, somente_leitura, arte_id, projeto_id")
-    .eq("token", token)
-    .or(`expira_em.is.null,expira_em.gt.${nowIso}`)
-    .maybeSingle();
-
-  const out: any = {
-    keyMeta: meta, // { ref, role }
-    link: { data: sel.data, error: sel.error?.message ?? null, code: sel.error?.code ?? null },
-  };
-
-  if (sel.data) {
-    const arte = await supabase.from("artes")
-      .select("id, nome, arquivo")
-      .eq("id", sel.data.arte_id)
-      .single();
-    out.arte = { data: arte.data, error: arte.error?.message ?? null, code: arte.error?.code ?? null };
+    return new Response(JSON.stringify(out, null, 2), {
+      status: res.ok ? 200 : res.status,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (e: any) {
+    return new Response(JSON.stringify({ error: e.message ?? "Erro interno" }, null, 2), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
   }
-
-  return new Response(JSON.stringify(out, null, 2), {
-    headers: { "content-type": "application/json" },
-  });
 }

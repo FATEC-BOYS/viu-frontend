@@ -1,6 +1,6 @@
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse } from "next/server";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 export async function GET(req: Request) {
@@ -12,30 +12,34 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, label: null }, { status: 400 });
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) return Response.json({ ok: false, label: null }, { status: 401 });
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) return Response.json({ ok: false, label: null }, { status: 401 });
 
-  // Se for email, a label é o próprio email (ou nome se existir em contatos).
   const isEmail = EMAIL_RE.test(id);
 
-  // Procura nos seus contatos:
-  const { data, error } = await supabase
-    .from("contatos")
-    .select("email, nome, contato_usuario_id")
-    .eq("owner_id", auth.user.id)
-    .eq("tipo", tipo)
-    .or(
-      isEmail
-        ? `email.eq.${id}`
-        : `contato_usuario_id.eq.${id}`
-    )
-    .limit(1)
-    .maybeSingle();
+  try {
+    if (!isEmail) {
+      // É um UUID — busca direto pelo id
+      const res = await fetch(`${BACKEND_URL}/usuarios/${id}`, {
+        headers: { Authorization: authHeader },
+        cache: "no-store",
+      });
+      if (!res.ok) return Response.json({ ok: true, label: id });
+      const body = await res.json();
+      const u = body.data;
+      return Response.json({ ok: true, label: u?.nome || u?.email || id });
+    }
 
-  if (error) return Response.json({ ok: true, label: isEmail ? id : id });
-
-  // Se achou contato → nome || email; se não, e for email → o email; se não, mostra o id cru (último caso).
-  const label = data ? (data.nome || data.email) : (isEmail ? id : id);
-  return Response.json({ ok: true, label });
+    // É email — busca todos do tipo e filtra
+    const res = await fetch(`${BACKEND_URL}/usuarios?tipo=${tipo}&limit=200`, {
+      headers: { Authorization: authHeader },
+      cache: "no-store",
+    });
+    if (!res.ok) return Response.json({ ok: true, label: id });
+    const body = await res.json();
+    const found = (body.data ?? []).find((u: any) => u.email?.toLowerCase() === id.toLowerCase());
+    return Response.json({ ok: true, label: found ? (found.nome || found.email) : id });
+  } catch {
+    return Response.json({ ok: true, label: id });
+  }
 }
