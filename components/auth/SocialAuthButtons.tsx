@@ -1,5 +1,17 @@
 "use client";
 
+// TODO: Google OAuth — este componente está pronto para uso, mas o backend ainda não implementa o flow.
+// Backend necessário (viu-backend):
+//   1. Instalar: @fastify/passport + passport-google-oauth20
+//   2. Criar GET /auth/google          → redireciona para consent screen do Google
+//   3. Criar GET /auth/google/callback → recebe code, troca por perfil, cria/atualiza usuário,
+//      gera JWT e redireciona para o frontend em /auth/callback?token=<jwt>
+//   4. Configurar env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL
+// Frontend necessário:
+//   - Criar /app/(auth)/callback/page.tsx que lê ?token= da URL, salva em localStorage e redireciona
+//   - Passar onGoogle={() => { window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google` }}
+//     para este componente nas páginas de login e cadastro
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
