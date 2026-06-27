@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,14 +30,6 @@ interface Notificacao {
 }
 
 type SortKey = 'criado_em' | 'titulo' | 'tipo' | 'status';
-
-type MaybeArray<T> = T | T[] | null | undefined;
-interface RawUsuario { nome: unknown }
-interface RawNotificacao {
-  id: unknown; titulo: unknown; conteudo: unknown; tipo: unknown; canal: unknown; lida: unknown; criado_em: unknown;
-  usuario: MaybeArray<RawUsuario>;
-}
-const toOne = <T,>(val: MaybeArray<T>): T | null => Array.isArray(val) ? (val[0] ?? null) as T | null : (val ?? null) as T | null;
 
 /* ===================== Pequenos helpers ===================== */
 
@@ -186,31 +178,17 @@ export default function NotificacoesPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('notificacoes')
-          .select(`
-            id, titulo, conteudo, tipo, canal, lida, criado_em,
-            usuario:usuario_id (nome)
-          `)
-          .order('criado_em', { ascending: false });
-
-        if (error) throw error;
-
-        const raw = (data ?? []) as RawNotificacao[];
-        const mapped: Notificacao[] = raw.map(r => {
-          const u = toOne<RawUsuario>(r.usuario);
-          return {
-            id: String(r.id),
-            titulo: String(r.titulo),
-            conteudo: String(r.conteudo),
-            tipo: String(r.tipo) as Notificacao['tipo'],
-            canal: String(r.canal) as Notificacao['canal'],
-            lida: Boolean(r.lida),
-            criado_em: String(r.criado_em),
-            usuario: { nome: String(u?.nome ?? '—') },
-          };
-        });
-
+        const res = await api.get<{ data: any[] }>('/notificacoes?limit=100');
+        const mapped: Notificacao[] = (res.data ?? []).map((r: any) => ({
+          id: String(r.id),
+          titulo: String(r.titulo ?? ''),
+          conteudo: String(r.conteudo ?? ''),
+          tipo: String(r.tipo) as Notificacao['tipo'],
+          canal: String(r.canal) as Notificacao['canal'],
+          lida: Boolean(r.lida),
+          criado_em: r.criadoEm ?? r.criado_em ?? '',
+          usuario: { nome: String(r.usuario?.nome ?? '—') },
+        }));
         setRows(mapped);
       } catch {
         setError('Não foi possível carregar as notificações.');
@@ -267,29 +245,21 @@ export default function NotificacoesPage() {
   // ações
   async function toggleRead(id: string, next: boolean) {
     try {
-      await supabase.from('notificacoes').update({ lida: next }).eq('id', id);
+      await api.put(`/notificacoes/${id}/lida`, { lida: next });
       setRows(prev => prev.map(n => (n.id === id ? { ...n, lida: next } : n)));
-    } catch (e) {
-      console.error('toggle read failed', e);
-    }
+    } catch {}
   }
   async function deleteOne(id: string) {
     try {
-      await supabase.from('notificacoes').delete().eq('id', id);
+      await api.delete(`/notificacoes/${id}`);
       setRows(prev => prev.filter(n => n.id !== id));
-    } catch (e) {
-      console.error('delete failed', e);
-    }
+    } catch {}
   }
   async function markAllAsRead() {
-    try {
-      const ids = filtered.filter(n => !n.lida).map(n => n.id);
-      if (!ids.length) return;
-      await supabase.from('notificacoes').update({ lida: true }).in('id', ids);
-      setRows(prev => prev.map(n => (ids.includes(n.id) ? { ...n, lida: true } : n)));
-    } catch (e) {
-      console.error('mark all failed', e);
-    }
+    const ids = filtered.filter(n => !n.lida).map(n => n.id);
+    if (!ids.length) return;
+    await Promise.allSettled(ids.map(id => api.put(`/notificacoes/${id}/lida`, { lida: true })));
+    setRows(prev => prev.map(n => (ids.includes(n.id) ? { ...n, lida: true } : n)));
   }
 
   /* ===================== Render ===================== */

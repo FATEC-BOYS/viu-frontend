@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 const PAGE_SIZE_DEFAULT = 10;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -18,10 +17,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ items: [], error: "tipo inválido" }, { status: 400 });
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
-  const { data: auth, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !auth?.user) return NextResponse.json({ items: [] }, { status: 401 });
-  const ownerId = auth.user.id;
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) return NextResponse.json({ items: [] }, { status: 401 });
 
   const isEmailQuery = EMAIL_RE.test(qRaw);
   const q = qRaw.toLowerCase();
@@ -29,41 +26,38 @@ export async function GET(req: Request) {
     return NextResponse.json({ items: [] });
   }
 
-  let query = supabase
-    .from("contatos")
-    .select("id, email, nome, contato_usuario_id")
-    .eq("owner_id", ownerId)
-    .eq("tipo", tipo)
-    .order("nome", { ascending: true })
-    .limit(limit);
-
-  if (isEmailQuery) {
-    query = query.or(`email.eq.${q},nome.ilike.%${q}%`);
-  } else {
-    query = query.or(`email.ilike.%${q}%,nome.ilike.%${q}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ items: [] }, { status: 200 });
-
-  const items = (data ?? []).map((c) => ({
-    id: c.contato_usuario_id || c.email,   // se não tem user, usa e-mail como id lógico
-    label: c.nome || c.email,
-    email: c.email,
-    isPendingUser: !c.contato_usuario_id,  // contato sem conta ainda
-    isNew: false,
-  }));
-
-  const hasExactEmail = items.some((i) => i.email.toLowerCase() === q);
-  if (isEmailQuery && !hasExactEmail) {
-    items.unshift({
-      id: q,
-      label: q,
-      email: q,
-      isPendingUser: true,
-      isNew: true,                         
+  try {
+    const res = await fetch(`${BACKEND_URL}/usuarios?tipo=${tipo}&limit=200`, {
+      headers: { Authorization: authHeader },
+      cache: "no-store",
     });
-  }
+    if (!res.ok) return NextResponse.json({ items: [] }, { status: 200 });
 
-  return NextResponse.json({ items });
+    const body = await res.json();
+    const all: any[] = body.data ?? [];
+
+    const matched = all.filter((u: any) => {
+      const nome = (u.nome ?? "").toLowerCase();
+      const email = (u.email ?? "").toLowerCase();
+      if (isEmailQuery) return email === q || nome.includes(q);
+      return email.includes(q) || nome.includes(q);
+    });
+
+    const items = matched.slice(0, limit).map((u: any) => ({
+      id: u.id,
+      label: u.nome || u.email,
+      email: u.email,
+      isPendingUser: false,
+      isNew: false,
+    }));
+
+    const hasExactEmail = items.some((i: any) => i.email?.toLowerCase() === q);
+    if (isEmailQuery && !hasExactEmail) {
+      items.unshift({ id: q, label: q, email: q, isPendingUser: true, isNew: true });
+    }
+
+    return NextResponse.json({ items });
+  } catch {
+    return NextResponse.json({ items: [] });
+  }
 }

@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
+import { createProjeto } from '@/lib/projects';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -91,6 +93,7 @@ export default function ClienteDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const clienteId = params?.id;
+  const { user } = useAuth();
 
   // ===== State base =====
   const [cliente, setCliente] = useState<Cliente | null>(null);
@@ -119,29 +122,46 @@ export default function ClienteDetailPage() {
   // ===== Fetch =====
   async function load() {
     if (!clienteId) return;
+    if (!user) {
+      setError('Faça login para ver este cliente.');
+      setCliente(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // Garante sessão (evita 401 silencioso)
-      const { data: sess } = await supabase.auth.getSession();
-      if (!sess?.session?.user) {
-        setError('Faça login para ver este cliente.');
-        setCliente(null);
-        return;
-      }
+      const [clienteRes, projetosRes] = await Promise.all([
+        api.get<{ data: any }>(`/usuarios/${clienteId}`),
+        api.get<{ data: any[] }>('/projetos?limit=200'),
+      ]);
 
-      const SELECT = `
-        id, email, nome, telefone, avatar, tipo, ativo, criado_em, atualizado_em,
-        projetos:projetos!cliente_id (
-          id, nome, descricao, status, orcamento, prazo, criado_em,
-          artes ( id, status )
-        )
-      `;
+      const c = clienteRes.data;
+      const projetos: Projeto[] = (projetosRes.data || [])
+        .filter((p: any) => p.cliente?.id === clienteId || p.clienteId === clienteId)
+        .map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          descricao: p.descricao ?? null,
+          status: p.status,
+          orcamento: p.orcamento ?? null,
+          prazo: p.prazo ?? null,
+          criado_em: p.criadoEm ?? p.criado_em ?? '',
+          artes: [],
+        }));
 
-      const { data, error } = await supabase.from('usuarios').select(SELECT).eq('id', clienteId).single();
-      if (error) throw error;
-
-      setCliente(data as unknown as Cliente);
+      setCliente({
+        id: c.id,
+        email: c.email,
+        nome: c.nome,
+        telefone: c.telefone ?? null,
+        avatar: c.avatar ?? null,
+        tipo: c.tipo,
+        ativo: c.ativo,
+        criado_em: c.criadoEm ?? c.criado_em ?? '',
+        atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
+        projetos,
+      });
     } catch (e: any) {
       setError(e?.message ?? 'Não foi possível carregar o cliente.');
       setCliente(null);
@@ -152,7 +172,7 @@ export default function ClienteDetailPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId]);
+  }, [clienteId, user]);
 
   // ===== Derivados (sempre fora de condicionais) =====
   const projetosFiltrados = useMemo(() => {
@@ -166,7 +186,6 @@ export default function ClienteDetailPage() {
           (p.descricao ?? '').toLowerCase().includes(q)
       );
     }
-    // ordena por mais recente (criado_em desc; se empatar, prazo asc)
     return [...arr].sort((a, b) => {
       const tA = new Date(a.criado_em).getTime();
       const tB = new Date(b.criado_em).getTime();
@@ -199,8 +218,7 @@ export default function ClienteDetailPage() {
     if (!cliente) return;
     try {
       setBusy(true);
-      const { error } = await supabase.from('usuarios').update({ ativo: !cliente.ativo }).eq('id', cliente.id);
-      if (error) throw error;
+      await api.put(`/usuarios/${cliente.id}`, { ativo: !cliente.ativo });
       setCliente({ ...cliente, ativo: !cliente.ativo });
       toast.success(cliente.ativo ? 'Cliente desativado.' : 'Cliente ativado.');
     } catch (e: any) {
@@ -211,36 +229,20 @@ export default function ClienteDetailPage() {
   };
 
   const criarProjetoRápido = async () => {
-    if (!cliente) return;
+    if (!cliente || !user) return;
     try {
       setBusy(true);
-      // Descobrir designer atual a partir do auth (usuario_auth)
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth?.user) throw new Error('Sessão expirada.');
-      const { data: link, error: linkErr } = await supabase
-        .from('usuario_auth')
-        .select('usuario_id')
-        .eq('auth_user_id', auth.user.id)
-        .single();
-      if (linkErr || !link) throw linkErr || new Error('Não foi possível identificar o designer.');
-
-      const { data, error } = await supabase
-        .from('projetos')
-        .insert({
-          nome: `Projeto de ${cliente.nome}`,
-          descricao: null,
-          status: 'EM_ANDAMENTO',
-          orcamento: 0,
-          prazo: null,
-          designer_id: link.usuario_id,
-          cliente_id: cliente.id,
-        })
-        .select('id')
-        .single();
-
-      if (error) throw error;
+      const novo = await createProjeto({
+        nome: `Projeto de ${cliente.nome}`,
+        descricao: null,
+        status: 'EM_ANDAMENTO',
+        orcamento: 0,
+        prazo: null,
+        clienteId: cliente.id,
+        designerId: user.id,
+      });
       toast.success('Projeto criado!');
-      router.push(`/projetos/${data!.id}`);
+      router.push(`/projetos/${novo.id}`);
     } catch (e: any) {
       toast.error(e?.message ?? 'Falha ao criar projeto.');
     } finally {
@@ -410,18 +412,6 @@ export default function ClienteDetailPage() {
                             <span className="text-muted-foreground">Orçamento</span>
                             <span className="font-semibold">{formatBRLFromCents(p.orcamento)}</span>
                           </div>
-                          <div className="col-span-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">Aprovação</span>
-                              <span className="text-xs font-medium">{aprovadas}/{totalArtes}</span>
-                            </div>
-                            <div className="w-full bg-muted h-2 rounded-full mt-1">
-                              <div
-                                className="bg-primary h-2 rounded-full"
-                                style={{ width: `${totalArtes ? (aprovadas / totalArtes) * 100 : 0}%` }}
-                              />
-                            </div>
-                          </div>
                         </div>
                         <div className="mt-3 flex justify-end">
                           <Button asChild size="sm" variant="ghost">
@@ -505,7 +495,7 @@ export default function ClienteDetailPage() {
         </div>
       </div>
 
-      {/* Abas (para crescer depois) */}
+      {/* Abas */}
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Resumo</TabsTrigger>

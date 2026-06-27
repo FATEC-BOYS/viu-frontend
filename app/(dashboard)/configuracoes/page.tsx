@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -38,7 +39,8 @@ interface ConfiguracoesSistema {
   analyticsEnabled: boolean;
 }
 
-const PREFS_KEY = 'viu_prefs';
+const PREFS_KEY = (uid: string) => `viu_prefs_${uid}`;
+
 const DEFAULT_CONFIGS: ConfiguracoesSistema = {
   tema: 'claro', idioma: 'pt-BR', timezone: 'America/Sao_Paulo',
   notificacoesPush: true, notificacoesEmail: true, notificacoesSms: false,
@@ -312,23 +314,31 @@ function TwoFactorSection() {
 
 /** ---------- Página principal ---------- */
 export default function ConfiguracoesPage() {
+  const { user } = useAuth();
   const [configs, setConfigs] = useState<ConfiguracoesSistema>(DEFAULT_CONFIGS);
+  const [initializing, setInitializing] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingReset, setLoadingReset] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
 
   useEffect(() => {
+    if (!user?.id) { setInitializing(false); return; }
     try {
-      const raw = localStorage.getItem(PREFS_KEY);
+      const raw = localStorage.getItem(PREFS_KEY(user.id));
       if (raw) setConfigs((p) => ({ ...p, ...JSON.parse(raw) }));
-    } catch {}
-  }, []);
+    } catch {
+      // usa defaults
+    } finally {
+      setInitializing(false);
+    }
+  }, [user?.id]);
 
   const handleSave = () => {
+    if (!user?.id) return;
     setSaving(true);
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify(configs));
+      localStorage.setItem(PREFS_KEY(user.id), JSON.stringify(configs));
     } finally {
       setTimeout(() => setSaving(false), 300);
     }
@@ -338,7 +348,7 @@ export default function ConfiguracoesPage() {
     setLoadingReset(true);
     try {
       setConfigs(DEFAULT_CONFIGS);
-      localStorage.setItem(PREFS_KEY, JSON.stringify(DEFAULT_CONFIGS));
+      if (user?.id) localStorage.setItem(PREFS_KEY(user.id), JSON.stringify(DEFAULT_CONFIGS));
       setShowResetDialog(false);
     } finally {
       setLoadingReset(false);
@@ -369,7 +379,7 @@ export default function ConfiguracoesPage() {
           <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button size="sm" onClick={handleSave} disabled={saving || initializing || !user?.id}>
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Salvar
           </Button>

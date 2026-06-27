@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -76,26 +76,16 @@ export default function TarefasPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("tarefas")
-        .select(`
-          id, titulo, descricao, status, prioridade, prazo, criado_em, atualizado_em,
-          projeto:projeto_id ( nome, cliente:cliente_id (nome) ),
-          responsavel:responsavel_id (id, nome)
-        `)
-        .order("criado_em", { ascending: false });
-
-      if (error) throw error;
-
-      const rows: Tarefa[] = (data ?? []).map((r: Raw) => ({
+      const res = await api.get<{ data: Raw[] }>("/tarefas?limit=200");
+      const rows: Tarefa[] = (res.data ?? []).map((r: Raw) => ({
         id: String(r.id ?? ""),
         titulo: String(r.titulo ?? ""),
         descricao: r.descricao ?? null,
         status: String(r.status ?? ""),
         prioridade: String(r.prioridade ?? ""),
         prazo: r.prazo ?? null,
-        criado_em: String(r.criado_em ?? ""),
-        atualizado_em: String(r.atualizado_em ?? ""),
+        criado_em: r.criadoEm ?? r.criado_em ?? "",
+        atualizado_em: r.atualizadoEm ?? r.atualizado_em ?? "",
         projeto: r.projeto
           ? { nome: String(r.projeto.nome ?? ""), cliente: { nome: String(r.projeto?.cliente?.nome ?? "") } }
           : null,
@@ -108,7 +98,7 @@ export default function TarefasPage() {
       rows.forEach(t => { if (t.responsavel.id && !uniq.has(t.responsavel.id)) uniq.set(t.responsavel.id, t.responsavel); });
       setResponsaveis(Array.from(uniq.values()));
       setError(null);
-    } catch (e) {
+    } catch {
       setError("Ops! Deu ruim carregando suas tarefas. Tenta de novo em alguns segundos 😬");
     } finally {
       setLoading(false);
@@ -261,16 +251,10 @@ export default function TarefasPage() {
             onOpen={openTask}
             onMove={async (taskId, from, to) => {
               if (from === to) return;
-              // otimista
               setTarefas((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: to } : t)));
               try {
-                const { error } = await supabase
-                  .from("tarefas")
-                  .update({ status: to, atualizado_em: new Date().toISOString() })
-                  .eq("id", taskId);
-                if (error) throw error;
+                await api.put(`/tarefas/${taskId}`, { status: to });
               } catch {
-                // rollback
                 setTarefas((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: from } : t)));
               }
             }}

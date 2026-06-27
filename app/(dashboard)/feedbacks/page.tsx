@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -85,22 +86,32 @@ function formatTime(s: string) { return new Date(s).toLocaleTimeString('pt-BR', 
 function isHttpUrl(path?: string | null) { return !!path && /^https?:\/\//i.test(path); }
 
 /* =========================
-   Storage helpers
+   API mapper
    ========================= */
-async function signPathIfNeeded(bucket: string, path?: string | null, expiresInSec = 600) {
-  if (!path) return null;
-  if (isHttpUrl(path)) return path;
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSec);
-  if (error) return null;
-  return data?.signedUrl ?? null;
-}
-async function hydrateSignedUrls(rows: RowBase[]): Promise<FeedbackRow[]> {
-  const out: FeedbackRow[] = rows.map((r) => ({ ...r, audio_signed_url: null, preview_signed_url: null }));
-  await Promise.all(out.map(async (r) => {
-    if (r.tipo === 'AUDIO') r.audio_signed_url = await signPathIfNeeded('artes', r.arquivo);
-    if (r.arte_preview_path) r.preview_signed_url = await signPathIfNeeded('artes', r.arte_preview_path);
-  }));
-  return out;
+function mapFeedback(fb: any): FeedbackRow {
+  return {
+    id: fb.id,
+    conteudo: fb.conteudo,
+    status: fb.status,
+    tipo: fb.tipo,
+    arquivo: fb.arquivo ?? null,
+    criado_em: fb.criadoEm ?? fb.criado_em ?? '',
+    posicao_x: fb.posicaoX ?? null,
+    posicao_y: fb.posicaoY ?? null,
+    arte_id: fb.arte?.id ?? '',
+    arte_nome: fb.arte?.nome ?? '',
+    arte_status_atual: fb.arte?.status ?? null,
+    arte_preview_path: fb.arte?.arquivo ?? null,
+    projeto_id: fb.arte?.projeto?.id ?? '',
+    projeto_nome: fb.arte?.projeto?.nome ?? '',
+    cliente_id: fb.arte?.projeto?.cliente?.id ?? '',
+    cliente_nome: fb.arte?.projeto?.cliente?.nome ?? '',
+    autor_id: fb.autor?.id ?? '',
+    autor_nome: fb.autor?.nome ?? '',
+    autor_tipo: (fb.autor?.tipo ?? 'CLIENTE') as AutorTipo,
+    audio_signed_url: fb.arquivo_url ?? null,
+    preview_signed_url: fb.arte_preview_url ?? null,
+  };
 }
 
 /* =========================
@@ -435,96 +446,41 @@ export default function FeedbacksPage() {
   // projetos distintos (para filtro)
   const projetos = useMemo(() => Array.from(new Set(rows.map(r => r.projeto_nome))).sort(), [rows]);
 
-  /* ----------- FETCH: tenta RPC, senão SELECT aninhado ----------- */
-  async function fetchPage(from: number) {
-    const limit = PAGE_SIZE;
-    const offset = from;
+  const { user } = useAuth();
 
-    // 1) tenta RPC
-    try {
-      const { data, error } = await supabase.rpc('feedbacks_ui_page', {
-        p_status: statusFilter === 'todos' ? null : statusFilter,
-        p_tipo:   tipoFilter   === 'todos' ? null : tipoFilter,
-        p_limit:  limit,
-        p_offset: offset,
-        p_search: debouncedSearch.trim() ? debouncedSearch.trim() : null,
-      });
-
-      if (error) throw error;
-      if (!Array.isArray(data)) throw new Error('RPC feedbacks_ui_page retornou formato inesperado');
-
-      return await hydrateSignedUrls(data as RowBase[]);
-    } catch (rpcErr: any) {
-      // 2) fallback com SELECT aninhado
-      console.warn('[feedbacks] RPC falhou, usando fallback:', rpcErr?.message || rpcErr);
-      const SELECT = `
-        id, conteudo, status, tipo, arquivo, criado_em, posicao_x, posicao_y,
-        arte:arte_id (
-          id, nome, status_atual, preview_path,
-          projeto:projeto_id (
-            id, nome,
-            cliente:cliente_id ( id, nome )
-          )
-        ),
-        autor:autor_id ( id, nome, tipo )
-      `;
-      const { data, error } = await supabase
-        .from('feedbacks')
-        .select(SELECT)
-        .order('criado_em', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (error) throw error;
-
-      const mapped: RowBase[] = (data as any[]).map((r) => ({
-        id: r.id,
-        conteudo: r.conteudo,
-        status: r.status,
-        tipo: r.tipo,
-        arquivo: r.arquivo,
-        criado_em: r.criado_em,
-        posicao_x: r.posicao_x,
-        posicao_y: r.posicao_y,
-        arte_id: r.arte?.id,
-        arte_nome: r.arte?.nome,
-        arte_status_atual: r.arte?.status_atual ?? null,
-        arte_preview_path: r.arte?.preview_path ?? null,
-        projeto_id: r.arte?.projeto?.id,
-        projeto_nome: r.arte?.projeto?.nome,
-        cliente_id: r.arte?.projeto?.cliente?.id,
-        cliente_nome: r.arte?.projeto?.cliente?.nome,
-        autor_id: r.autor?.id,
-        autor_nome: r.autor?.nome,
-        autor_tipo: r.autor?.tipo,
-      }));
-
-      return await hydrateSignedUrls(mapped);
-    }
+  /* ----------- FETCH via REST API ----------- */
+  async function fetchPage(offset: number): Promise<FeedbackRow[]> {
+    const page = Math.floor(offset / PAGE_SIZE) + 1;
+    const qs = new URLSearchParams();
+    qs.set('page', String(page));
+    qs.set('limit', String(PAGE_SIZE));
+    if (statusFilter !== 'todos') qs.set('status', statusFilter);
+    if (tipoFilter !== 'todos') qs.set('tipo', tipoFilter);
+    if (debouncedSearch.trim()) qs.set('search', debouncedSearch.trim());
+    const res = await api.get<{ data: any[] }>(`/feedbacks?${qs}`);
+    return (res.data ?? []).map(mapFeedback);
   }
 
   // primeira carga / quando filtros server-side mudam
   useEffect(() => {
+    if (!user) {
+      setError('Faça login para ver os feedbacks.');
+      setRows([]);
+      setHasMore(false);
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         setLoading(true);
         setError(null);
         setErrorDetails(null);
-
-        const { data: sess } = await supabase.auth.getSession();
-        if (!sess?.session?.user) {
-          setError('Faça login para ver os feedbacks.');
-          setRows([]);
-          setHasMore(false);
-          return;
-        }
-
         const page = await fetchPage(0);
         setRows(page);
         setHasMore(page.length === PAGE_SIZE);
         setSelectedId(page[0]?.id ?? null);
       } catch (e: any) {
         const msg = e?.message || JSON.stringify(e) || 'Erro desconhecido';
-        console.error('feedbacks: load error ->', msg, e);
         setError('Não foi possível carregar os feedbacks.');
         setErrorDetails(msg);
       } finally {
@@ -532,7 +488,7 @@ export default function FeedbacksPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, tipoFilter, debouncedSearch]);
+  }, [user, statusFilter, tipoFilter, debouncedSearch]);
 
   // carregar mais
   const handleLoadMore = async () => {
@@ -542,9 +498,7 @@ export default function FeedbacksPage() {
       setRows(prev => [...prev, ...page]);
       setHasMore(page.length === PAGE_SIZE);
     } catch (e: any) {
-      const msg = e?.message || JSON.stringify(e) || 'Erro desconhecido';
-      console.error('feedbacks: loadMore error ->', msg);
-      toast.error('Falha ao carregar mais feedbacks. ' + msg);
+      toast.error('Falha ao carregar mais feedbacks. ' + (e?.message || ''));
     } finally {
       setLoadingMore(false);
     }
@@ -588,16 +542,16 @@ export default function FeedbacksPage() {
   };
   const handleCriarTarefa = async (fb: FeedbackRow) => {
     try {
-      const user = (await supabase.auth.getUser()).data.user;
       if (!user) { toast.error('Você precisa estar autenticado.'); return; }
-      const { data: authLink, error: authErr } = await supabase.from('usuario_auth').select('usuario_id').eq('auth_user_id', user.id).single();
-      if (authErr || !authLink) { toast.error('Não identifiquei seu usuário.'); return; }
       const titulo = `Ajuste: ${fb.conteudo?.slice(0, 60) || fb.arte_nome}`;
       const descricao = `Criada a partir do feedback ${fb.id} — Arte: ${fb.arte_nome} — Projeto: ${fb.projeto_nome}`;
-      const { error: rpcError } = await supabase.rpc('criar_tarefa_de_feedback', {
-        p_feedback_id: fb.id, p_responsavel_id: authLink.usuario_id, p_titulo: titulo, p_descricao: descricao, p_prioridade: 'MEDIA', p_prazo: null,
+      await api.post('/tarefas', {
+        titulo,
+        descricao,
+        projetoId: fb.projeto_id,
+        prioridade: 'MEDIA',
+        responsavelId: user.id,
       });
-      if (rpcError) throw rpcError;
       toast.success('Tarefa criada a partir do feedback!');
     } catch (e: any) {
       toast.error('Falha ao criar tarefa. ' + (e?.message || ''));
@@ -757,8 +711,12 @@ export default function FeedbacksPage() {
             onOpen={(id) => setSelectedId(id)}
             onMove={async (fbId, to) => {
               setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: to } : x));
-              const { error } = await supabase.from('feedbacks').update({ status: to }).eq('id', fbId);
-              if (error) { toast.error('Não consegui mover, desfazendo…'); }
+              try {
+                await api.put(`/feedbacks/${fbId}`, { status: to });
+              } catch {
+                toast.error('Não consegui mover, desfazendo…');
+                setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: rows.find(r => r.id === fbId)?.status ?? x.status } : x));
+              }
             }}
           />
         </TabsContent>

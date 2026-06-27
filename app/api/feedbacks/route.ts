@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Supabase storage não configurado')
-  return createClient(url, key)
-}
 
 export async function POST(req: Request) {
   try {
@@ -35,45 +27,27 @@ export async function POST(req: Request) {
       return NextResponse.json(data, { status: res.ok ? 201 : res.status })
     }
 
-    // Form-data (áudio) — upload no Supabase Storage (service role), envia URL ao backend
+    // Form-data (áudio) — encaminha multipart ao backend
     if (contentType.includes('multipart/form-data')) {
       const form = await req.formData()
       const token = String(form.get('token') || '')
-      const arteId = String(form.get('arteId') || '')
-      const guestEmail = String(form.get('email') || '')
-      const guestNome = (form.get('nome') as string) || null
       const file = form.get('file') as File | null
-      const posX = form.get('posicao_x')
-      const posY = form.get('posicao_y')
 
       if (!file) return NextResponse.json({ error: 'Arquivo ausente' }, { status: 400 })
+      if (!token) return NextResponse.json({ error: 'Token ausente' }, { status: 400 })
 
-      const supabase = getSupabaseAdmin()
-      const buf = await file.arrayBuffer()
-      const bytes = new Uint8Array(buf)
-      const ext = file.name.split('.').pop() || 'webm'
-      const path = `${arteId}/${crypto.randomUUID()}.${ext}`
+      // Monta novo FormData para encaminhar ao backend
+      const fwd = new FormData()
+      fwd.append('audio', file, file.name)
+      const arteId = form.get('arteId'); if (arteId) fwd.append('arteId', String(arteId))
+      const guestNome = form.get('nome'); if (guestNome) fwd.append('guestNome', String(guestNome))
+      const guestEmail = form.get('email'); if (guestEmail) fwd.append('guestEmail', String(guestEmail))
+      const posX = form.get('posicao_x'); if (posX) fwd.append('posicaoX', String(posX))
+      const posY = form.get('posicao_y'); if (posY) fwd.append('posicaoY', String(posY))
 
-      const { data: up, error: upErr } = await supabase.storage
-        .from('feedbacks')
-        .upload(path, bytes, { contentType: file.type || 'audio/webm' })
-
-      if (upErr) throw upErr
-
-      const { data: pub } = supabase.storage.from('feedbacks').getPublicUrl(up.path)
-
-      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks`, {
+      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks/audio`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conteudo: '',
-          tipo: 'AUDIO',
-          arquivo: pub.publicUrl,
-          guestNome,
-          guestEmail,
-          posicaoX: posX ? parseFloat(String(posX)) : null,
-          posicaoY: posY ? parseFloat(String(posY)) : null,
-        }),
+        body: fwd,
       })
       const data = await res.json()
       return NextResponse.json(data, { status: res.ok ? 201 : res.status })
