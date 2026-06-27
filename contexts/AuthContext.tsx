@@ -19,6 +19,7 @@ type AuthContextType = {
   signIn: (email: string, senha: string) => Promise<void>
   completeTwoFactorLogin: (userId: string, code: string) => Promise<void>
   signOut: () => void
+  updateUser: (patch: Partial<UserProfile>) => void
   loading: boolean
 }
 
@@ -107,6 +108,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(usuario)
   }, [])
 
+  const updateUser = useCallback((patch: Partial<UserProfile>) => {
+    setUser((prev) => {
+      if (!prev) return prev
+      const updated = { ...prev, ...patch }
+      localStorage.setItem(USER_KEY, JSON.stringify(updated))
+      return updated
+    })
+  }, [])
+
   const signOut = useCallback(() => {
     const currentToken = localStorage.getItem(TOKEN_KEY)
     if (currentToken) {
@@ -124,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, token, signIn, completeTwoFactorLogin, signOut, loading }}>
+    <AuthContext.Provider value={{ user, token, signIn, completeTwoFactorLogin, signOut, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   )
