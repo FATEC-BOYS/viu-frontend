@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -31,12 +31,11 @@ interface ConfiguracoesSistema {
   qualidadeImagem: 'baixa' | 'media' | 'alta' | 'original';
   formatoPadrao: 'PNG' | 'JPG' | 'SVG' | 'PDF';
   backupAutomatico: boolean;
-  retencaoDados: number; // dias
+  retencaoDados: number;
   compartilhamentoPadrao: 'somente_leitura' | 'comentarios' | 'edicao';
   visibilidadePerfil: 'publico' | 'privado' | 'equipe';
   analyticsEnabled: boolean;
 }
-type PrefsRow = { usuario_id: string; prefs: ConfiguracoesSistema; atualizado_em?: string };
 
 const DEFAULT_CONFIGS: ConfiguracoesSistema = {
   tema: 'claro',
@@ -55,6 +54,8 @@ const DEFAULT_CONFIGS: ConfiguracoesSistema = {
   visibilidadePerfil: 'publico',
   analyticsEnabled: true,
 };
+
+const PREFS_KEY = (uid: string) => `viu_prefs_${uid}`;
 
 /** ---------- Pequenos componentes ---------- */
 function Row({
@@ -90,84 +91,45 @@ function ToggleRow({
 
 /** ---------- Página ---------- */
 export default function ConfiguracoesPage() {
+  const { user } = useAuth();
   const [configs, setConfigs] = useState<ConfiguracoesSistema>(DEFAULT_CONFIGS);
-  const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingReset, setLoadingReset] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
 
-  /** Resolve usuario_id e carrega prefs */
   useEffect(() => {
-    (async () => {
-      try {
-        setInitializing(true);
-        const { data: auth } = await supabase.auth.getUser();
-        const authUserId = auth.user?.id;
-        if (!authUserId) throw new Error('Usuário não autenticado');
-
-        const { data: map, error: mapErr } = await supabase
-          .from('usuario_auth')
-          .select('usuario_id')
-          .eq('auth_user_id', authUserId)
-          .maybeSingle();
-        if (mapErr) throw mapErr;
-        if (!map?.usuario_id) throw new Error('usuario_auth não encontrado');
-
-        const uid = map.usuario_id as string;
-        setUsuarioId(uid);
-
-        const { data, error } = await supabase
-          .from('usuario_prefs')
-          .select('usuario_id,prefs,atualizado_em')
-          .eq('usuario_id', uid)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (data?.prefs) setConfigs((p) => ({ ...p, ...data.prefs }));
-      } catch (e) {
-        console.warn('[Config] usando defaults; motivo:', e);
-      } finally {
-        setInitializing(false);
+    if (!user?.id) { setInitializing(false); return; }
+    try {
+      const raw = localStorage.getItem(PREFS_KEY(user.id));
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<ConfiguracoesSistema>;
+        setConfigs((p) => ({ ...p, ...saved }));
       }
-    })();
-  }, []);
+    } catch {
+      // usa defaults
+    } finally {
+      setInitializing(false);
+    }
+  }, [user?.id]);
 
-  const handleSave = async () => {
-    if (!usuarioId) return;
+  const handleSave = () => {
+    if (!user?.id) return;
     setSaving(true);
     try {
-      const row: PrefsRow = {
-        usuario_id: usuarioId,
-        prefs: configs,
-        atualizado_em: new Date().toISOString(),
-      };
-      const { error } = await supabase.from('usuario_prefs').upsert(row, { onConflict: 'usuario_id' });
-      if (error) throw error;
-    } catch (e) {
-      console.error('[Config] erro ao salvar:', e);
+      localStorage.setItem(PREFS_KEY(user.id), JSON.stringify(configs));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleReset = async () => {
+  const handleReset = () => {
     setLoadingReset(true);
     try {
       setConfigs(DEFAULT_CONFIGS);
-      if (usuarioId) {
-        const row: PrefsRow = {
-          usuario_id: usuarioId,
-          prefs: DEFAULT_CONFIGS,
-          atualizado_em: new Date().toISOString(),
-        };
-        const { error } = await supabase.from('usuario_prefs').upsert(row, { onConflict: 'usuario_id' });
-        if (error) throw error;
-      }
+      if (user?.id) localStorage.setItem(PREFS_KEY(user.id), JSON.stringify(DEFAULT_CONFIGS));
       setShowResetDialog(false);
-    } catch (e) {
-      console.error('[Config] erro ao resetar:', e);
     } finally {
       setLoadingReset(false);
     }
@@ -193,7 +155,6 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-4">
-      {/* Header compacto, alinhado com outras telas */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
@@ -203,14 +164,13 @@ export default function ConfiguracoesPage() {
           <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)} disabled={initializing}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving || initializing || !usuarioId}>
+          <Button size="sm" onClick={handleSave} disabled={saving || initializing || !user?.id}>
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Salvar
           </Button>
         </div>
       </div>
 
-      {/* Um único Card com seções e divisores — mais clean */}
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Preferências</CardTitle>
@@ -398,7 +358,6 @@ export default function ConfiguracoesPage() {
               />
               <Row
                 label="Compartilhamento padrão"
-                hint="Define o comportamento ao criar links em link_compartilhado"
                 control={
                   <Select
                     value={configs.compartilhamentoPadrao}
@@ -443,7 +402,7 @@ export default function ConfiguracoesPage() {
         </CardContent>
       </Card>
 
-      {/* Zona de Perigo minimalista */}
+      {/* Zona de Perigo */}
       <Card className="border-destructive/20">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-destructive">Zona de perigo</CardTitle>

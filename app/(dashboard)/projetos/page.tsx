@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -154,12 +154,13 @@ export default function ProjetosPage() {
     if (!confirm("Jogar fora? Tem certeza? Ainda dá tempo de desfazer…")) return;
     setBusy(true);
     try {
-      const [{ count: artesCount, error: aErr }, { count: tarefasCount, error: tErr }] = await Promise.all([
-        supabase.from("artes").select("id", { count: "exact", head: true }).eq("projeto_id", id),
-        supabase.from("tarefas").select("id", { count: "exact", head: true }).eq("projeto_id", id),
+      const [artesRes, tarefasRes] = await Promise.all([
+        api.get<{ pagination: { total: number } }>(`/artes?projetoId=${id}&limit=1`),
+        api.get<{ pagination: { total: number } }>(`/tarefas?projetoId=${id}&limit=1`),
       ]);
-      if (aErr || tErr) throw aErr || tErr;
-      if ((artesCount ?? 0) > 0 || (tarefasCount ?? 0) > 0) {
+      const artesCount = artesRes.pagination?.total ?? 0;
+      const tarefasCount = tarefasRes.pagination?.total ?? 0;
+      if (artesCount > 0 || tarefasCount > 0) {
         toast.error("Não é possível excluir: existem artes e/ou tarefas vinculadas."); return;
       }
       setRows((prev) => prev.filter((p) => p.id !== id));

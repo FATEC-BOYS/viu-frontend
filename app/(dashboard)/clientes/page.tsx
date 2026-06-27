@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +165,8 @@ function ClienteCard({
 
 /* ============================== Página ============================== */
 export default function ClientesPage() {
+  const { user } = useAuth();
+
   // data
   const [rows, setRows] = useState<Cliente[]>([]);
   const [filtered, setFiltered] = useState<Cliente[]>([]);
@@ -200,21 +203,36 @@ export default function ClientesPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const SELECT = `
-        id, email, nome, telefone, avatar, tipo, ativo, criado_em, atualizado_em,
-        projetos:projetos!cliente_id (
-          id, nome, status, orcamento, prazo,
-          artes (id, status)
-        )
-      `;
-      const { data, error } = await supabase
-        .from("usuarios")
-        .select(SELECT)
-        .eq("tipo", "CLIENTE")
-        .order("nome", { ascending: true });
+      const [clientesRes, projetosRes] = await Promise.all([
+        api.get<{ data: any[] }>('/usuarios?tipo=CLIENTE&limit=100'),
+        api.get<{ data: any[] }>('/projetos?limit=200'),
+      ]);
 
-      if (error) throw error;
-      setRows((data as any) || []);
+      const projetos: any[] = projetosRes.data || [];
+      const clientes: Cliente[] = (clientesRes.data || []).map((c: any) => ({
+        id: c.id,
+        email: c.email,
+        nome: c.nome,
+        telefone: c.telefone ?? null,
+        avatar: c.avatar ?? null,
+        tipo: c.tipo,
+        ativo: c.ativo,
+        criado_em: c.criadoEm ?? c.criado_em ?? '',
+        atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
+        projetos: projetos
+          .filter((p: any) => p.cliente?.id === c.id || p.clienteId === c.id)
+          .map((p: any) => ({
+            id: p.id,
+            nome: p.nome,
+            descricao: p.descricao ?? null,
+            status: p.status,
+            orcamento: p.orcamento ?? null,
+            prazo: p.prazo ?? null,
+            artes: [],
+          })),
+      }));
+
+      setRows(clientes);
       setError(null);
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar clientes");
@@ -267,29 +285,17 @@ export default function ClientesPage() {
   }), [rows]);
 
   // seleção em massa
-  const toggleSelectMode = () => { setSelectMode((s) => !s); setSelected({}); };
   const toggleSelect = (id: string) => setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const bulkAtivar = async () => {
+  const bulkToggleAtivo = async (ativo: boolean) => {
     if (!selectedIds.length) return;
     try {
-      setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, ativo: true } : c));
-      const { error } = await supabase.from("usuarios").update({ ativo: true }).in("id", selectedIds);
-      if (error) throw error;
-      toast.success("Clientes ativados.");
+      setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, ativo } : c));
+      await Promise.all(selectedIds.map((id) => api.put(`/usuarios/${id}`, { ativo })));
+      toast.success(ativo ? "Clientes ativados." : "Clientes desativados.");
     } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao ativar"); await reload();
-    } finally { setSelected({}); setSelectMode(false); }
-  };
-  const bulkDesativar = async () => {
-    if (!selectedIds.length) return;
-    try {
-      setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, ativo: false } : c));
-      const { error } = await supabase.from("usuarios").update({ ativo: false }).in("id", selectedIds);
-      if (error) throw error;
-      toast.success("Clientes desativados.");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao desativar"); await reload();
+      toast.error(e?.message ?? (ativo ? "Erro ao ativar" : "Erro ao desativar"));
+      await reload();
     } finally { setSelected({}); setSelectMode(false); }
   };
 
@@ -427,8 +433,8 @@ export default function ClientesPage() {
               <BulkBarClientes
                 count={selectedIds.length}
                 onClose={() => { setSelectMode(false); setSelected({}); }}
-                onAtivar={bulkAtivar}
-                onDesativar={bulkDesativar}
+                onAtivar={() => bulkToggleAtivo(true)}
+                onDesativar={() => bulkToggleAtivo(false)}
               />
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filtered.map((c) => (
@@ -458,8 +464,12 @@ export default function ClientesPage() {
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={async () => {
                         setRows(prev => prev.map(x => x.id === c.id ? { ...x, ativo: false } : x));
-                        const { error } = await supabase.from("usuarios").update({ ativo: false }).eq("id", c.id);
-                        if (error) { toast.error("Falhou"); await reload(); }
+                        try {
+                          await api.put(`/usuarios/${c.id}`, { ativo: false });
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Falhou");
+                          await reload();
+                        }
                       }}>Desativar</Button>
                       <Button asChild size="sm" variant="ghost"><Link href={`/clientes/${c.id}`}>Abrir</Link></Button>
                     </div>
@@ -476,8 +486,12 @@ export default function ClientesPage() {
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={async () => {
                         setRows(prev => prev.map(x => x.id === c.id ? { ...x, ativo: true } : x));
-                        const { error } = await supabase.from("usuarios").update({ ativo: true }).eq("id", c.id);
-                        if (error) { toast.error("Falhou"); await reload(); }
+                        try {
+                          await api.put(`/usuarios/${c.id}`, { ativo: true });
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Falhou");
+                          await reload();
+                        }
                       }}>Ativar</Button>
                       <Button asChild size="sm" variant="ghost"><Link href={`/clientes/${c.id}`}>Abrir</Link></Button>
                     </div>
@@ -514,7 +528,6 @@ export default function ClientesPage() {
         open={openClienteWizard}
         onOpenChange={setOpenClienteWizard}
         onCreated={() => {
-          // atualiza listagem após criação
           reload();
         }}
       />
