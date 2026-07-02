@@ -16,11 +16,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import {
-  User as UserIcon,
-  Calendar, Edit, Save, X, Loader2,
+  User as UserIcon, Calendar, Edit, Save, X, Loader2,
   Shield, Bell, Lock, Trash2, Download,
   BarChart3, Award, Clock, CheckCircle2, Camera,
+  CreditCard, Wallet, ArrowDownToLine, ArrowRight,
 } from 'lucide-react'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { pagamentosApi, Assinatura, SaldoInfo } from '@/lib/pagamentos'
 
 interface UsuarioPerfil {
   id: string
@@ -44,9 +47,7 @@ interface EstatisticasUsuario {
   tarefasConcluidas: number
 }
 
-function StatCard({
-  title, value, subtitle, icon: Icon,
-}: {
+function StatCard({ title, value, subtitle, icon: Icon }: {
   title: string
   value: number
   subtitle: string
@@ -68,13 +69,16 @@ function StatCard({
   )
 }
 
+const STATUS_ASSINATURA_CFG: Record<string, { label: string; cls: string }> = {
+  ATIVA: { label: 'Ativa', cls: 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20' },
+  PENDENTE: { label: 'Pendente', cls: 'bg-amber-400/10 text-amber-400 border-amber-400/20' },
+  CANCELADA: { label: 'Cancelada', cls: 'bg-red-400/10 text-red-400 border-red-400/20' },
+  PAUSADA: { label: 'Pausada', cls: 'bg-blue-400/10 text-blue-400 border-blue-400/20' },
+  EXPIRADA: { label: 'Expirada', cls: 'bg-muted text-muted-foreground border-border' },
+}
+
 function getInitials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((n) => n[0]?.toUpperCase())
-    .join('')
-    .slice(0, 2)
+  return name.split(' ').filter(Boolean).map(n => n[0]?.toUpperCase()).join('').slice(0, 2)
 }
 
 async function fetchTotal(path: string): Promise<number> {
@@ -99,12 +103,15 @@ export default function PerfilPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState({ nome: '', email: '', telefone: '' })
-
   const [configuracoes, setConfiguracoes] = useState({
     notificacoesPush: true,
     notificacoesEmail: true,
     visibilidadePerfil: 'publico' as string,
   })
+
+  // payment state
+  const [assinatura, setAssinatura] = useState<Assinatura | null | undefined>(undefined)
+  const [saldo, setSaldo] = useState<SaldoInfo | null>(null)
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -115,14 +122,8 @@ export default function PerfilPage() {
         setFormData({ nome: u.nome, email: u.email, telefone: u.telefone || '' })
 
         const [
-          totalProjetos,
-          projetosAtivos,
-          projetosConcluidos,
-          totalArtes,
-          artesAprovadas,
-          totalFeedbacks,
-          totalTarefas,
-          tarefasConcluidas,
+          totalProjetos, projetosAtivos, projetosConcluidos,
+          totalArtes, artesAprovadas, totalFeedbacks, totalTarefas, tarefasConcluidas,
         ] = await Promise.all([
           fetchTotal('/projetos?limit=1'),
           fetchTotal('/projetos?limit=1&status=EM_ANDAMENTO'),
@@ -135,22 +136,25 @@ export default function PerfilPage() {
         ])
 
         setEstatisticas({
-          totalProjetos,
-          projetosAtivos,
-          projetosConcluidos,
-          totalArtes,
-          artesAprovadas,
-          totalFeedbacks,
-          totalTarefas,
-          tarefasConcluidas,
+          totalProjetos, projetosAtivos, projetosConcluidos,
+          totalArtes, artesAprovadas, totalFeedbacks, totalTarefas, tarefasConcluidas,
         })
+
+        // payment data
+        const tipo = u.tipo === 'DESIGNER' ? 'designer' : 'cliente'
+        const [assinaturaRes, saldoRes] = await Promise.allSettled([
+          pagamentosApi.getMinhaAssinatura(),
+          u.tipo === 'DESIGNER' ? pagamentosApi.getSaldo() : Promise.resolve(null),
+        ])
+        if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value.data)
+        else setAssinatura(null)
+        if (saldoRes.status === 'fulfilled' && saldoRes.value) setSaldo(saldoRes.value.data)
       } catch (e: any) {
         setError(e?.message || 'Falha ao carregar o perfil')
       } finally {
         setLoading(false)
       }
     }
-
     fetchAll()
   }, [])
 
@@ -161,10 +165,7 @@ export default function PerfilPage() {
     try {
       const res = await api.put<{ data: UsuarioPerfil; success: boolean }>(
         `/usuarios/${usuario.id}`,
-        {
-          nome: formData.nome,
-          ...(formData.telefone ? { telefone: formData.telefone } : {}),
-        }
+        { nome: formData.nome, ...(formData.telefone ? { telefone: formData.telefone } : {}) }
       )
       setUsuario(res.data)
       setEditMode(false)
@@ -183,16 +184,13 @@ export default function PerfilPage() {
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !usuario) return
-
     const preview = URL.createObjectURL(file)
     setAvatarPreview(preview)
     setAvatarUploading(true)
     setError(null)
-
     try {
       const formPayload = new FormData()
       formPayload.append('file', file)
-
       const token = typeof window !== 'undefined' ? localStorage.getItem('viu_token') : null
       const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
       const res = await fetch(`${BASE_URL}/usuarios/${usuario.id}/avatar`, {
@@ -200,12 +198,10 @@ export default function PerfilPage() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formPayload,
       })
-
       const body = await res.json()
       if (!res.ok) throw new Error(body.message ?? `Erro ${res.status}`)
-
       const newAvatar: string | null = body.data?.avatar ?? null
-      setUsuario((prev) => prev ? { ...prev, avatar: newAvatar } : prev)
+      setUsuario(prev => prev ? { ...prev, avatar: newAvatar } : prev)
       updateUser({ avatar: newAvatar })
     } catch (err: any) {
       setError(err?.message || 'Falha ao enviar avatar')
@@ -236,6 +232,10 @@ export default function PerfilPage() {
     )
   }
 
+  const assinaturaStatus = assinatura?.status ?? null
+  const assinaturaCfg = assinaturaStatus ? STATUS_ASSINATURA_CFG[assinaturaStatus] : null
+  const isDesigner = usuario.tipo === 'DESIGNER'
+
   return (
     <div className="space-y-6 p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
@@ -265,9 +265,7 @@ export default function PerfilPage() {
                   </Button>
                 ) : (
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleCancel}>
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleCancel}><X className="h-4 w-4" /></Button>
                     <Button size="sm" onClick={handleSave} disabled={saving}>
                       {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     </Button>
@@ -280,11 +278,8 @@ export default function PerfilPage() {
                 <div className="relative group/avatar">
                   <Avatar className="w-24 h-24">
                     <AvatarImage src={avatarPreview ?? usuario.avatar ?? undefined} alt={usuario.nome} />
-                    <AvatarFallback className="text-lg font-semibold">
-                      {getInitials(usuario.nome)}
-                    </AvatarFallback>
+                    <AvatarFallback className="text-lg font-semibold">{getInitials(usuario.nome)}</AvatarFallback>
                   </Avatar>
-
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -296,14 +291,8 @@ export default function PerfilPage() {
                       ? <Loader2 className="h-6 w-6 text-white animate-spin" />
                       : <Camera className="h-6 w-6 text-white" />}
                   </button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                  />
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden" onChange={handleAvatarChange} />
                 </div>
                 <div className="space-y-1">
                   <h2 className="text-xl font-semibold">{usuario.nome}</h2>
@@ -318,18 +307,14 @@ export default function PerfilPage() {
               </div>
 
               <Separator />
-
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome Completo</Label>
-                  <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData((p) => ({ ...p, nome: e.target.value }))}
-                    disabled={!editMode}
-                  />
+                  <Input id="nome" value={formData.nome}
+                    onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))}
+                    disabled={!editMode} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -337,13 +322,9 @@ export default function PerfilPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="telefone">Telefone</Label>
-                  <Input
-                    id="telefone"
-                    value={formData.telefone}
-                    onChange={(e) => setFormData((p) => ({ ...p, telefone: e.target.value }))}
-                    disabled={!editMode}
-                    placeholder="(11) 99999-9999"
-                  />
+                  <Input id="telefone" value={formData.telefone}
+                    onChange={e => setFormData(p => ({ ...p, telefone: e.target.value }))}
+                    disabled={!editMode} placeholder="(11) 99999-9999" />
                 </div>
                 <div className="space-y-2">
                   <Label>Status da Conta</Label>
@@ -374,37 +355,27 @@ export default function PerfilPage() {
                         <p className="font-medium">Notificações Push</p>
                         <p className="text-sm text-muted-foreground">Receba notificações no navegador</p>
                       </div>
-                      <Switch
-                        checked={configuracoes.notificacoesPush}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesPush: checked }))}
-                      />
+                      <Switch checked={configuracoes.notificacoesPush}
+                        onCheckedChange={checked => setConfiguracoes(p => ({ ...p, notificacoesPush: checked }))} />
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium">Notificações por Email</p>
                         <p className="text-sm text-muted-foreground">Receba resumos por email</p>
                       </div>
-                      <Switch
-                        checked={configuracoes.notificacoesEmail}
-                        onCheckedChange={(checked) => setConfiguracoes((p) => ({ ...p, notificacoesEmail: checked }))}
-                      />
+                      <Switch checked={configuracoes.notificacoesEmail}
+                        onCheckedChange={checked => setConfiguracoes(p => ({ ...p, notificacoesEmail: checked }))} />
                     </div>
                   </div>
                 </div>
-
                 <Separator />
-
                 <div>
                   <h4 className="font-medium mb-3">Privacidade</h4>
                   <div>
                     <Label>Visibilidade do Perfil</Label>
-                    <Select
-                      value={configuracoes.visibilidadePerfil}
-                      onValueChange={(value) => setConfiguracoes((p) => ({ ...p, visibilidadePerfil: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={configuracoes.visibilidadePerfil}
+                      onValueChange={value => setConfiguracoes(p => ({ ...p, visibilidadePerfil: value }))}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="publico">Público</SelectItem>
                         <SelectItem value="privado">Privado</SelectItem>
@@ -429,27 +400,107 @@ export default function PerfilPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4">
-                  <StatCard
-                    title="Projetos"
-                    value={estatisticas.totalProjetos}
+                  <StatCard title="Projetos" value={estatisticas.totalProjetos}
                     subtitle={`${estatisticas.projetosAtivos} em andamento • ${estatisticas.projetosConcluidos} concluídos`}
-                    icon={Award}
-                  />
-                  <StatCard
-                    title="Artes"
-                    value={estatisticas.totalArtes}
-                    subtitle={`${estatisticas.artesAprovadas} aprovadas`}
-                    icon={CheckCircle2}
-                  />
-                  <StatCard
-                    title="Tarefas"
-                    value={estatisticas.totalTarefas}
-                    subtitle={`${estatisticas.tarefasConcluidas} concluídas`}
-                    icon={Clock}
-                  />
+                    icon={Award} />
+                  <StatCard title="Artes" value={estatisticas.totalArtes}
+                    subtitle={`${estatisticas.artesAprovadas} aprovadas`} icon={CheckCircle2} />
+                  <StatCard title="Tarefas" value={estatisticas.totalTarefas}
+                    subtitle={`${estatisticas.tarefasConcluidas} concluídas`} icon={Clock} />
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* --- assinatura card --- */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CreditCard className="h-4 w-4" />
+                  Assinatura
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {assinatura === undefined ? (
+                  <div className="flex justify-center py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : !assinatura ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Nenhuma assinatura ativa.</p>
+                    <Button asChild size="sm" className="w-full">
+                      <Link href="/planos">Ver planos</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">{assinatura.plano.nome}</p>
+                      {assinaturaCfg && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${assinaturaCfg.cls}`}>
+                          {assinaturaCfg.label}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {assinatura.plano.precoMensal === 0
+                        ? 'Grátis'
+                        : `${assinatura.plano.precoMensalFormatado}/mês`}
+                    </p>
+                    <Button asChild size="sm" variant="outline" className="w-full gap-1">
+                      <Link href="/assinaturas">Gerenciar <ArrowRight className="h-3 w-3" /></Link>
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* --- saldo designer card --- */}
+          {isDesigner && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+              <Card className="border-primary/20 bg-gradient-to-br from-orange-900/10 to-transparent">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    Saldo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!saldo ? (
+                    <div className="flex justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Disponível</p>
+                        <p className="text-2xl font-bold tabular-nums text-emerald-400">
+                          {saldo.saldoDisponivelFormatado}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <p className="uppercase tracking-wide text-[10px]">Recebido</p>
+                          <p className="font-medium text-foreground">{saldo.totalRecebidoFormatado}</p>
+                        </div>
+                        <div>
+                          <p className="uppercase tracking-wide text-[10px]">Sacado</p>
+                          <p className="font-medium text-foreground">{saldo.totalSacadoFormatado}</p>
+                        </div>
+                      </div>
+                      <Button asChild size="sm" className="w-full gap-1">
+                        <Link href="/saques">
+                          <ArrowDownToLine className="h-3.5 w-3.5" />
+                          Sacar
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
 
           <Card>
@@ -461,10 +512,7 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/recuperar">
-                  <Lock className="h-4 w-4 mr-2" />
-                  Alterar Senha
-                </a>
+                <a href="/recuperar"><Lock className="h-4 w-4 mr-2" />Alterar Senha</a>
               </Button>
               <Button variant="outline" className="w-full justify-start" disabled>
                 <Download className="h-4 w-4 mr-2" />

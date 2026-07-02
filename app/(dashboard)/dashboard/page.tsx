@@ -1,19 +1,20 @@
 'use client'
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FolderOpen, Clock, MessageSquare, CalendarDays, Rocket } from 'lucide-react'
+import {
+  FolderOpen, Clock, MessageSquare, CalendarDays, Rocket,
+  Receipt, Wallet, AlertCircle, ArrowRight, CreditCard
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
+import { pagamentosApi, SaldoInfo, Assinatura, Fatura, formatReais } from '@/lib/pagamentos'
 
 import StepCliente from '@/components/dashboard/StepCliente'
 import StepProjeto from '@/components/dashboard/StepProjeto'
@@ -48,6 +49,138 @@ type Tarefa = {
   projeto?: { nome?: string | null } | null
 }
 
+// --- mini financial card ---
+
+function FinanceiroCard({
+  isDesigner,
+  faturasPendentes,
+  saldo,
+  assinatura,
+}: {
+  isDesigner: boolean
+  faturasPendentes: Fatura[]
+  saldo: SaldoInfo | null
+  assinatura: Assinatura | null
+}) {
+  const assinaturaAlerta =
+    !assinatura || assinatura.status === 'CANCELADA' || assinatura.status === 'EXPIRADA'
+
+  return (
+    <Card className="h-full flex flex-col min-h-[360px]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center text-base gap-2">
+          <Wallet className="h-5 w-5" />
+          Financeiro
+        </CardTitle>
+        <CardDescription>Resumo de pagamentos</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col gap-3">
+        {/* assinatura alert */}
+        {assinaturaAlerta && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"
+          >
+            <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-amber-300">
+                {!assinatura ? 'Sem assinatura ativa' : `Assinatura ${assinatura.status.toLowerCase()}`}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Escolha um plano para continuar usando o VIU.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-amber-300 hover:text-amber-200 flex-shrink-0">
+              <Link href="/planos">Ver planos</Link>
+            </Button>
+          </motion.div>
+        )}
+
+        {/* saldo designer */}
+        {isDesigner && saldo && (
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Saldo disponível</p>
+            <motion.p
+              key={saldo.saldoDisponivel}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-2xl font-bold tabular-nums text-emerald-400"
+            >
+              {saldo.saldoDisponivelFormatado}
+            </motion.p>
+            {saldo.saldoDisponivel > 0 && (
+              <Button asChild size="sm" variant="ghost" className="mt-1 h-7 px-0 gap-1 text-xs">
+                <Link href="/saques">
+                  Sacar <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* faturas pendentes (cliente) */}
+        {!isDesigner && (
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Faturas pendentes</p>
+              <Button asChild size="sm" variant="ghost" className="h-6 px-1 text-[11px] gap-1">
+                <Link href="/faturas">
+                  Ver todas <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+            {faturasPendentes.length === 0 ? (
+              <p className="text-sm font-medium text-muted-foreground mt-1">Nenhuma pendente 🎉</p>
+            ) : (
+              <div className="mt-2 space-y-1.5">
+                {faturasPendentes.slice(0, 3).map(f => (
+                  <Link key={f.id} href={`/faturas/${f.id}`}>
+                    <div className="flex items-center justify-between rounded-md hover:bg-muted/40 transition px-1 py-1">
+                      <p className="text-xs truncate">{f.projeto.nome}</p>
+                      <span className="text-xs font-semibold tabular-nums ml-2 flex-shrink-0 text-amber-400">
+                        {f.valorFormatado}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* faturas pendentes designer */}
+        {isDesigner && (
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Faturas a receber</p>
+              <Button asChild size="sm" variant="ghost" className="h-6 px-1 text-[11px] gap-1">
+                <Link href="/faturas">
+                  Ver <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+            {faturasPendentes.length === 0 ? (
+              <p className="text-sm text-muted-foreground mt-1">Nenhuma pendente</p>
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums mt-1">{faturasPendentes.length}</p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-auto flex gap-2 flex-wrap">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/assinaturas"><CreditCard className="h-3.5 w-3.5 mr-1.5" />Assinatura</Link>
+          </Button>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/faturas"><Receipt className="h-3.5 w-3.5 mr-1.5" />Faturas</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
   const [projetos, setProjetos] = useState<Projeto[]>([])
@@ -63,6 +196,13 @@ export default function DashboardPage() {
     tarefasPendentes: 0,
   })
 
+  // financial state
+  const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
+  const [saldo, setSaldo] = useState<SaldoInfo | null>(null)
+  const [faturasPendentes, setFaturasPendentes] = useState<Fatura[]>([])
+
+  const isDesigner = (user as any)?.tipo === 'DESIGNER'
+
   useEffect(() => {
     if (authLoading) return
     const fetchData = async () => {
@@ -71,17 +211,13 @@ export default function DashboardPage() {
         const [projetosRes, feedbacksRes, tarefasRes] = await Promise.allSettled([
           api.get<{ data: any[] }>('/projetos?limit=10'),
           api.get<{ data: any[] }>('/feedbacks?limit=10').catch(() => ({ data: [] as any[] })),
-          api
-            .get<{ data: any[] }>('/tarefas?status=PENDENTE&limit=10')
-            .catch(() => ({ data: [] as any[] })),
+          api.get<{ data: any[] }>('/tarefas?status=PENDENTE&limit=10').catch(() => ({ data: [] as any[] })),
         ])
 
         const projetosData: Projeto[] =
           projetosRes.status === 'fulfilled'
             ? (projetosRes.value.data ?? []).map((p: any) => ({
-                id: p.id,
-                nome: p.nome,
-                status: p.status,
+                id: p.id, nome: p.nome, status: p.status,
                 prazo: p.prazo ?? null,
                 cliente: p.cliente ? { nome: p.cliente.nome } : null,
                 _count: p._count,
@@ -91,8 +227,7 @@ export default function DashboardPage() {
         const feedbacksData: Feedback[] =
           feedbacksRes.status === 'fulfilled'
             ? (feedbacksRes.value.data ?? []).map((f: any) => ({
-                id: f.id,
-                conteudo: f.conteudo,
+                id: f.id, conteudo: f.conteudo,
                 criado_em: f.criadoEm ?? f.criado_em ?? '',
                 autor: f.autor ? { nome: f.autor.nome } : null,
               }))
@@ -101,9 +236,7 @@ export default function DashboardPage() {
         const tarefasData: Tarefa[] =
           tarefasRes.status === 'fulfilled'
             ? (tarefasRes.value.data ?? []).map((t: any) => ({
-                id: t.id,
-                titulo: t.titulo,
-                status: t.status,
+                id: t.id, titulo: t.titulo, status: t.status,
                 prioridade: t.prioridade ?? 'MEDIA',
                 prazo: t.prazo ?? null,
                 projeto: t.projeto ? { nome: t.projeto.nome } : null,
@@ -114,13 +247,10 @@ export default function DashboardPage() {
         setFeedbacks(feedbacksData)
         setTarefas(tarefasData)
 
-        const totalArtes = projetosData.reduce(
-          (acc, p) => acc + (p._count?.artes ?? 0),
-          0
-        )
+        const totalArtes = projetosData.reduce((acc, p) => acc + (p._count?.artes ?? 0), 0)
         setMetricas({
           totalProjetos: projetosData.length,
-          projetosAtivos: projetosData.filter((p) => p.status === 'EM_ANDAMENTO').length,
+          projetosAtivos: projetosData.filter(p => p.status === 'EM_ANDAMENTO').length,
           totalArtes,
           artesAprovadas: 0,
           feedbacksRecentes: feedbacksData.length,
@@ -135,17 +265,31 @@ export default function DashboardPage() {
     fetchData()
   }, [authLoading])
 
-  const displayName =
-    user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
+  // financial data — separate effect, non-blocking
+  useEffect(() => {
+    if (authLoading) return
+    const tipo = isDesigner ? 'designer' : 'cliente'
+    Promise.allSettled([
+      pagamentosApi.getMinhaAssinatura(),
+      pagamentosApi.getFaturas(tipo),
+      isDesigner ? pagamentosApi.getSaldo() : Promise.resolve(null),
+    ]).then(([assinaturaRes, faturasRes, saldoRes]) => {
+      if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value.data)
+      if (faturasRes.status === 'fulfilled') {
+        const pendentes = (faturasRes.value.data ?? []).filter(f => f.status === 'PENDENTE')
+        setFaturasPendentes(pendentes)
+      }
+      if (saldoRes.status === 'fulfilled' && saldoRes.value) setSaldo(saldoRes.value.data)
+    }).catch(console.error)
+  }, [authLoading, isDesigner])
+
+  const displayName = user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
   const temProjeto = projetos.length > 0
   const temProjetoConcluido = useMemo(
-    () =>
-      projetos.some((p) =>
-        ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(
-          p.status?.toUpperCase?.() ?? ''
-        )
-      ),
+    () => projetos.some(p =>
+      ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(p.status?.toUpperCase?.() ?? '')
+    ),
     [projetos]
   )
   const onboardingConcluido = temProjetoConcluido || (temProjeto && metricas.artesAprovadas > 0)
@@ -158,13 +302,10 @@ export default function DashboardPage() {
       </div>
     )
 
-  const projetosEmAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO')
+  const projetosEmAndamento = projetos.filter(p => p.status === 'EM_ANDAMENTO')
   const proximosPrazos = [...projetos]
-    .filter((p) => p.prazo)
-    .sort(
-      (a, b) =>
-        new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime()
-    )
+    .filter(p => p.prazo)
+    .sort((a, b) => new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime())
     .slice(0, 6)
 
   return (
@@ -172,7 +313,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {mostrarOnboarding ? 'Vamos começar ✦' : 'Dashboard ✦'}
+            {mostrarOnboarding ? 'Vamos começar ✶' : 'Dashboard ✶'}
           </h1>
           <p className="text-muted-foreground">
             {mostrarOnboarding
@@ -240,21 +381,14 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 h-full overflow-auto pr-1">
-                {feedbacks.slice(0, 10).map((fb) => (
-                  <div
-                    key={fb.id}
-                    className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition"
-                  >
+                {feedbacks.slice(0, 10).map(fb => (
+                  <div key={fb.id} className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition">
                     <div className="w-8 h-8 bg-primary/10 rounded-full grid place-items-center">
                       <MessageSquare className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {fb.autor?.nome || 'Alguém'} comentou
-                      </p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {fb.conteudo}
-                      </p>
+                      <p className="text-sm font-medium truncate">{fb.autor?.nome || 'Alguém'} comentou</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{fb.conteudo}</p>
                     </div>
                   </div>
                 ))}
@@ -274,25 +408,14 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1">
               <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm">
-                  <Link href="/projetos/novo">Novo projeto</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/artes/nova">Enviar arte</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/links">Gerar link</Link>
-                </Button>
-                <Button asChild size="sm" variant="ghost">
-                  <Link href="/feedbacks">Ver feedbacks</Link>
-                </Button>
+                <Button asChild size="sm"><Link href="/projetos/novo">Novo projeto</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/artes/nova">Enviar arte</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/links">Gerar link</Link></Button>
+                <Button asChild size="sm" variant="ghost"><Link href="/feedbacks">Ver feedbacks</Link></Button>
               </div>
               <div className="mt-4 rounded-md border p-3 text-xs text-muted-foreground">
                 Dica: arraste e solte arquivos na página de{' '}
-                <Link href="/artes" className="underline underline-offset-4">
-                  Artes
-                </Link>
-                .
+                <Link href="/artes" className="underline underline-offset-4">Artes</Link>.
               </div>
             </CardContent>
           </Card>
@@ -307,29 +430,20 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
               <div className="grid gap-3 max-h-full overflow-auto pr-1">
-                {projetosEmAndamento.slice(0, 8).map((projeto) => (
-                  <div
-                    key={projeto.id}
-                    className="rounded-lg border p-3 hover:shadow-sm transition"
-                  >
+                {projetosEmAndamento.slice(0, 8).map(projeto => (
+                  <div key={projeto.id} className="rounded-lg border p-3 hover:shadow-sm transition">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <h4 className="font-medium truncate">{projeto.nome}</h4>
-                        <p className="text-xs text-muted-foreground truncate">
-                          Cliente: {projeto.cliente?.nome || '—'}
-                        </p>
+                        <p className="text-xs text-muted-foreground truncate">Cliente: {projeto.cliente?.nome || '—'}</p>
                       </div>
-                      <Badge variant="secondary" className="shrink-0">
-                        {projeto.status}
-                      </Badge>
+                      <Badge variant="secondary" className="shrink-0">{projeto.status}</Badge>
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span>{projeto._count?.artes ?? 0} artes</span>
                       <span className="text-muted-foreground">
                         <Clock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
-                        {projeto.prazo
-                          ? new Date(projeto.prazo).toLocaleDateString('pt-BR')
-                          : '—'}
+                        {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '—'}
                       </span>
                     </div>
                     <div className="mt-2 flex justify-end">
@@ -340,9 +454,7 @@ export default function DashboardPage() {
                   </div>
                 ))}
                 {projetosEmAndamento.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">
-                    Nenhum projeto em andamento
-                  </div>
+                  <div className="text-sm text-muted-foreground text-center py-6">Nenhum projeto em andamento</div>
                 )}
               </div>
             </CardContent>
@@ -358,38 +470,25 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 max-h-full overflow-auto pr-1">
-                {tarefas.slice(0, 10).map((tarefa) => (
-                  <div
-                    key={tarefa.id}
-                    className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition"
-                  >
+                {tarefas.slice(0, 10).map(tarefa => (
+                  <div key={tarefa.id} className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {tarefa.projeto?.nome}
-                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{tarefa.projeto?.nome}</p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">
-                        {tarefa.prioridade}
-                      </Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">{tarefa.prioridade}</Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {tarefa.status}
-                      </Badge>
+                      <Badge variant="secondary" className="text-[10px]">{tarefa.status}</Badge>
                       <span className="text-[11px] text-muted-foreground">
-                        {tarefa.prazo
-                          ? new Date(tarefa.prazo).toLocaleDateString('pt-BR')
-                          : '—'}
+                        {tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR') : '—'}
                       </span>
                     </div>
                   </div>
                 ))}
                 {tarefas.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">
-                    Nada urgente por enquanto 🤙
-                  </div>
+                  <div className="text-sm text-muted-foreground text-center py-6">Nada urgente por enquanto 🦙</div>
                 )}
               </div>
             </CardContent>
@@ -406,22 +505,15 @@ export default function DashboardPage() {
             <CardContent className="flex-1 overflow-hidden">
               <div className="space-y-3 max-h-full overflow-auto pr-1">
                 {proximosPrazos.length > 0 ? (
-                  proximosPrazos.map((p) => (
-                    <div
-                      key={p.id}
-                      className="rounded-md border p-3 hover:bg-muted/40 transition"
-                    >
+                  proximosPrazos.map(p => (
+                    <div key={p.id} className="rounded-md border p-3 hover:bg-muted/40 transition">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-medium truncate">{p.nome}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            Cliente: {p.cliente?.nome || '—'}
-                          </p>
+                          <p className="text-xs text-muted-foreground truncate">Cliente: {p.cliente?.nome || '—'}</p>
                         </div>
                         <Badge variant="secondary" className="shrink-0">
-                          {p.prazo
-                            ? new Date(p.prazo).toLocaleDateString('pt-BR')
-                            : '—'}
+                          {p.prazo ? new Date(p.prazo).toLocaleDateString('pt-BR') : '—'}
                         </Badge>
                       </div>
                       <div className="mt-2 flex justify-end">
@@ -432,13 +524,19 @@ export default function DashboardPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-sm text-muted-foreground text-center py-6">
-                    Sem prazos cadastrados
-                  </div>
+                  <div className="text-sm text-muted-foreground text-center py-6">Sem prazos cadastrados</div>
                 )}
               </div>
             </CardContent>
           </Card>
+
+          {/* financial card */}
+          <FinanceiroCard
+            isDesigner={isDesigner}
+            faturasPendentes={faturasPendentes}
+            saldo={saldo}
+            assinatura={assinatura}
+          />
         </section>
       )}
     </div>

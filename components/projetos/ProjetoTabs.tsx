@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-export type ProjetoTabKey = "overview" | "artes" | "tasks" | "approval" | "activity";
+export type ProjetoTabKey = "overview" | "artes" | "tasks" | "approval" | "activity" | "billing";
 
 const TABS: { key: ProjetoTabKey; label: string }[] = [
   { key: "overview", label: "Visão Geral" },
@@ -10,12 +10,13 @@ const TABS: { key: ProjetoTabKey; label: string }[] = [
   { key: "tasks", label: "Tarefas" },
   { key: "approval", label: "Aprovação" },
   { key: "activity", label: "Atividade" },
+  { key: "billing", label: "Fatura" },
 ];
 
 export default function ProjetoTabs({
   current,
   onChange,
-  top = 64, // ajuste se seu header tiver outra altura
+  top = 64,
   className,
 }: {
   current: ProjetoTabKey;

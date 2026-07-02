@@ -6,30 +6,26 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
-// Lib base
 import {
   getProjeto,
   getProjetoAlertas,
   type Projeto,
   type ProximoPasso as LibProximoPasso,
   type ProximoPassoKind,
-  type TarefasKanban,   // ← tipo da LIB (MicroKanban usa esse)
-  type TarefaCard,      // ← cards das colunas (LIB)
+  type TarefasKanban,
+  type TarefaCard,
 } from "@/lib/projects";
 
-// Shell
 import ProjetoHeader from "@/components/projetos/ProjetoHeader";
 import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
 import ProjetoAlertBanner from "@/components/projetos/ProjetoAlertBanner";
 
-// ====== VISÃO GERAL ======
 import ResumoCards from "@/components/projetos/overview/ResumoCards";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
 import MicroKanban from "@/components/projetos/overview/MicroKanban";
 import CTAContextual from "@/components/projetos/overview/CTAContextual";
 import OverviewSkeleton from "@/components/projetos/overview/OverviewSkeleton";
 
-// ====== ARTES ======
 import ArtesToolbar from "@/components/projetos/artes/ArtesToolbar";
 import ArtesDenseList from "@/components/projetos/artes/ArtesDenseList";
 import ArteQuickPeekDrawer from "@/components/projetos/artes/ArteQuickPeekDrawer";
@@ -40,18 +36,15 @@ import type {
 } from "@/components/projetos/artes/ArtesToolbar";
 import type { ArteListItem as UIArteListItem } from "@/components/projetos/artes/ArtesDenseList";
 
-// ====== APROVAÇÃO ======
 import AprovacaoPanel from "@/components/projetos/aprovacao/AprovacaoPanel";
 import AprovacaoSkeleton from "@/components/projetos/aprovacao/AprovacaoSkeleton";
 import type { AprovacaoPainel as UIPainel } from "@/components/projetos/aprovacao/AprovacaoPanel";
 
-// ====== ATIVIDADE ======
 import AtividadeFeed from "@/components/projetos/activity/AtividadeFeed";
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
-/* =====================================================================================
- * Fetch helper defensivo
- * ===================================================================================== */
+import FaturaTab from "@/components/projetos/billing/FaturaTab";
+
 async function j<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
   try {
     const r = await fetch(url, init);
@@ -63,14 +56,8 @@ async function j<T>(url: string, init: RequestInit | undefined, fallback: T): Pr
   }
 }
 
-/* =====================================================================================
- * Tipos de UI (compatíveis com os componentes)
- * ===================================================================================== */
-
-// CTA do botão principal (tipo local — o componente não exporta type)
 type EstadoCTA = "CRIAR_ARTE" | "PEDIR_APROVACAO" | "CONCLUIR";
 
-// Resumo para ResumoCards (shape do componente)
 type ProjetoResumoUI = {
   artesAprovadas: number;
   artesPendentes: number;
@@ -90,31 +77,22 @@ type ProjetoResumoUI = {
   estado?: EstadoCTA;
 };
 
-// Arte filters e rows — usar tipos da toolbar/list
 type ArteFilters = UIArteFilters;
 type ArteListItem = UIArteListItem;
-
-// Aprovação — o componente espera raiz com `regra` e `items`
 type AprovacaoPainel = UIPainel;
 
-/* =====================================================================================
- * Página
- * ===================================================================================== */
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
-  // Boot
   const [loading, setLoading] = useState(true);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [alertas, setAlertas] = useState<{
     prazosSemana: number; aprovacaoTravada: number; semAprovador: boolean;
   } | null>(null);
 
-  // Aba atual
   const [tab, setTab] = useState<ProjetoTabKey>("overview");
 
-  // ====== boot ======
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -132,7 +110,6 @@ export default function ProjetoPage() {
     return () => { mounted = false; };
   }, [id]);
 
-  // Pill de status pro header
   const statusPill = useMemo(() => {
     if (!projeto) return null;
     switch (projeto.status) {
@@ -143,9 +120,6 @@ export default function ProjetoPage() {
     }
   }, [projeto]);
 
-  /* =====================================================================================
-   * VISÃO GERAL — estados e loaders
-   * ===================================================================================== */
   const [ovLoading, setOvLoading] = useState(false);
   const [resumo, setResumo] = useState<ProjetoResumoUI | null>(null);
   const [passos, setPassos] = useState<LibProximoPasso[]>([]);
@@ -158,7 +132,6 @@ export default function ProjetoPage() {
     return (ALLOWED_KINDS as readonly string[]).includes(k) ? k : "GENERIC";
   }
 
-  // Adapter: overview → ProjetoResumoUI
   function adaptResumo(raw: any): ProjetoResumoUI {
     return {
       artesAprovadas: Number(raw?.artesAprovadas ?? raw?.aprovadas ?? raw?.aprovadas_count ?? 0),
@@ -169,14 +142,11 @@ export default function ProjetoPage() {
       proximaRevisao: raw?.proximaRevisao ?? null,
       orcamentoCentavos: raw?.orcamentoCentavos ?? raw?.orcamento ?? null,
       sparkline: Array.isArray(raw?.sparkline) ? raw.sparkline : [],
-      pessoas: raw?.pessoas ?? {
-        owner: "", designers: 0, clientes: 0, aprovadores: 0, observadores: 0,
-      },
+      pessoas: raw?.pessoas ?? { owner: "", designers: 0, clientes: 0, aprovadores: 0, observadores: 0 },
       estado: (raw?.estado ?? "CRIAR_ARTE") as EstadoCTA,
     };
   }
 
-  // Adapter: tarefa do backend -> TarefaCard (LIB)
   function adaptTarefaCard(r: any): TarefaCard {
     return {
       id: String(r.id),
@@ -191,7 +161,6 @@ export default function ProjetoPage() {
     };
   }
 
-  // Adapter: back-end genérico → TarefasKanban (da lib)
   function adaptKanban(raw: any): TarefasKanban {
     const toCol = (arr: any[]) => {
       const rows = Array.isArray(arr) ? arr : [];
@@ -233,61 +202,37 @@ export default function ProjetoPage() {
     } finally { setOvLoading(false); }
   }
 
-  /* =====================================================================================
-   * ARTES — estados e loader
-   * ===================================================================================== */
   const [artLoading, setArtLoading] = useState(false);
   const [artRows, setArtRows] = useState<ArteListItem[]>([]);
   const [artTotal, setArtTotal] = useState(0);
   const [artFrom, setArtFrom] = useState(0);
-
-  // ⚠️ Mantemos genérico pra não conflitar com a tipagem da Toolbar
   const [filters, setFilters] = useState<ArteFilters>({} as ArteFilters);
   const [peekId, setPeekId] = useState<string | null>(null);
   const ART_PAGE = 12;
 
-  // helper pra serializar filtros — aceita várias chaves
   function buildArtesQuery(from: number) {
     const q = new URLSearchParams({ from: String(from), limit: String(ART_PAGE) });
-
     const anyF = filters as any;
-
     if (typeof anyF.q === "string" && anyF.q) q.set("q", anyF.q);
-
-    const statusArr: string[] =
-      Array.isArray(anyF.status) ? anyF.status :
-      Array.isArray(anyF.statuses) ? anyF.statuses : [];
-    statusArr.forEach((s) => q.append("status", s));
-
-    const tipoArr: string[] =
-      Array.isArray(anyF.tipo) ? anyF.tipo :
-      Array.isArray(anyF.tipos) ? anyF.tipos : [];
-    tipoArr.forEach((t) => q.append("tipo", t));
-
-    const autorArr: string[] =
-      Array.isArray(anyF.autor) ? anyF.autor :
-      Array.isArray(anyF.autores) ? anyF.autores :
-      Array.isArray(anyF.autorId) ? anyF.autorId : [];
-    autorArr.forEach((a) => q.append("autor", a));
-
-    const tagArr: string[] =
-      Array.isArray(anyF.tag) ? anyF.tag :
-      Array.isArray(anyF.tags) ? anyF.tags : [];
-    tagArr.forEach((t) => q.append("tag", t));
-
+    const statusArr: string[] = Array.isArray(anyF.status) ? anyF.status : Array.isArray(anyF.statuses) ? anyF.statuses : [];
+    statusArr.forEach(s => q.append("status", s));
+    const tipoArr: string[] = Array.isArray(anyF.tipo) ? anyF.tipo : Array.isArray(anyF.tipos) ? anyF.tipos : [];
+    tipoArr.forEach(t => q.append("tipo", t));
+    const autorArr: string[] = Array.isArray(anyF.autor) ? anyF.autor : Array.isArray(anyF.autores) ? anyF.autores : Array.isArray(anyF.autorId) ? anyF.autorId : [];
+    autorArr.forEach(a => q.append("autor", a));
+    const tagArr: string[] = Array.isArray(anyF.tag) ? anyF.tag : Array.isArray(anyF.tags) ? anyF.tags : [];
+    tagArr.forEach(t => q.append("tag", t));
     return q;
   }
 
-  // Adapter: garantir campos exigidos pela DenseList
   function adaptArteRows(raw: any[]): ArteListItem[] {
-    return (raw ?? []).map((r) => {
+    return (raw ?? []).map(r => {
       const autor =
         r.autor && (r.autor.id || r.autor.nome)
           ? { id: String(r.autor.id ?? r.autor_id ?? ""), nome: String(r.autor.nome ?? r.autor_nome ?? "—") }
           : r.autor_nome
             ? { id: "", nome: String(r.autor_nome) }
             : null;
-
       return {
         id: String(r.id),
         nome: String(r.nome ?? "Sem nome"),
@@ -296,7 +241,7 @@ export default function ProjetoPage() {
         status: String(r.status ?? "EM_ANALISE"),
         tipo: String(r.tipo ?? "DESCONHECIDO"),
         criado_em: String(r.criado_em ?? new Date().toISOString()),
-        autor, // ← { id, nome } | null
+        autor,
       };
     }) as ArteListItem[];
   }
@@ -312,15 +257,12 @@ export default function ProjetoPage() {
         { items: [], total: 0 }
       );
       const items = adaptArteRows(data.items);
-      setArtRows((prev) => (append ? [...prev, ...items] : items));
+      setArtRows(prev => (append ? [...prev, ...items] : items));
       setArtTotal(data.total);
       setArtFrom(from + ART_PAGE);
     } finally { setArtLoading(false); }
   }
 
-  /* =====================================================================================
-   * APROVAÇÃO — estados e loader
-   * ===================================================================================== */
   const [apLoading, setApLoading] = useState(false);
   const [painel, setPainel] = useState<AprovacaoPainel | null>(null);
 
@@ -362,9 +304,6 @@ export default function ProjetoPage() {
     await loadApproval();
   }
 
-  /* =====================================================================================
-   * ATIVIDADE — estados e loader
-   * ===================================================================================== */
   const [actLoading, setActLoading] = useState(false);
   const [actRows, setActRows] = useState<any[]>([]);
   const [actTotal, setActTotal] = useState(0);
@@ -380,13 +319,12 @@ export default function ProjetoPage() {
         undefined,
         { items: [], total: 0 }
       );
-      setActRows((prev) => (append ? [...prev, ...data.items] : data.items));
+      setActRows(prev => (append ? [...prev, ...data.items] : data.items));
       setActTotal(data.total);
       setActFrom(from + ACT_PAGE);
     } finally { setActLoading(false); }
   }
 
-  // Lazy-load por aba
   useEffect(() => {
     if (tab === "overview" && !resumo) loadOverview();
     if (tab === "artes" && artRows.length === 0) loadArtes(false);
@@ -395,7 +333,6 @@ export default function ProjetoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, id]);
 
-  // ====== estados base ======
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center h-[50vh]">
@@ -414,12 +351,8 @@ export default function ProjetoPage() {
     );
   }
 
-  /* =====================================================================================
-   * Render
-   * ===================================================================================== */
   return (
     <div className="p-6 space-y-4">
-      {/* Header */}
       <ProjetoHeader
         projeto={projeto}
         statusPill={statusPill ?? undefined}
@@ -429,7 +362,6 @@ export default function ProjetoPage() {
         onArquivar={() => console.log("arquivar", projeto.id)}
       />
 
-      {/* Alertas contextuais */}
       {alertas && (
         <ProjetoAlertBanner
           prazosSemana={alertas.prazosSemana}
@@ -439,12 +371,9 @@ export default function ProjetoPage() {
         />
       )}
 
-      {/* Tabs sticky */}
       <ProjetoTabs current={tab} onChange={setTab} />
 
-      {/* Conteúdo por aba */}
       <div className="pt-2 space-y-6">
-        {/* ===== VISÃO GERAL ===== */}
         {tab === "overview" && (
           ovLoading || !resumo || !kanban ? (
             <OverviewSkeleton />
@@ -454,7 +383,7 @@ export default function ProjetoPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <ProximosPassos
                   passos={passos}
-                  onAction={(passo) => {
+                  onAction={passo => {
                     if (passo.tipo === "APROVADOR") setTab("approval");
                     if (passo.tipo === "PRAZO") console.log("definir prazo");
                     if (passo.tipo === "TAREFA") console.log("abrir tarefa");
@@ -464,20 +393,16 @@ export default function ProjetoPage() {
                 <MicroKanban
                   kanban={kanban}
                   onNovo={() => console.log("nova tarefa")}
-                  onAbrir={(tid) => console.log("abrir tarefa", tid)}
+                  onAbrir={tid => console.log("abrir tarefa", tid)}
                 />
               </div>
               <div className="flex justify-end">
                 <CTAContextual
                   estado={resumo.estado ?? "CRIAR_ARTE"}
                   onClick={() => {
-                    if (resumo.estado === "CONCLUIR") {
-                      console.log("Concluir projeto");
-                    } else if (resumo.estado === "PEDIR_APROVACAO") {
-                      setTab("approval");
-                    } else {
-                      setTab("artes");
-                    }
+                    if (resumo.estado === "CONCLUIR") console.log("Concluir projeto");
+                    else if (resumo.estado === "PEDIR_APROVACAO") setTab("approval");
+                    else setTab("artes");
                   }}
                 />
               </div>
@@ -485,12 +410,11 @@ export default function ProjetoPage() {
           )
         )}
 
-        {/* ===== ARTES ===== */}
         {tab === "artes" && (
           <>
             <ArtesToolbar
               filters={filters}
-              onChange={(f) => {
+              onChange={f => {
                 setFilters(f);
                 setArtFrom(0);
                 loadArtes(false);
@@ -505,11 +429,11 @@ export default function ProjetoPage() {
                   total={artTotal}
                   loading={artLoading}
                   onLoadMore={() => loadArtes(true)}
-                  onPeek={(arteId) => setPeekId(arteId)}
+                  onPeek={arteId => setPeekId(arteId)}
                 />
                 <ArteQuickPeekDrawer
                   open={!!peekId}
-                  onOpenChange={(v) => !v && setPeekId(null)}
+                  onOpenChange={v => !v && setPeekId(null)}
                   arteId={peekId ?? ""}
                 />
               </>
@@ -517,28 +441,22 @@ export default function ProjetoPage() {
           </>
         )}
 
-        {/* ===== TAREFAS ===== */}
         {tab === "tasks" && (
-          <>
-            {ovLoading && !kanban ? (
-              <OverviewSkeleton />
-            ) : (
-              <MicroKanban
-                kanban={
-                  kanban ?? {
-                    pendente: { top: [], total: 0 },
-                    em_andamento: { top: [], total: 0 },
-                    concluida: { top: [], total: 0 },
-                  }
-                }
-                onNovo={() => console.log("nova tarefa")}
-                onAbrir={(tid) => console.log("abrir tarefa", tid)}
-              />
-            )}
-          </>
+          ovLoading && !kanban ? (
+            <OverviewSkeleton />
+          ) : (
+            <MicroKanban
+              kanban={kanban ?? {
+                pendente: { top: [], total: 0 },
+                em_andamento: { top: [], total: 0 },
+                concluida: { top: [], total: 0 },
+              }}
+              onNovo={() => console.log("nova tarefa")}
+              onAbrir={tid => console.log("abrir tarefa", tid)}
+            />
+          )
         )}
 
-        {/* ===== APROVAÇÃO ===== */}
         {tab === "approval" && (
           apLoading || !painel ? (
             <AprovacaoSkeleton />
@@ -551,7 +469,6 @@ export default function ProjetoPage() {
           )
         )}
 
-        {/* ===== ATIVIDADE ===== */}
         {tab === "activity" && (
           actLoading && actRows.length === 0 ? (
             <AtividadeSkeleton />
@@ -561,12 +478,12 @@ export default function ProjetoPage() {
               total={actTotal}
               loading={actLoading}
               onLoadMore={() => loadActivity(true)}
-              onOpen={(ref) => {
-                console.log("abrir no contexto", ref);
-              }}
+              onOpen={ref => console.log("abrir no contexto", ref)}
             />
           )
         )}
+
+        {tab === "billing" && <FaturaTab projetoId={id} />}
       </div>
     </div>
   );
