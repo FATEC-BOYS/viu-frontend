@@ -12,12 +12,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
-  ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor
+  ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
+  CreditCard, Wallet, Receipt, ArrowDownToLine
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-// ✅ Tooltip do shadcn (se não tiver, me avisa que troco por title nativo)
 import {
   Tooltip,
   TooltipContent,
@@ -33,7 +33,6 @@ function useMounted() {
   return m;
 }
 
-// localStorage seguro (SSR)
 function useLocalStorageBoolean(key: string, initial = false) {
   const mounted = useMounted();
   const [value, setValue] = useState(initial);
@@ -76,7 +75,6 @@ interface NavSection {
   collapsible?: boolean;
 }
 
-// mostra badge só quando há valor definido e > 0
 function renderBadge(value: MaybeNumber) {
   if (typeof value !== 'number' || value <= 0) return null;
   return (
@@ -103,12 +101,10 @@ export function Sidebar() {
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
   const fetchingRef = useRef(false);
 
-  // Toggle via botão e via atalho
   const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Ctrl/Cmd + B
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         toggleCollapsed();
@@ -118,7 +114,6 @@ export function Sidebar() {
     return () => window.removeEventListener('keydown', onKey);
   }, [toggleCollapsed]);
 
-  // evita hydration: só pintamos "ativo" após montar
   const isActive = (href: string) => {
     if (!mounted) return false;
     if (href === '/dashboard') {
@@ -127,7 +122,6 @@ export function Sidebar() {
     return pathname.startsWith(href);
   };
 
-  // busca contadores via REST API
   useEffect(() => {
     let alive = true;
 
@@ -170,7 +164,6 @@ export function Sidebar() {
     };
   }, []);
 
-  // sections memoizadas
   const navigationSections: NavSection[] = useMemo(() => ([
     {
       title: 'Principal',
@@ -187,6 +180,16 @@ export function Sidebar() {
         { title: 'Clientes', href: '/clientes', icon: Users },
         { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
         { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas }
+      ]
+    },
+    {
+      title: 'Financeiro',
+      collapsible: true,
+      items: [
+        { title: 'Planos', href: '/planos', icon: CreditCard },
+        { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
+        { title: 'Faturas', href: '/faturas', icon: Receipt },
+        { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
       ]
     },
     {
@@ -239,7 +242,6 @@ export function Sidebar() {
             </div>
           </div>
 
-        {/* Botão de colapsar/expandir */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -270,7 +272,6 @@ export function Sidebar() {
 
               return (
                 <div key={section.title}>
-                  {/* Header da seção */}
                   <div className={cn(
                     "mb-1 flex items-center justify-between px-2",
                     collapsed && "justify-center"
@@ -297,11 +298,9 @@ export function Sidebar() {
                       </Button>
                     )}
 
-                    {/* separador visual no modo compacto */}
                     {collapsed && <div className="h-px w-8 bg-border" />}
                   </div>
 
-                  {/* Itens */}
                   {showItems && (
                     <div className={cn("space-y-1", collapsed && "space-y-2")}>
                       {section.items.map((item) => (
@@ -320,14 +319,12 @@ export function Sidebar() {
           </nav>
         </ScrollArea>
 
-        {/* Rodapé (usuario) */}
+        {/* Rodapé */}
         <SidebarUser collapsed={collapsed} />
       </div>
     </TooltipProvider>
   );
 }
-
-// --- Item isolado ----------------------------------------------------------
 
 function NavItemRow({
   item,
@@ -351,7 +348,6 @@ function NavItemRow({
       )}
       aria-current={active ? 'page' : undefined}
     >
-      {/* Indicador de ativo (borda à esquerda) */}
       <span
         className={cn(
           "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r",
@@ -362,7 +358,6 @@ function NavItemRow({
 
       <Icon className={cn("h-4 w-4", collapsed ? "mx-auto" : "mr-3")} />
 
-      {/* Título + badge (somem no compacto) */}
       {!collapsed && (
         <div className="ml-1 flex w-full items-center justify-between">
           <span>{item.title}</span>
@@ -372,7 +367,6 @@ function NavItemRow({
     </Link>
   );
 
-  // No modo compacto, envolvemos no Tooltip para mostrar o título e o badge
   if (collapsed) {
     return (
       <Tooltip>
@@ -387,8 +381,6 @@ function NavItemRow({
 
   return content;
 }
-
-// --- footer isolado --------------------------------------------------------
 
 function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const { user } = useAuth();
