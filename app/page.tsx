@@ -123,8 +123,8 @@ function Feature({
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, profile, signOut, loading } = useAuth();
-  const isAuthed = !!user && !!profile;
+  const { user, signOut, loading } = useAuth();
+  const isAuthed = !!user;
 
   if (loading) {
     return (
