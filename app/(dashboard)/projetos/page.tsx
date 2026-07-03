@@ -156,7 +156,6 @@ export default function ProjetosPage() {
     if (!confirm("Jogar fora? Tem certeza? Ainda dá tempo de desfazer…")) return;
     setBusy(true);
     try {
-<<<<<<< HEAD
       const [artesRes, tarefasRes] = await Promise.all([
         api.get<{ pagination: { total: number } }>(`/artes?projetoId=${id}&limit=1`),
         api.get<{ pagination: { total: number } }>(`/tarefas?projetoId=${id}&limit=1`),
@@ -166,8 +165,6 @@ export default function ProjetosPage() {
       if (artesCount > 0 || tarefasCount > 0) {
         toast.error("Não é possível excluir: existem artes e/ou tarefas vinculadas."); return;
       }
-=======
->>>>>>> origin/main
       setRows((prev) => prev.filter((p) => p.id !== id));
       await deleteProjeto(id);
       toast.success("Projeto excluído!");
