@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
+  Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
   CreditCard, Wallet, Receipt, ArrowDownToLine, Scale
@@ -178,6 +178,7 @@ export function Sidebar() {
       title: 'Gestão',
       items: [
         { title: 'Clientes', href: '/clientes', icon: Users },
+        { title: 'Equipes', href: '/equipes', icon: Users2 },
         { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
         { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas }
       ]
