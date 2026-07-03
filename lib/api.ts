@@ -1,5 +1,5 @@
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 const TOKEN_KEY = 'viu_token'
 const REFRESH_KEY = 'viu_refresh_token'
