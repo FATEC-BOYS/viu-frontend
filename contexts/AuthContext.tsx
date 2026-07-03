@@ -40,7 +40,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const TOKEN_KEY = 'viu_token'
 const USER_KEY = 'viu_user'
 const REFRESH_KEY = 'viu_refresh_token'
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
