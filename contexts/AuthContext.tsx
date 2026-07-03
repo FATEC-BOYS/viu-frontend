@@ -25,6 +25,18 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// TODO(security): migrate tokens from localStorage to HttpOnly cookies to prevent XSS token theft.
+// Risk: localStorage is accessible to any JS running on the page — an XSS attack can read TOKEN_KEY
+// and impersonate the user indefinitely.
+// Migration path:
+//   1. Backend: on /auth/login and /auth/2fa-login, set `Set-Cookie: viu_token=...; HttpOnly; SameSite=Strict; Secure`
+//      and remove token from the JSON response body. Do the same for refreshToken.
+//   2. Backend: CORS must allow credentials (`credentials: true`, explicit origin — no wildcard).
+//   3. Frontend (this file): remove TOKEN_KEY / USER_KEY / REFRESH_KEY localStorage reads and writes;
+//      remove the Authorization header injection in lib/api.ts (browser sends cookie automatically);
+//      `storeSession` becomes a no-op (only persist non-sensitive user profile if needed).
+//   4. Backend /auth/logout: clear the cookie with `Set-Cookie: viu_token=; Max-Age=0; HttpOnly`.
+//   5. Update all fetch/axios calls to pass `credentials: 'include'` (withCredentials: true).
 const TOKEN_KEY = 'viu_token'
 const USER_KEY = 'viu_user'
 const REFRESH_KEY = 'viu_refresh_token'
