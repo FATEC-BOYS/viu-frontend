@@ -65,7 +65,7 @@ function AdicionarMembroModal({
     const t = setTimeout(async () => {
       setBuscando(true)
       try {
-        const res = await api.get<{ data: Usuario[] }>(`/usuarios?search=${encodeURIComponent(busca)}&limit=5`)
+        const res = await api.get<{ data: Usuario[] }>(`/usuarios/buscar?q=${encodeURIComponent(busca)}&limit=5`)
         setResultados(res.data ?? [])
       } catch { setResultados([]) }
       finally { setBuscando(false) }
