@@ -7,6 +7,7 @@ import { listClientes, listDesigners } from "@/lib/projects";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
 import type { ProjetoInput } from "@/lib/projects";
 import { Stepper } from "@/components/ui/stepper";
@@ -39,7 +40,7 @@ interface ProjetoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ProjetoInitial | null;
-  onSubmit?: (values: ProjetoInput & ProjetoExtraPayload & { skipBriefingEval?: boolean }) => Promise<void>;
+  onSubmit?: (values: ProjetoInput & ProjetoExtraPayload & { skipBriefingEval?: boolean; aceiteTermos?: boolean }) => Promise<void>;
 }
 
 const isUuidLike = (v?: string | null) => !!v && v.length === 36;
@@ -126,6 +127,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const [souCliente, setSouCliente] = useState(false);
   const [step, setStep] = useState(0);
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
+  const [aceiteTermos, setAceiteTermos] = useState(false);
 
   const steps = [
     { key: "basic", label: "Básico" },
@@ -159,6 +161,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       if (!open) return;
       setLoading(true);
       setEvalResult(null);
+      setAceiteTermos(false);
       try {
         const isCli = user?.tipo === "CLIENTE";
         setSouCliente(isCli);
@@ -203,6 +206,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       }));
     }
     setEvalResult(null);
+    setAceiteTermos(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, open]);
 
@@ -236,7 +240,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       };
 
       if (onSubmit) {
-        await onSubmit({ ...baseValues, ...extra, skipBriefingEval });
+        await onSubmit({ ...baseValues, ...extra, skipBriefingEval, aceiteTermos: !initial && aceiteTermos });
         onOpenChange(false);
       }
     } catch (err: any) {
@@ -271,6 +275,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       prazoAprovDias: formData.aprovacao.prazoAprovacaoDias ?? null,
     };
   }, [formData, clientes, designers]);
+
+  const isLastStep = step === steps.length - 1;
+  const submitDisabled = salvando || loading || (isLastStep && !initial && !aceiteTermos);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -309,13 +316,36 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
           )}
         </div>
 
+        {/* Aceite de termos – apenas na etapa de revisão ao criar um novo projeto */}
+        {!evalResult && isLastStep && !initial && (
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+            <Checkbox
+              id="aceite-termos"
+              checked={aceiteTermos}
+              onCheckedChange={(v) => setAceiteTermos(v === true)}
+              className="mt-0.5"
+            />
+            <label htmlFor="aceite-termos" className="text-xs text-muted-foreground cursor-pointer leading-relaxed">
+              Li e aceito os{' '}
+              <a href="/termos" target="_blank" rel="noopener noreferrer" className="underline text-foreground hover:text-primary">
+                Termos de Uso
+              </a>{' '}
+              e a{' '}
+              <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline text-foreground hover:text-primary">
+                Política de Privacidade
+              </a>
+              . Confirmo que o briefing é verídico e concordo com as condições de entrega e pagamento. (Lei 14.063/20)
+            </label>
+          </div>
+        )}
+
         {!evalResult && (
           <div className="flex justify-between pt-2">
             <Button variant="outline" onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
               {step > 0 ? "Voltar" : "Cancelar"}
             </Button>
 
-            {step < steps.length - 1 ? (
+            {!isLastStep ? (
               <Button
                 onClick={() => setStep(step + 1)}
                 disabled={step === 0 && (loading || invalidBasic)}
@@ -324,7 +354,11 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
                 Próximo
               </Button>
             ) : (
-              <Button onClick={() => handleSubmitFinal(false)} disabled={salvando || loading}>
+              <Button
+                onClick={() => handleSubmitFinal(false)}
+                disabled={submitDisabled}
+                title={!initial && !aceiteTermos ? "Aceite os termos para continuar" : undefined}
+              >
                 {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {initial ? "Salvar" : "Criar"}
               </Button>

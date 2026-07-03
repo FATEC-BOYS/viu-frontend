@@ -13,7 +13,7 @@ import {
   Home, FolderOpen, FileImage, CheckSquare, Users, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -190,6 +190,7 @@ export function Sidebar() {
         { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
         { title: 'Faturas', href: '/faturas', icon: Receipt },
         { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
+        { title: 'Disputas', href: '/disputas', icon: Scale },
       ]
     },
     {
