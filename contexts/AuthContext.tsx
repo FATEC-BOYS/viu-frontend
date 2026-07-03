@@ -29,7 +29,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Risk: localStorage is accessible to any JS running on the page — an XSS attack can read TOKEN_KEY
 // and impersonate the user indefinitely.
 // Migration path:
-//   1. Backend: on /auth/login and /auth/2fa-login, set `Set-Cookie: viu_token=...; HttpOnly; SameSite=Strict; Secure`
+//   1. Backend: on /auth/login and /auth/2fa/login, set `Set-Cookie: viu_token=...; HttpOnly; SameSite=Strict; Secure`
 //      and remove token from the JSON response body. Do the same for refreshToken.
 //   2. Backend: CORS must allow credentials (`credentials: true`, explicit origin — no wildcard).
 //   3. Frontend (this file): remove TOKEN_KEY / USER_KEY / REFRESH_KEY localStorage reads and writes;
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeTwoFactorLogin = useCallback(async (userId: string, code: string) => {
     const res = await api.post<{ data: { token: string; refreshToken: string; usuario: UserProfile }; success: boolean }>(
-      '/auth/2fa-login',
+      '/auth/2fa/login',
       { userId, code }
     )
     const { token: newToken, refreshToken, usuario } = res.data
