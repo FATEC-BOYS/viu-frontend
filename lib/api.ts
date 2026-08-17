@@ -91,3 +91,40 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
+
+/**
+ * Limite máximo de itens por página aceito pelo backend.
+ * Rotas com validatePagination (/projetos, /usuarios) rejeitam limit > 100 com 400.
+ */
+export const MAX_PAGE_SIZE = 100
+
+type Paginated<T> = {
+  data: T[]
+  pagination?: { page: number; limit: number; total: number }
+}
+
+/**
+ * Busca todas as páginas de um endpoint paginado, respeitando MAX_PAGE_SIZE.
+ *
+ * Usar no lugar de `limit=200` & cia: além de estourar o limite do backend,
+ * um limite fixo trunca silenciosamente quem tem mais itens que o chute.
+ *
+ * `path` pode já conter query string — o page/limit é anexado corretamente.
+ */
+export async function getAll<T>(path: string, maxPages = 20): Promise<T[]> {
+  const sep = path.includes('?') ? '&' : '?'
+  const out: T[] = []
+
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await api.get<Paginated<T>>(
+      `${path}${sep}page=${page}&limit=${MAX_PAGE_SIZE}`,
+    )
+    const rows = res.data ?? []
+    out.push(...rows)
+
+    const total = res.pagination?.total
+    if (total !== undefined ? out.length >= total : rows.length < MAX_PAGE_SIZE) break
+  }
+
+  return out
+}

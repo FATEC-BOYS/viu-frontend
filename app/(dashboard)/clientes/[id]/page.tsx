@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, getAll } from '@/lib/api';
 import { createProjeto } from '@/lib/projects';
 import { toast } from 'sonner';
 
@@ -131,13 +131,13 @@ export default function ClienteDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [clienteRes, projetosRes] = await Promise.all([
+      const [clienteRes, todosProjetos] = await Promise.all([
         api.get<{ data: any }>(`/usuarios/${clienteId}`),
-        api.get<{ data: any[] }>('/projetos?limit=200'),
+        getAll<any>('/projetos'),
       ]);
 
       const c = clienteRes.data;
-      const projetos: Projeto[] = (projetosRes.data || [])
+      const projetos: Projeto[] = todosProjetos
         .filter((p: any) => p.cliente?.id === clienteId || p.clienteId === clienteId)
         .map((p: any) => ({
           id: p.id,

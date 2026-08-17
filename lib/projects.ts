@@ -1,5 +1,5 @@
 // lib/projects.ts — sem Supabase, usa API REST do backend
-import { api } from '@/lib/api'
+import { api, getAll } from '@/lib/api'
 
 export type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO'
 
@@ -227,13 +227,11 @@ export interface ProjetoResumo {
 }
 
 export async function getProjetoResumo(id: string): Promise<ProjetoResumo> {
-  const [proj, artesRes] = await Promise.all([
+  const [proj, artes] = await Promise.all([
     getProjeto(id),
-    api
-      .get<{ data: any[] }>(`/artes?projetoId=${id}&limit=200`)
-      .catch(() => ({ data: [] as any[] })),
+    // contagem precisa exige todas as artes, não as 200 primeiras
+    getAll<any>(`/artes?projetoId=${id}`).catch(() => [] as any[]),
   ])
-  const artes = artesRes.data ?? []
   const artesAprovadas = artes.filter((a: any) => a.status === 'APROVADO').length
   const artesRejeitadas = artes.filter((a: any) => a.status === 'REJEITADO').length
   const artesTotal = artes.length
@@ -443,22 +441,22 @@ export interface AprovacaoPainel {
 }
 
 export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPainel> {
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=200`)
-    .catch(() => ({ data: [] as any[] }))
-  const estados: AprovadorEstado[] = (artesRes.data ?? [])
-    .filter((a: any) => a.aprovacoes?.length)
-    .flatMap((a: any) =>
-      (a.aprovacoes ?? []).map((ap: any) => ({
-        aprovacao_id: ap.id,
-        aprovador_nome: ap.aprovador?.nome ?? null,
-        status: ap.status,
-        criado_em: ap.criadoEm ?? ap.criado_em ?? '',
-        arte_id: a.id,
-        arte_nome: a.nome,
-        versao: a.versao,
-      }))
-    )
+  // GET /artes não traz as aprovações (só _count), então a fonte é /aprovacoes
+  // filtrado pelo projeto.
+  const aprovacoes = await getAll<any>(`/aprovacoes?projetoId=${projetoId}`).catch(
+    () => [] as any[]
+  )
+
+  const estados: AprovadorEstado[] = aprovacoes.map((ap: any) => ({
+    aprovacao_id: ap.id,
+    aprovador_nome: ap.aprovador?.nome ?? null,
+    status: ap.status,
+    criado_em: ap.criadoEm ?? ap.criado_em ?? '',
+    arte_id: ap.arte?.id ?? ap.arteId,
+    arte_nome: ap.arte?.nome ?? null,
+    versao: ap.arte?.versao ?? 1,
+  }))
+
   return {
     regra: { todosAprovadores: false, exigirAprovacaoDesigner: false, prazoDias: null },
     estados,
@@ -484,6 +482,9 @@ export interface AtividadeItem {
   ref_id: string
   titulo: string
   autor_id: string | null
+  autor_nome: string | null
+  autor_avatar: string | null
+  versao: number | null
   criado_em: string
   texto: string | null
 }
@@ -493,18 +494,25 @@ export async function listAtividade(
   params?: { limit?: number; offset?: number }
 ): Promise<{ rows: AtividadeItem[]; count: number }> {
   const limit = params?.limit ?? 20
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=${limit}`)
-    .catch(() => ({ data: [] as any[] }))
-  const rows: AtividadeItem[] = (artesRes.data ?? []).map((a: any) => ({
+  const offset = params?.offset ?? 0
+  const page = Math.floor(offset / limit) + 1
+  const res = await api
+    .get<{ data: any[]; pagination?: { total: number } }>(
+      `/artes?projetoId=${projetoId}&page=${page}&limit=${limit}`
+    )
+    .catch(() => ({ data: [] as any[], pagination: { total: 0 } }))
+  const rows: AtividadeItem[] = (res.data ?? []).map((a: any) => ({
     tipo: 'ARTE_CRIADA' as AtividadeTipo,
     ref_id: a.id,
     titulo: a.nome,
-    autor_id: a.autorId ?? null,
+    autor_id: a.autor?.id ?? a.autorId ?? null,
+    autor_nome: a.autor?.nome ?? null,
+    autor_avatar: a.autor?.avatar ?? null,
+    versao: a.versao ?? null,
     criado_em: a.criadoEm ?? a.criado_em ?? '',
     texto: null,
   }))
-  return { rows, count: rows.length }
+  return { rows, count: res.pagination?.total ?? rows.length }
 }
 
 export interface Participante {

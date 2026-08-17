@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, getAll } from '@/lib/api';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -143,20 +143,17 @@ export default function PrazosPage() {
         today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
 
-        const [pendentesRes, andamentoRes, projetosRes, aprovacoesRes, feedbacksRes] = await Promise.all([
-          api.get<{ data: any[] }>('/tarefas?status=PENDENTE&limit=200'),
-          api.get<{ data: any[] }>('/tarefas?status=EM_ANDAMENTO&limit=200'),
-          api.get<{ data: any[] }>('/projetos?limit=200'),
+        const [pendentes, andamento, todosProjetos, aprovacoesRes, feedbacksRes] = await Promise.all([
+          getAll<any>('/tarefas?status=PENDENTE'),
+          getAll<any>('/tarefas?status=EM_ANDAMENTO'),
+          getAll<any>('/projetos'),
           api.get<{ data: any[] }>('/aprovacoes?status=PENDENTE&limit=50'),
           api.get<{ data: any[] }>('/feedbacks?status=ABERTO&limit=50'),
         ]);
 
-        const tarefas = [
-          ...(pendentesRes.data || []),
-          ...(andamentoRes.data || []),
-        ].map(mapTarefa);
+        const tarefas = [...pendentes, ...andamento].map(mapTarefa);
 
-        const projetos: Projeto[] = (projetosRes.data || [])
+        const projetos: Projeto[] = todosProjetos
           .filter((p: any) => p.prazo)
           .map((p: any) => ({ id: p.id, nome: p.nome, prazo: p.prazo }));
 

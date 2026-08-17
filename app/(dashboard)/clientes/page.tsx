@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
+import { api, getAll } from "@/lib/api";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -203,36 +203,43 @@ export default function ClientesPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const [clientesRes, projetosRes] = await Promise.all([
-        api.get<{ data: any[] }>('/usuarios?tipo=CLIENTE&limit=100'),
-        api.get<{ data: any[] }>('/projetos?limit=200'),
-      ]);
+      // GET /usuarios é restrito a ADMIN, então a carteira do designer é montada
+      // a partir dos clientes dos seus próprios projetos — que é exatamente o
+      // escopo que ele pode enxergar.
+      const projetos = await getAll<any>('/projetos');
 
-      const projetos: any[] = projetosRes.data || [];
-      const clientes: Cliente[] = (clientesRes.data || []).map((c: any) => ({
-        id: c.id,
-        email: c.email,
-        nome: c.nome,
-        telefone: c.telefone ?? null,
-        avatar: c.avatar ?? null,
-        tipo: c.tipo,
-        ativo: c.ativo,
-        criado_em: c.criadoEm ?? c.criado_em ?? '',
-        atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
-        projetos: projetos
-          .filter((p: any) => p.cliente?.id === c.id || p.clienteId === c.id)
-          .map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            descricao: p.descricao ?? null,
-            status: p.status,
-            orcamento: p.orcamento ?? null,
-            prazo: p.prazo ?? null,
-            artes: [],
-          })),
-      }));
+      const porCliente = new Map<string, Cliente>();
+      for (const p of projetos) {
+        const c = p.cliente;
+        if (!c?.id) continue;
 
-      setRows(clientes);
+        if (!porCliente.has(c.id)) {
+          porCliente.set(c.id, {
+            id: c.id,
+            email: c.email,
+            nome: c.nome,
+            telefone: c.telefone ?? null,
+            avatar: c.avatar ?? null,
+            tipo: 'CLIENTE',
+            ativo: c.ativo ?? true,
+            criado_em: c.criadoEm ?? c.criado_em ?? '',
+            atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
+            projetos: [],
+          });
+        }
+
+        porCliente.get(c.id)!.projetos.push({
+          id: p.id,
+          nome: p.nome,
+          descricao: p.descricao ?? null,
+          status: p.status,
+          orcamento: p.orcamento ?? null,
+          prazo: p.prazo ?? null,
+          artes: [],
+        });
+      }
+
+      setRows([...porCliente.values()]);
       setError(null);
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar clientes");

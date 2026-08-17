@@ -9,11 +9,18 @@ import { Loader2 } from "lucide-react";
 import {
   getProjeto,
   getProjetoAlertas,
+  getProjetoResumo,
+  getProximosPassos,
+  getTarefasKanban,
+  getAprovacaoPainel,
+  lembrarAprovadores as lembrarAprovadoresApi,
+  listArtes,
+  listAtividade,
   type Projeto,
   type ProximoPasso as LibProximoPasso,
   type ProximoPassoKind,
   type TarefasKanban,
-  type TarefaCard,
+  type AprovacaoPainel as LibAprovacaoPainel,
 } from "@/lib/projects";
 
 import ProjetoHeader from "@/components/projetos/ProjetoHeader";
@@ -38,23 +45,16 @@ import type { ArteListItem as UIArteListItem } from "@/components/projetos/artes
 
 import AprovacaoPanel from "@/components/projetos/aprovacao/AprovacaoPanel";
 import AprovacaoSkeleton from "@/components/projetos/aprovacao/AprovacaoSkeleton";
-import type { AprovacaoPainel as UIPainel } from "@/components/projetos/aprovacao/AprovacaoPanel";
+import type {
+  AprovacaoPainel as UIPainel,
+  AprovacaoArteRow,
+} from "@/components/projetos/aprovacao/AprovacaoPanel";
 
 import AtividadeFeed from "@/components/projetos/activity/AtividadeFeed";
+import type { AtividadeItem as UIAtividadeItem } from "@/components/projetos/activity/AtividadeItemRow";
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
-
-async function j<T>(url: string, init: RequestInit | undefined, fallback: T): Promise<T> {
-  try {
-    const r = await fetch(url, init);
-    if (!r.ok) return fallback;
-    const data = await r.json();
-    return (data ?? fallback) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 type EstadoCTA = "CRIAR_ARTE" | "PEDIR_APROVACAO" | "CONCLUIR";
 
@@ -147,45 +147,14 @@ export default function ProjetoPage() {
     };
   }
 
-  function adaptTarefaCard(r: any): TarefaCard {
-    return {
-      id: String(r.id),
-      titulo: String(r.titulo ?? r.title ?? "Tarefa"),
-      prazo: r.prazo ?? null,
-      prioridade: (r.prioridade ?? "MEDIA") as "ALTA" | "MEDIA" | "BAIXA",
-      status: (r.status ?? "PENDENTE") as "PENDENTE" | "EM_ANDAMENTO" | "CONCLUIDA" | "CANCELADA",
-      responsavel_nome:
-        r.responsavel?.nome ??
-        r.responsavel_nome ??
-        (r.responsavel_id ? "—" : null),
-    };
-  }
-
-  function adaptKanban(raw: any): TarefasKanban {
-    const toCol = (arr: any[]) => {
-      const rows = Array.isArray(arr) ? arr : [];
-      return { top: rows.slice(0, 3).map(adaptTarefaCard), total: rows.length };
-    };
-    const pendenteSrc = raw?.pendente ?? raw?.PENDENTE ?? [];
-    const emAndamentoSrc = raw?.em_andamento ?? raw?.EM_ANDAMENTO ?? [];
-    const concluidaSrc = raw?.concluida ?? raw?.CONCLUIDA ?? [];
-    return {
-      pendente: toCol(pendenteSrc),
-      em_andamento: toCol(emAndamentoSrc),
-      concluida: toCol(concluidaSrc),
-    };
-  }
 
   async function loadOverview() {
     setOvLoading(true);
     try {
       const [r, p, k] = await Promise.all([
-        j<any>(`/api/projetos/${id}/overview`, undefined, {
-          aprovadas: 0, total: 0, pessoas: { owner: "", designers: 0, clientes: 0, aprovadores: 0 },
-          estado: "CRIAR_ARTE" as EstadoCTA,
-        }),
-        j<any[]>(`/api/projetos/${id}/proximos-passos`, undefined, []),
-        j<any>(`/api/projetos/${id}/kanban`, undefined, { pendente: [], em_andamento: [], concluida: [] }),
+        getProjetoResumo(id),
+        getProximosPassos(id),
+        getTarefasKanban(id),
       ]);
 
       const passosLib: LibProximoPasso[] = (p ?? []).map((it: any, idx: number) => ({
@@ -198,7 +167,8 @@ export default function ProjetoPage() {
 
       setResumo(adaptResumo(r));
       setPassos(passosLib);
-      setKanban(adaptKanban(k));
+      // getTarefasKanban já devolve as colunas no formato { top, total }
+      setKanban(k);
     } finally { setOvLoading(false); }
   }
 
@@ -251,14 +221,15 @@ export default function ProjetoPage() {
     try {
       const from = append ? artFrom : 0;
       const q = buildArtesQuery(from);
-      const data = await j<{ items: any[]; total: number }>(
-        `/api/projetos/${id}/artes?${q.toString()}`,
-        undefined,
-        { items: [], total: 0 }
-      );
-      const items = adaptArteRows(data.items);
+      const { rows, count } = await listArtes(id, {
+        limit: ART_PAGE,
+        offset: from,
+        status: q.get("status") ?? undefined,
+        tipo: q.get("tipo") ?? undefined,
+      });
+      const items = adaptArteRows(rows);
       setArtRows(prev => (append ? [...prev, ...items] : items));
-      setArtTotal(data.total);
+      setArtTotal(count);
       setArtFrom(from + ART_PAGE);
     } finally { setArtLoading(false); }
   }
@@ -266,46 +237,70 @@ export default function ProjetoPage() {
   const [apLoading, setApLoading] = useState(false);
   const [painel, setPainel] = useState<AprovacaoPainel | null>(null);
 
-  function adaptPainel(raw: any): AprovacaoPainel {
-    if (!raw) return { regra: { tipo: "TODOS", exigirDesigner: false, slaDias: null }, items: [] } as unknown as AprovacaoPainel;
-    const items = raw.items ?? raw.itens ?? [];
-    const regra = raw.regra ?? { tipo: "TODOS", exigirDesigner: false, slaDias: null };
-    const normItems = items.map((i: any) => ({
-      arteId: String(i.arteId ?? i.arte_id ?? i.id),
-      nome: String(i.nome ?? "Arte"),
-      versao: Number(i.versao ?? 1),
-      estado: (i.estado ?? "EM_ANALISE") as "ENVIADA" | "EM_ANALISE" | "APROVADA" | "REJEITADA",
-      aprovadores: (i.aprovadores ?? []).map((ap: any) => ({
-        id: String(ap.id),
-        nome: String(ap.nome ?? ap.email ?? "—"),
-        status: (ap.status ?? "PENDENTE") as "OK" | "PENDENTE" | "REJEITADO",
-        deadline: ap.deadline ?? null,
-      })),
-      regra: i.regra ?? { tipo: "TODOS", exigirDesigner: false, slaDias: null },
-    }));
-    return { regra, items: normItems } as AprovacaoPainel;
+  /**
+   * getAprovacaoPainel devolve uma linha por aprovação; a UI espera uma linha
+   * por arte, com os aprovadores agrupados dentro dela.
+   */
+  function adaptPainel(raw: LibAprovacaoPainel): AprovacaoPainel {
+    const porArte = new Map<string, AprovacaoArteRow>();
+
+    for (const e of raw.estados ?? []) {
+      if (!porArte.has(e.arte_id)) {
+        porArte.set(e.arte_id, {
+          aprovacaoId: e.aprovacao_id,
+          arteId: e.arte_id,
+          arteNome: e.arte_nome ?? "Arte",
+          versaoAtual: Number(e.versao ?? 1),
+          status: "EM_ANALISE",
+          criadoEm: e.criado_em,
+          aprovadores: [],
+        });
+      }
+      porArte.get(e.arte_id)!.aprovadores.push({
+        id: e.aprovacao_id,
+        nome: e.aprovador_nome ?? "—",
+        status: e.status,
+      });
+    }
+
+    const items = [...porArte.values()].map((it) => {
+      const rejeitou = it.aprovadores.some((a) => a.status === "REJEITADO");
+      const todosAprovaram =
+        it.aprovadores.length > 0 && it.aprovadores.every((a) => a.status === "APROVADO");
+      return {
+        ...it,
+        status: rejeitou ? "REJEITADO" : todosAprovaram ? "APROVADO" : "EM_ANALISE",
+      } as AprovacaoArteRow;
+    });
+
+    return {
+      regra: {
+        modo: raw.regra?.todosAprovadores ? "TODOS" : "QUALQUER_UM",
+        exigirDesigner: raw.regra?.exigirAprovacaoDesigner ?? false,
+        slaDias: raw.regra?.prazoDias ?? null,
+      },
+      items,
+    };
   }
 
   async function loadApproval() {
     setApLoading(true);
     try {
-      const data = await j<any>(`/api/projetos/${id}/aprovacao/painel`, undefined, {
-        regra: { tipo: "TODOS", exigirDesigner: false, slaDias: null }, items: []
-      });
-      setPainel(adaptPainel(data));
+      setPainel(adaptPainel(await getAprovacaoPainel(id)));
     } finally { setApLoading(false); }
   }
 
   async function lembrarAprovadores(aprovacaoId: string) {
-    await fetch(`/api/aprovacoes/${aprovacaoId}/remind`, { method: "POST" });
+    await lembrarAprovadoresApi(aprovacaoId);
   }
-  async function overrideOwner(arteId: string) {
-    await fetch(`/api/artes/${arteId}/override`, { method: "POST" });
+  async function overrideOwner(_arteId: string) {
+    // TODO: sem endpoint no backend — o override do dono ainda não existe na API.
+    // Recarrega o painel para não deixar a UI em estado mentiroso.
     await loadApproval();
   }
 
   const [actLoading, setActLoading] = useState(false);
-  const [actRows, setActRows] = useState<any[]>([]);
+  const [actRows, setActRows] = useState<UIAtividadeItem[]>([]);
   const [actTotal, setActTotal] = useState(0);
   const [actFrom, setActFrom] = useState(0);
   const ACT_PAGE = 15;
@@ -314,13 +309,21 @@ export default function ProjetoPage() {
     setActLoading(true);
     try {
       const from = append ? actFrom : 0;
-      const data = await j<{ items: any[]; total: number }>(
-        `/api/projetos/${id}/atividade?from=${from}&limit=${ACT_PAGE}`,
-        undefined,
-        { items: [], total: 0 }
-      );
-      setActRows(prev => (append ? [...prev, ...data.items] : data.items));
-      setActTotal(data.total);
+      const { rows, count } = await listAtividade(id, { limit: ACT_PAGE, offset: from });
+      const items: UIAtividadeItem[] = rows.map((r) => ({
+        id: r.ref_id,
+        tipo: r.tipo as UIAtividadeItem["tipo"],
+        criado_em: r.criado_em,
+        autor: {
+          id: r.autor_id ?? "",
+          nome: r.autor_nome ?? "—",
+          avatar: r.autor_avatar,
+        },
+        ref: { kind: "arte", id: r.ref_id },
+        meta: { arteNome: r.titulo, versao: r.versao ?? undefined },
+      }));
+      setActRows(prev => (append ? [...prev, ...items] : items));
+      setActTotal(count);
       setActFrom(from + ACT_PAGE);
     } finally { setActLoading(false); }
   }
