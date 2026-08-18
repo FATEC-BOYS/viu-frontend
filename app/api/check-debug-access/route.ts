@@ -1,14 +1,14 @@
 // app/api/check-debug-access/route.ts
+import { backendFetch } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (!authHeader) return NextResponse.json({ hasAccess: false });
 
   try {
-    const res = await fetch(`${BACKEND_URL}/me`, {
+    const res = await backendFetch(`/me`, {
       headers: { Authorization: authHeader },
       cache: "no-store",
     });

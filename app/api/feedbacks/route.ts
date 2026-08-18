@@ -1,6 +1,6 @@
+import { backendFetch } from "@/lib/serverBackend";
 import { NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       const body = await req.json()
       const { token, conteudo, tipo, guestNome, guestEmail, posicao_x, posicao_y } = body
 
-      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks`, {
+      const res = await backendFetch(`/links/${token}/feedbacks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       const posX = form.get('posicao_x'); if (posX) fwd.append('posicaoX', String(posX))
       const posY = form.get('posicao_y'); if (posY) fwd.append('posicaoY', String(posY))
 
-      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks/audio`, {
+      const res = await backendFetch(`/links/${token}/feedbacks/audio`, {
         method: 'POST',
         body: fwd,
       })

@@ -43,7 +43,9 @@ interface ProjetoModalProps {
   onSubmit?: (values: ProjetoInput & ProjetoExtraPayload & { skipBriefingEval?: boolean; aceiteTermos?: boolean }) => Promise<void>;
 }
 
-const isUuidLike = (v?: string | null) => !!v && v.length === 36;
+// CUID gerado no banco: 'c' + 24 hex. O check antigo era v.length === 36
+// (tamanho de UUID), que reprovava todo id real e travava o modal.
+const isCuidLike = (v?: string | null) => !!v && /^c[a-z0-9]{24}$/i.test(v);
 
 const DIMENSION_LABELS: Record<string, string> = {
   completude: "Completude",
@@ -213,14 +215,14 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const invalidBasic = useMemo(() => {
     const nomeOk = formData.nome.trim().length > 0;
     const orcOk = Number.isFinite(formData.orcamento);
-    const cliOk = souCliente || isUuidLike(formData.cliente_id);
+    const cliOk = souCliente || isCuidLike(formData.cliente_id);
     return !(nomeOk && orcOk && cliOk);
   }, [formData, souCliente]);
 
   const handleSubmitFinal = async (skipBriefingEval = false) => {
     setSalvando(true);
     try {
-      const clienteId = souCliente ? (user?.id ?? null) : (isUuidLike(formData.cliente_id) ? formData.cliente_id : null);
+      const clienteId = souCliente ? (user?.id ?? null) : (isCuidLike(formData.cliente_id) ? formData.cliente_id : null);
       if (!clienteId) throw new Error("Selecione um cliente.");
 
       const prazoISO: string | null = formData.prazo ? new Date(formData.prazo).toISOString() : null;

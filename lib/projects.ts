@@ -25,9 +25,11 @@ export interface ProjetoInput {
   cliente_id: string
 }
 
-const isUuid = (v?: string | null) =>
-  !!v &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+// Os ids são CUIDs gerados no banco ('c' + 24 hex), não UUIDs. O regex de UUID
+// que estava aqui reprovava todo id real, então createProjeto sempre falhava
+// com "Selecione o cliente". Mesmo formato validado pelo backend em
+// validateCuidParam.
+const isCuid = (v?: string | null) => !!v && /^c[a-z0-9]{24}$/i.test(v)
 
 const isValidISO = (v: string) => !Number.isNaN(Date.parse(v))
 
@@ -87,7 +89,7 @@ function validateProjetoInput(payload: ProjetoInput): string[] {
     errs.push('Orçamento deve ser um número ≥ 0')
   if (payload.prazo != null && !isValidISO(payload.prazo))
     errs.push('Prazo inválido (use ISO-8601)')
-  if (!isUuid(payload.cliente_id)) errs.push('Selecione o cliente')
+  if (!isCuid(payload.cliente_id)) errs.push('Selecione o cliente')
   return errs
 }
 
@@ -122,7 +124,7 @@ function validateProjetoPatch(patch: Partial<ProjetoInput>): string[] {
     !isValidISO(patch.prazo)
   )
     errs.push('Prazo inválido (use ISO-8601)')
-  if (patch.cliente_id !== undefined && !isUuid(patch.cliente_id))
+  if (patch.cliente_id !== undefined && !isCuid(patch.cliente_id))
     errs.push('Selecione o cliente')
   return errs
 }
@@ -200,18 +202,30 @@ export async function getProjetoCabecalho(id: string): Promise<Projeto> {
   return getProjeto(id)
 }
 
+/**
+ * Designers e clientes já conhecidos, derivados dos projetos do usuário.
+ *
+ * GET /usuarios é restrito a ADMIN — chamá-lo aqui devolvia 403, que o
+ * .catch() antigo transformava em lista vazia sem avisar ninguém. Para
+ * descobrir alguém fora dessa lista, a UI usa o typeahead
+ * /api/contacts/search, que roda sobre GET /usuarios/buscar.
+ */
+async function pessoasDosProjetos(campo: 'designer' | 'cliente') {
+  const projetos = await getAll<any>('/projetos')
+  const porId = new Map<string, { id: string; nome: string }>()
+  for (const p of projetos) {
+    const u = p[campo]
+    if (u?.id && !porId.has(u.id)) porId.set(u.id, { id: u.id, nome: u.nome })
+  }
+  return [...porId.values()]
+}
+
 export async function listDesigners() {
-  const res = await api
-    .get<{ data: any[] }>('/usuarios?tipo=DESIGNER&ativo=true&limit=100')
-    .catch(() => ({ data: [] as any[] }))
-  return (res.data ?? []).map((u: any) => ({ id: u.id, nome: u.nome }))
+  return pessoasDosProjetos('designer')
 }
 
 export async function listClientes() {
-  const res = await api
-    .get<{ data: any[] }>('/usuarios?tipo=CLIENTE&ativo=true&limit=100')
-    .catch(() => ({ data: [] as any[] }))
-  return (res.data ?? []).map((u: any) => ({ id: u.id, nome: u.nome }))
+  return pessoasDosProjetos('cliente')
 }
 
 export interface ProjetoResumo {

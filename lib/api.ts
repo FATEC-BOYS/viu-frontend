@@ -93,6 +93,15 @@ export const api = {
 }
 
 /**
+ * Header de auth para chamadas que não passam por api.* — por exemplo os
+ * fetch() diretos nas rotas BFF /api/contacts/*, que repassam o token adiante.
+ */
+export function authHeaders(): Record<string, string> {
+  const token = getToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+/**
  * Limite máximo de itens por página aceito pelo backend.
  * Rotas com validatePagination (/projetos, /usuarios) rejeitam limit > 100 com 400.
  */

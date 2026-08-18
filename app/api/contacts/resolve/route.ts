@@ -1,45 +1,54 @@
+import { backendFetch } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
+/**
+ * Traduz um id (ou e-mail) de contato para um rótulo legível.
+ *
+ * GET /usuarios/:id exige ownership, então um designer não consegue ler o
+ * cadastro do próprio cliente por ali. O fallback procura a pessoa entre os
+ * participantes dos projetos do usuário, que é o escopo que ele já enxerga.
+ */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const id = (url.searchParams.get("id") ?? "").trim();
   const tipo = (url.searchParams.get("tipo") ?? "") as "CLIENTE" | "DESIGNER";
 
   if (!id || !["CLIENTE", "DESIGNER"].includes(tipo)) {
-    return Response.json({ ok: false, label: null }, { status: 400 });
+    return NextResponse.json({ ok: false, label: null }, { status: 400 });
   }
 
   const authHeader = req.headers.get("authorization");
-  if (!authHeader) return Response.json({ ok: false, label: null }, { status: 401 });
+  if (!authHeader) return NextResponse.json({ ok: false, label: null }, { status: 401 });
 
+  const headers = { Authorization: authHeader };
   const isEmail = EMAIL_RE.test(id);
+  const rotulo = (u: any) => u?.nome || u?.email || id;
 
   try {
     if (!isEmail) {
-      // É um UUID — busca direto pelo id
-      const res = await fetch(`${BACKEND_URL}/usuarios/${id}`, {
-        headers: { Authorization: authHeader },
-        cache: "no-store",
-      });
-      if (!res.ok) return Response.json({ ok: true, label: id });
-      const body = await res.json();
-      const u = body.data;
-      return Response.json({ ok: true, label: u?.nome || u?.email || id });
+      const res = await backendFetch(`/usuarios/${id}`, { headers });
+      if (res.ok) {
+        const body = await res.json();
+        return NextResponse.json({ ok: true, label: rotulo(body.data) });
+      }
     }
 
-    // É email — busca todos do tipo e filtra
-    const res = await fetch(`${BACKEND_URL}/usuarios?tipo=${tipo}&limit=200`, {
-      headers: { Authorization: authHeader },
-      cache: "no-store",
-    });
-    if (!res.ok) return Response.json({ ok: true, label: id });
-    const body = await res.json();
-    const found = (body.data ?? []).find((u: any) => u.email?.toLowerCase() === id.toLowerCase());
-    return Response.json({ ok: true, label: found ? (found.nome || found.email) : id });
+    // Fallback: procura nos projetos do usuário
+    const campo = tipo === "CLIENTE" ? "cliente" : "designer";
+    const res = await backendFetch(`/projetos?page=1&limit=100`, { headers });
+    if (res.ok) {
+      const body = await res.json();
+      const alvo = id.toLowerCase();
+      const achado = (body.data ?? [])
+        .map((p: any) => p[campo])
+        .find((u: any) => u && (u.id === id || u.email?.toLowerCase() === alvo));
+      if (achado) return NextResponse.json({ ok: true, label: rotulo(achado) });
+    }
+
+    return NextResponse.json({ ok: true, label: id });
   } catch {
-    return Response.json({ ok: true, label: id });
+    return NextResponse.json({ ok: true, label: id });
   }
 }

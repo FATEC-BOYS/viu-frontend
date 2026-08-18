@@ -238,8 +238,7 @@ export default function ClienteDetailPage() {
         status: 'EM_ANDAMENTO',
         orcamento: 0,
         prazo: null,
-        clienteId: cliente.id,
-        designerId: user.id,
+        cliente_id: cliente.id,
       });
       toast.success('Projeto criado!');
       router.push(`/projetos/${novo.id}`);
