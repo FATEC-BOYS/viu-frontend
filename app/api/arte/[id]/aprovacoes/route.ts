@@ -1,12 +1,12 @@
 // app/api/arte/[id]/aprovacoes/route.ts
+import { backendFetch } from "@/lib/serverBackend";
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
 /** Valida o token público via GET /preview/:token */
 async function validateToken(arteId: string, token: string): Promise<boolean> {
   try {
-    const res = await fetch(`${BACKEND_URL}/preview/${token}`, { cache: "no-store" });
+    const res = await backendFetch(`/preview/${token}`, { cache: "no-store" });
     if (!res.ok) return false;
     const body = await res.json();
     return body?.data?.arte?.id === arteId;
@@ -43,7 +43,7 @@ export async function GET(
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/aprovacoes?arteId=${arteId}&limit=50`, {
+    const res = await backendFetch(`/aprovacoes?arteId=${arteId}&limit=50`, {
       headers: { Authorization: authHeader },
       cache: "no-store",
     });
@@ -95,8 +95,7 @@ export async function PATCH(
 
   try {
     // Encontra a aprovação pelo arteId + aprovadorId
-    const listRes = await fetch(
-      `${BACKEND_URL}/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&limit=1`,
+    const listRes = await backendFetch(`/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&limit=1`,
       { headers: { Authorization: authHeader }, cache: "no-store" }
     );
     if (!listRes.ok) throw new Error("Falha ao buscar aprovação.");
@@ -107,7 +106,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Aprovação não encontrada." }, { status: 404 });
     }
 
-    const updateRes = await fetch(`${BACKEND_URL}/aprovacoes/${aprovacao.id}`, {
+    const updateRes = await backendFetch(`/aprovacoes/${aprovacao.id}`, {
       method: "PUT",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ status: decisao, comentario: comentario ?? null }),

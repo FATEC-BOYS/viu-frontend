@@ -1,5 +1,5 @@
 // lib/projects.ts — sem Supabase, usa API REST do backend
-import { api } from '@/lib/api'
+import { api, getAll } from '@/lib/api'
 
 export type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO'
 
@@ -25,9 +25,11 @@ export interface ProjetoInput {
   cliente_id: string
 }
 
-const isUuid = (v?: string | null) =>
-  !!v &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+// Os ids são CUIDs gerados no banco ('c' + 24 hex), não UUIDs. O regex de UUID
+// que estava aqui reprovava todo id real, então createProjeto sempre falhava
+// com "Selecione o cliente". Mesmo formato validado pelo backend em
+// validateCuidParam.
+const isCuid = (v?: string | null) => !!v && /^c[a-z0-9]{24}$/i.test(v)
 
 const isValidISO = (v: string) => !Number.isNaN(Date.parse(v))
 
@@ -87,7 +89,7 @@ function validateProjetoInput(payload: ProjetoInput): string[] {
     errs.push('Orçamento deve ser um número ≥ 0')
   if (payload.prazo != null && !isValidISO(payload.prazo))
     errs.push('Prazo inválido (use ISO-8601)')
-  if (!isUuid(payload.cliente_id)) errs.push('Selecione o cliente')
+  if (!isCuid(payload.cliente_id)) errs.push('Selecione o cliente')
   return errs
 }
 
@@ -122,7 +124,7 @@ function validateProjetoPatch(patch: Partial<ProjetoInput>): string[] {
     !isValidISO(patch.prazo)
   )
     errs.push('Prazo inválido (use ISO-8601)')
-  if (patch.cliente_id !== undefined && !isUuid(patch.cliente_id))
+  if (patch.cliente_id !== undefined && !isCuid(patch.cliente_id))
     errs.push('Selecione o cliente')
   return errs
 }
@@ -200,18 +202,30 @@ export async function getProjetoCabecalho(id: string): Promise<Projeto> {
   return getProjeto(id)
 }
 
+/**
+ * Designers e clientes já conhecidos, derivados dos projetos do usuário.
+ *
+ * GET /usuarios é restrito a ADMIN — chamá-lo aqui devolvia 403, que o
+ * .catch() antigo transformava em lista vazia sem avisar ninguém. Para
+ * descobrir alguém fora dessa lista, a UI usa o typeahead
+ * /api/contacts/search, que roda sobre GET /usuarios/buscar.
+ */
+async function pessoasDosProjetos(campo: 'designer' | 'cliente') {
+  const projetos = await getAll<any>('/projetos')
+  const porId = new Map<string, { id: string; nome: string }>()
+  for (const p of projetos) {
+    const u = p[campo]
+    if (u?.id && !porId.has(u.id)) porId.set(u.id, { id: u.id, nome: u.nome })
+  }
+  return [...porId.values()]
+}
+
 export async function listDesigners() {
-  const res = await api
-    .get<{ data: any[] }>('/usuarios?tipo=DESIGNER&ativo=true&limit=100')
-    .catch(() => ({ data: [] as any[] }))
-  return (res.data ?? []).map((u: any) => ({ id: u.id, nome: u.nome }))
+  return pessoasDosProjetos('designer')
 }
 
 export async function listClientes() {
-  const res = await api
-    .get<{ data: any[] }>('/usuarios?tipo=CLIENTE&ativo=true&limit=100')
-    .catch(() => ({ data: [] as any[] }))
-  return (res.data ?? []).map((u: any) => ({ id: u.id, nome: u.nome }))
+  return pessoasDosProjetos('cliente')
 }
 
 export interface ProjetoResumo {
@@ -227,13 +241,11 @@ export interface ProjetoResumo {
 }
 
 export async function getProjetoResumo(id: string): Promise<ProjetoResumo> {
-  const [proj, artesRes] = await Promise.all([
+  const [proj, artes] = await Promise.all([
     getProjeto(id),
-    api
-      .get<{ data: any[] }>(`/artes?projetoId=${id}&limit=200`)
-      .catch(() => ({ data: [] as any[] })),
+    // contagem precisa exige todas as artes, não as 200 primeiras
+    getAll<any>(`/artes?projetoId=${id}`).catch(() => [] as any[]),
   ])
-  const artes = artesRes.data ?? []
   const artesAprovadas = artes.filter((a: any) => a.status === 'APROVADO').length
   const artesRejeitadas = artes.filter((a: any) => a.status === 'REJEITADO').length
   const artesTotal = artes.length
@@ -443,31 +455,30 @@ export interface AprovacaoPainel {
 }
 
 export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPainel> {
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=200`)
-    .catch(() => ({ data: [] as any[] }))
-  const estados: AprovadorEstado[] = (artesRes.data ?? [])
-    .filter((a: any) => a.aprovacoes?.length)
-    .flatMap((a: any) =>
-      (a.aprovacoes ?? []).map((ap: any) => ({
-        aprovacao_id: ap.id,
-        aprovador_nome: ap.aprovador?.nome ?? null,
-        status: ap.status,
-        criado_em: ap.criadoEm ?? ap.criado_em ?? '',
-        arte_id: a.id,
-        arte_nome: a.nome,
-        versao: a.versao,
-      }))
-    )
+  // GET /artes não traz as aprovações (só _count), então a fonte é /aprovacoes
+  // filtrado pelo projeto.
+  const aprovacoes = await getAll<any>(`/aprovacoes?projetoId=${projetoId}`).catch(
+    () => [] as any[]
+  )
+
+  const estados: AprovadorEstado[] = aprovacoes.map((ap: any) => ({
+    aprovacao_id: ap.id,
+    aprovador_nome: ap.aprovador?.nome ?? null,
+    status: ap.status,
+    criado_em: ap.criadoEm ?? ap.criado_em ?? '',
+    arte_id: ap.arte?.id ?? ap.arteId,
+    arte_nome: ap.arte?.nome ?? null,
+    versao: ap.arte?.versao ?? 1,
+  }))
+
   return {
     regra: { todosAprovadores: false, exigirAprovacaoDesigner: false, prazoDias: null },
     estados,
   }
 }
 
-export async function lembrarAprovadores(
-  _aprovacaoId: string
-): Promise<{ ok: true }> {
+export async function lembrarAprovadores(aprovacaoId: string): Promise<{ ok: true }> {
+  await api.put(`/aprovacoes/${aprovacaoId}/lembrar`, {})
   return { ok: true }
 }
 
@@ -484,6 +495,9 @@ export interface AtividadeItem {
   ref_id: string
   titulo: string
   autor_id: string | null
+  autor_nome: string | null
+  autor_avatar: string | null
+  versao: number | null
   criado_em: string
   texto: string | null
 }
@@ -493,18 +507,25 @@ export async function listAtividade(
   params?: { limit?: number; offset?: number }
 ): Promise<{ rows: AtividadeItem[]; count: number }> {
   const limit = params?.limit ?? 20
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=${limit}`)
-    .catch(() => ({ data: [] as any[] }))
-  const rows: AtividadeItem[] = (artesRes.data ?? []).map((a: any) => ({
+  const offset = params?.offset ?? 0
+  const page = Math.floor(offset / limit) + 1
+  const res = await api
+    .get<{ data: any[]; pagination?: { total: number } }>(
+      `/artes?projetoId=${projetoId}&page=${page}&limit=${limit}`
+    )
+    .catch(() => ({ data: [] as any[], pagination: { total: 0 } }))
+  const rows: AtividadeItem[] = (res.data ?? []).map((a: any) => ({
     tipo: 'ARTE_CRIADA' as AtividadeTipo,
     ref_id: a.id,
     titulo: a.nome,
-    autor_id: a.autorId ?? null,
+    autor_id: a.autor?.id ?? a.autorId ?? null,
+    autor_nome: a.autor?.nome ?? null,
+    autor_avatar: a.autor?.avatar ?? null,
+    versao: a.versao ?? null,
     criado_em: a.criadoEm ?? a.criado_em ?? '',
     texto: null,
   }))
-  return { rows, count: rows.length }
+  return { rows, count: res.pagination?.total ?? rows.length }
 }
 
 export interface Participante {
@@ -532,8 +553,16 @@ export async function listParticipantes(projetoId: string): Promise<Participante
   return parts
 }
 
-export async function listConvites(_projetoId: string): Promise<ConviteRow[]> {
-  return []
+export async function listConvites(projetoId: string): Promise<ConviteRow[]> {
+  const res = await api
+    .get<{ data: any[] }>(`/projetos/${projetoId}/convites`)
+    .catch(() => ({ data: [] as any[] }))
+  return (res.data ?? []).map((c: any) => ({
+    email: c.convidado?.email ?? '',
+    papel: c.papel ?? 'CLIENTE',
+    status: c.status,
+    criado_em: c.criadoEm ?? '',
+  })) as ConviteRow[]
 }
 
 export async function getNarrativaContagens(projetoId: string) {

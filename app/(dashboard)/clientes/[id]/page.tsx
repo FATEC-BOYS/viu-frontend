@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, getAll } from '@/lib/api';
 import { createProjeto } from '@/lib/projects';
 import { toast } from 'sonner';
 
@@ -62,7 +62,8 @@ type Cliente = {
   telefone: string | null;
   avatar: string | null;
   tipo: 'DESIGNER' | 'CLIENTE';
-  ativo: boolean;
+  // Vínculo com o designer, não status da conta do cliente.
+  vinculado: boolean;
   criado_em: string;
   atualizado_em: string;
   projetos: Projeto[];
@@ -113,7 +114,7 @@ export default function ClienteDetailPage() {
     telefone: null,
     avatar: null,
     tipo: 'CLIENTE',
-    ativo: true,
+    vinculado: true,
     criado_em: '',
     atualizado_em: '',
     projetos: [],
@@ -131,13 +132,24 @@ export default function ClienteDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [clienteRes, projetosRes] = await Promise.all([
-        api.get<{ data: any }>(`/usuarios/${clienteId}`),
-        api.get<{ data: any[] }>('/projetos?limit=200'),
+      // GET /usuarios/:id exige ownership, então um designer não lê o cadastro
+      // do próprio cliente. Os dados vêm dos projetos em comum, mesmo escopo
+      // que a listagem usa.
+      const [todosProjetos, rompidosRes] = await Promise.all([
+        getAll<any>('/projetos'),
+        api.get<{ data: any[] }>('/vinculos/rompidos').catch(() => ({ data: [] as any[] })),
       ]);
+      const rompido = (rompidosRes.data ?? []).some(
+        (v: any) => (v.clienteId ?? v.cliente?.id) === clienteId
+      );
 
-      const c = clienteRes.data;
-      const projetos: Projeto[] = (projetosRes.data || [])
+      const c = todosProjetos.find((p: any) => p.cliente?.id === clienteId)?.cliente;
+      if (!c) {
+        setError('Cliente não encontrado na sua carteira.');
+        setCliente(null);
+        return;
+      }
+      const projetos: Projeto[] = todosProjetos
         .filter((p: any) => p.cliente?.id === clienteId || p.clienteId === clienteId)
         .map((p: any) => ({
           id: p.id,
@@ -156,8 +168,8 @@ export default function ClienteDetailPage() {
         nome: c.nome,
         telefone: c.telefone ?? null,
         avatar: c.avatar ?? null,
-        tipo: c.tipo,
-        ativo: c.ativo,
+        tipo: 'CLIENTE',
+        vinculado: !rompido,
         criado_em: c.criadoEm ?? c.criado_em ?? '',
         atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
         projetos,
@@ -214,15 +226,20 @@ export default function ClienteDetailPage() {
   }, [clienteSafe.projetos]);
 
   // ===== Ações =====
-  const toggleAtivo = async () => {
+  /**
+   * Rompe ou restaura o vínculo. A conta do cliente não é tocada e nada do
+   * histórico é apagado — ele só sai (ou volta) para a carteira do designer.
+   */
+  const toggleVinculo = async () => {
     if (!cliente) return;
+    const acao = cliente.vinculado ? 'romper' : 'restaurar';
     try {
       setBusy(true);
-      await api.put(`/usuarios/${cliente.id}`, { ativo: !cliente.ativo });
-      setCliente({ ...cliente, ativo: !cliente.ativo });
-      toast.success(cliente.ativo ? 'Cliente desativado.' : 'Cliente ativado.');
+      await api.put(`/vinculos/${cliente.id}/${acao}`, {});
+      setCliente({ ...cliente, vinculado: !cliente.vinculado });
+      toast.success(cliente.vinculado ? 'Vínculo rompido. Os projetos continuam aqui.' : 'Vínculo restaurado.');
     } catch (e: any) {
-      toast.error(e?.message ?? 'Não foi possível alterar status.');
+      toast.error(e?.message ?? 'Não foi possível alterar o vínculo.');
     } finally {
       setBusy(false);
     }
@@ -238,8 +255,7 @@ export default function ClienteDetailPage() {
         status: 'EM_ANDAMENTO',
         orcamento: 0,
         prazo: null,
-        clienteId: cliente.id,
-        designerId: user.id,
+        cliente_id: cliente.id,
       });
       toast.success('Projeto criado!');
       router.push(`/projetos/${novo.id}`);
@@ -296,16 +312,16 @@ export default function ClienteDetailPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> {clienteSafe.email}</span>
               {clienteSafe.telefone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" /> {clienteSafe.telefone}</span>}
-              <Badge variant={clienteSafe.ativo ? 'default' : 'secondary'} className="ml-1">
-                {clienteSafe.ativo ? 'Ativo' : 'Inativo'}
+              <Badge variant={clienteSafe.vinculado ? 'default' : 'secondary'} className="ml-1">
+                {clienteSafe.vinculado ? 'Vínculo ativo' : 'Vínculo rompido'}
               </Badge>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={toggleAtivo} disabled={busy}>
-            {clienteSafe.ativo ? 'Desativar' : 'Ativar'}
+          <Button variant="outline" onClick={toggleVinculo} disabled={busy}>
+            {clienteSafe.vinculado ? 'Romper vínculo' : 'Restaurar vínculo'}
           </Button>
           <Button onClick={criarProjetoRápido} disabled={busy}>
             <Plus className="h-4 w-4 mr-1" /> Novo projeto

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "@/lib/api";
+import { api, getAll } from "@/lib/api";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +36,9 @@ type Cliente = {
   telefone: string | null;
   avatar: string | null;
   tipo: "DESIGNER" | "CLIENTE";
-  ativo: boolean;
+  // Vínculo com o designer, não status da conta do cliente. Romper tira o
+  // cliente da carteira sem apagar nada do que já foi trocado.
+  vinculado: boolean;
   criado_em: string;
   atualizado_em: string;
   projetos: Projeto[];
@@ -45,7 +47,7 @@ type Cliente = {
 /* ============================== Helpers ============================== */
 const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"] as const;
 type Mode = "cards" | "board" | "calendar";
-type StatusFiltro = "todos" | "ativo" | "inativo";
+type StatusFiltro = "todos" | "vinculado" | "rompido";
 const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
 const formatBRLFromCents = (v?: number | null) =>
   typeof v === "number"
@@ -54,15 +56,15 @@ const formatBRLFromCents = (v?: number | null) =>
 
 /* ============================== Bulk Bar ============================== */
 function BulkBarClientes({
-  count, onClose, onAtivar, onDesativar,
-}: { count: number; onClose: () => void; onAtivar: () => void; onDesativar: () => void; }) {
+  count, onClose, onRestaurar, onRomper,
+}: { count: number; onClose: () => void; onRestaurar: () => void; onRomper: () => void; }) {
   if (count === 0) return null;
   return (
     <div className="sticky top-0 z-10 mb-4 rounded-md border bg-card p-2 shadow-sm flex items-center justify-between">
       <span className="text-sm">Selecionados: <b>{count}</b></span>
       <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={onAtivar}>Ativar</Button>
-        <Button size="sm" variant="outline" onClick={onDesativar}><Undo2 className="h-4 w-4 mr-1" /> Desativar</Button>
+        <Button size="sm" variant="outline" onClick={onRestaurar}>Restaurar vínculo</Button>
+        <Button size="sm" variant="outline" onClick={onRomper}><Undo2 className="h-4 w-4 mr-1" /> Romper vínculo</Button>
         <Button size="sm" variant="ghost" onClick={onClose}><Settings2 className="h-4 w-4 mr-1" /> Fechar</Button>
       </div>
     </div>
@@ -104,8 +106,8 @@ function ClienteCard({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium truncate">{c.nome}</h4>
-                <Badge variant={c.ativo ? "default" : "secondary"} className="shrink-0">
-                  {c.ativo ? "Ativo" : "Inativo"}
+                <Badge variant={c.vinculado ? "default" : "secondary"} className="shrink-0">
+                  {c.vinculado ? "Vínculo ativo" : "Vínculo rompido"}
                 </Badge>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -203,36 +205,47 @@ export default function ClientesPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const [clientesRes, projetosRes] = await Promise.all([
-        api.get<{ data: any[] }>('/usuarios?tipo=CLIENTE&limit=100'),
-        api.get<{ data: any[] }>('/projetos?limit=200'),
+      // GET /usuarios é restrito a ADMIN, então a carteira do designer é montada
+      // a partir dos clientes dos seus próprios projetos — que é exatamente o
+      // escopo que ele pode enxergar.
+      const [projetos, rompidosRes] = await Promise.all([
+        getAll<any>('/projetos'),
+        api.get<{ data: any[] }>('/vinculos/rompidos').catch(() => ({ data: [] as any[] })),
       ]);
+      const rompidos = new Set((rompidosRes.data ?? []).map((v: any) => v.clienteId ?? v.cliente?.id));
 
-      const projetos: any[] = projetosRes.data || [];
-      const clientes: Cliente[] = (clientesRes.data || []).map((c: any) => ({
-        id: c.id,
-        email: c.email,
-        nome: c.nome,
-        telefone: c.telefone ?? null,
-        avatar: c.avatar ?? null,
-        tipo: c.tipo,
-        ativo: c.ativo,
-        criado_em: c.criadoEm ?? c.criado_em ?? '',
-        atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
-        projetos: projetos
-          .filter((p: any) => p.cliente?.id === c.id || p.clienteId === c.id)
-          .map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            descricao: p.descricao ?? null,
-            status: p.status,
-            orcamento: p.orcamento ?? null,
-            prazo: p.prazo ?? null,
-            artes: [],
-          })),
-      }));
+      const porCliente = new Map<string, Cliente>();
+      for (const p of projetos) {
+        const c = p.cliente;
+        if (!c?.id) continue;
 
-      setRows(clientes);
+        if (!porCliente.has(c.id)) {
+          porCliente.set(c.id, {
+            id: c.id,
+            email: c.email,
+            nome: c.nome,
+            telefone: c.telefone ?? null,
+            avatar: c.avatar ?? null,
+            tipo: 'CLIENTE',
+            vinculado: !rompidos.has(c.id),
+            criado_em: c.criadoEm ?? c.criado_em ?? '',
+            atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
+            projetos: [],
+          });
+        }
+
+        porCliente.get(c.id)!.projetos.push({
+          id: p.id,
+          nome: p.nome,
+          descricao: p.descricao ?? null,
+          status: p.status,
+          orcamento: p.orcamento ?? null,
+          prazo: p.prazo ?? null,
+          artes: [],
+        });
+      }
+
+      setRows([...porCliente.values()]);
       setError(null);
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar clientes");
@@ -257,7 +270,7 @@ export default function ClientesPage() {
     }
 
     if (statusFilter !== "todos") {
-      f = f.filter((c) => (statusFilter === "ativo" ? c.ativo : !c.ativo));
+      f = f.filter((c) => (statusFilter === "vinculado" ? c.vinculado : !c.vinculado));
     }
 
     if (prazoPreset !== "todos") {
@@ -280,21 +293,27 @@ export default function ClientesPage() {
 
   const estatisticas = useMemo(() => ({
     total: rows.length,
-    ativos: rows.filter((c) => c.ativo).length,
-    inativos: rows.filter((c) => !c.ativo).length,
+    ativos: rows.filter((c) => c.vinculado).length,
+    inativos: rows.filter((c) => !c.vinculado).length,
   }), [rows]);
 
   // seleção em massa
   const toggleSelect = (id: string) => setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const bulkToggleAtivo = async (ativo: boolean) => {
+  /**
+   * Rompe ou restaura o vínculo com os clientes selecionados. Não mexe na
+   * conta de ninguém — o cliente só sai (ou volta) para a carteira, e os
+   * projetos e conversas seguem onde estavam.
+   */
+  const bulkToggleVinculo = async (vinculado: boolean) => {
     if (!selectedIds.length) return;
+    const acao = vinculado ? "restaurar" : "romper";
     try {
-      setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, ativo } : c));
-      await Promise.all(selectedIds.map((id) => api.put(`/usuarios/${id}`, { ativo })));
-      toast.success(ativo ? "Clientes ativados." : "Clientes desativados.");
+      setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, vinculado } : c));
+      await Promise.all(selectedIds.map((id) => api.put(`/vinculos/${id}/${acao}`, {})));
+      toast.success(vinculado ? "Vínculos restaurados." : "Vínculos rompidos.");
     } catch (e: any) {
-      toast.error(e?.message ?? (ativo ? "Erro ao ativar" : "Erro ao desativar"));
+      toast.error(e?.message ?? `Erro ao ${acao} vínculo`);
       await reload();
     } finally { setSelected({}); setSelectMode(false); }
   };
@@ -375,8 +394,8 @@ export default function ClientesPage() {
           <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="ativo">Ativos</SelectItem>
-            <SelectItem value="inativo">Inativos</SelectItem>
+            <SelectItem value="vinculado">Vínculo ativo</SelectItem>
+            <SelectItem value="rompido">Vínculo rompido</SelectItem>
           </SelectContent>
         </Select>
 
@@ -433,8 +452,8 @@ export default function ClientesPage() {
               <BulkBarClientes
                 count={selectedIds.length}
                 onClose={() => { setSelectMode(false); setSelected({}); }}
-                onAtivar={() => bulkToggleAtivo(true)}
-                onDesativar={() => bulkToggleAtivo(false)}
+                onRestaurar={() => bulkToggleVinculo(true)}
+                onRomper={() => bulkToggleVinculo(false)}
               />
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filtered.map((c) => (
@@ -456,21 +475,21 @@ export default function ClientesPage() {
         <TabsContent value="board" className="mt-0">
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-md border p-3">
-              <h4 className="text-sm font-semibold mb-2">Ativos</h4>
+              <h4 className="text-sm font-semibold mb-2">Vínculo ativo</h4>
               <div className="space-y-3">
-                {filtered.filter(c => c.ativo).map(c => (
+                {filtered.filter(c => c.vinculado).map(c => (
                   <div key={c.id} className="border rounded-md p-2 flex items-center justify-between">
                     <span className="truncate">{c.nome}</span>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={async () => {
-                        setRows(prev => prev.map(x => x.id === c.id ? { ...x, ativo: false } : x));
+                        setRows(prev => prev.map(x => x.id === c.id ? { ...x, vinculado: false } : x));
                         try {
-                          await api.put(`/usuarios/${c.id}`, { ativo: false });
+                          await api.put(`/vinculos/${c.id}/romper`, {});
                         } catch (e: any) {
                           toast.error(e?.message ?? "Falhou");
                           await reload();
                         }
-                      }}>Desativar</Button>
+                      }}>Romper vínculo</Button>
                       <Button asChild size="sm" variant="ghost"><Link href={`/clientes/${c.id}`}>Abrir</Link></Button>
                     </div>
                   </div>
@@ -478,21 +497,21 @@ export default function ClientesPage() {
               </div>
             </div>
             <div className="rounded-md border p-3">
-              <h4 className="text-sm font-semibold mb-2">Inativos</h4>
+              <h4 className="text-sm font-semibold mb-2">Vínculo rompido</h4>
               <div className="space-y-3">
-                {filtered.filter(c => !c.ativo).map(c => (
+                {filtered.filter(c => !c.vinculado).map(c => (
                   <div key={c.id} className="border rounded-md p-2 flex items-center justify-between">
                     <span className="truncate">{c.nome}</span>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={async () => {
-                        setRows(prev => prev.map(x => x.id === c.id ? { ...x, ativo: true } : x));
+                        setRows(prev => prev.map(x => x.id === c.id ? { ...x, vinculado: true } : x));
                         try {
-                          await api.put(`/usuarios/${c.id}`, { ativo: true });
+                          await api.put(`/vinculos/${c.id}/restaurar`, {});
                         } catch (e: any) {
                           toast.error(e?.message ?? "Falhou");
                           await reload();
                         }
-                      }}>Ativar</Button>
+                      }}>Restaurar vínculo</Button>
                       <Button asChild size="sm" variant="ghost"><Link href={`/clientes/${c.id}`}>Abrir</Link></Button>
                     </div>
                   </div>

@@ -170,16 +170,19 @@ export async function saveAudioFeedback(formData: FormData) {
   return data?.data ?? data;
 }
 
-/** Atualiza o status de um feedback */
+/** Resolve ou reabre a thread de um feedback */
 export async function updateFeedbackStatus(input: {
   id: string;
-  status: "ABERTO" | "EM_ANALISE" | "RESOLVIDO" | "ARQUIVADO";
+  status: "ABERTO" | "RESOLVIDO";
 }) {
+  // Não existe coluna de status: o backend expõe /resolver e /reabrir, que
+  // escrevem em resolvidoEm.
+  const acao = input.status === "RESOLVIDO" ? "resolver" : "reabrir";
   // TODO: implementar cookie-based auth para server actions
-  const res = await fetch(`${BASE_URL}/feedbacks/${input.id}`, {
-    method: "PATCH",
+  const res = await fetch(`${BASE_URL}/feedbacks/${input.id}/${acao}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status: input.status }),
+    body: JSON.stringify({}),
     // TODO: Authorization: `Bearer ${cookieToken}`
   });
   return res.ok;

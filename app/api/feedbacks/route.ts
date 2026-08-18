@@ -1,24 +1,39 @@
+import { backendFetch } from "@/lib/serverBackend";
 import { NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
 
+/**
+ * Comentar por link compartilhado.
+ *
+ * Ler pelo link é público (GET /preview/:token), mas comentar exige conta:
+ * Feedback.autorId é obrigatório no schema, com FK para usuarios, então todo
+ * comentário tem autor rastreável — é o que sustenta o histórico de aprovação
+ * e o caminho de anonimização da LGPD. Convidado sem cadastro não cabe aí.
+ */
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get('content-type') || ''
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json(
+        { error: 'Entre na sua conta para comentar nesta arte.' },
+        { status: 401 },
+      )
+    }
 
     // JSON (texto/posicional) — proxy direto para o backend
     if (contentType.includes('application/json')) {
       const body = await req.json()
-      const { token, conteudo, tipo, guestNome, guestEmail, posicao_x, posicao_y } = body
+      const { token, conteudo, tipo, posicao_x, posicao_y } = body
 
-      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks`, {
+      // guestNome/guestEmail eram enviados aqui, mas o backend nunca os leu —
+      // o autor sai do token.
+      const res = await backendFetch(`/links/${token}/feedbacks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
         body: JSON.stringify({
           conteudo: conteudo ?? '',
           tipo: tipo ?? 'TEXTO',
-          guestNome: guestNome ?? null,
-          guestEmail: guestEmail ?? null,
           posicaoX: posicao_x ?? null,
           posicaoY: posicao_y ?? null,
         }),
@@ -40,13 +55,12 @@ export async function POST(req: Request) {
       const fwd = new FormData()
       fwd.append('audio', file, file.name)
       const arteId = form.get('arteId'); if (arteId) fwd.append('arteId', String(arteId))
-      const guestNome = form.get('nome'); if (guestNome) fwd.append('guestNome', String(guestNome))
-      const guestEmail = form.get('email'); if (guestEmail) fwd.append('guestEmail', String(guestEmail))
       const posX = form.get('posicao_x'); if (posX) fwd.append('posicaoX', String(posX))
       const posY = form.get('posicao_y'); if (posY) fwd.append('posicaoY', String(posY))
 
-      const res = await fetch(`${BACKEND_URL}/links/${token}/feedbacks/audio`, {
+      const res = await backendFetch(`/links/${token}/feedbacks/audio`, {
         method: 'POST',
+        headers: { Authorization: authHeader },
         body: fwd,
       })
       const data = await res.json()

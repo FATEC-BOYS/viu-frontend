@@ -1,14 +1,14 @@
+import { backendFetch } from "@/lib/serverBackend";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
 export async function GET(_req: Request, ctx: any) {
   const p = ctx?.params;
   const { token } = p && typeof p.then === "function" ? await p : p || {};
 
   try {
-    const res = await fetch(`${BACKEND_URL}/preview/${token}`, { cache: "no-store" });
+    const res = await backendFetch(`/preview/${token}`, { cache: "no-store" });
     const body = await res.json().catch(() => null);
 
     const out: any = { status: res.status, ok: res.ok };

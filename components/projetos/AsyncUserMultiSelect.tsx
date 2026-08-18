@@ -1,4 +1,5 @@
 "use client";
+import { authHeaders } from "@/lib/api";
 import * as React from "react";
 import { X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ export default function AsyncUserMultiSelect({
       try {
         const res = await fetch(`${route}?q=${encodeURIComponent(query)}&tipo=${tipo}`, {
           signal: ctrl.signal,
+          headers: authHeaders(),
         });
         if (res.ok) {
           const data = await res.json();

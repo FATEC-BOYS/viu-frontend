@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Check, X, Clock, BellRing, ShieldAlert } from "lucide-react";
+import { Check, X, Clock, BellRing } from "lucide-react";
 import RegraAprovacaoBadge, { type RegraAprovacao } from "./RegraAprovacaoBadge";
 import { cn } from "@/lib/utils";
 
@@ -40,11 +40,9 @@ export type AprovacaoPainel = {
 export default function AprovacaoPanel({
   painel,
   onLembrar,
-  onOverride,
 }: {
   painel: AprovacaoPainel;
   onLembrar: (aprovacaoId: string) => void;
-  onOverride: (arteId: string) => void;
 }) {
   const items = painel.items ?? [];
 
@@ -173,15 +171,6 @@ export default function AprovacaoPanel({
                           Lembrar
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => onOverride(it.arteId)}
-                        className="gap-1"
-                      >
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        Override
-                      </Button>
                     </div>
                   </div>
                 </CardContent>

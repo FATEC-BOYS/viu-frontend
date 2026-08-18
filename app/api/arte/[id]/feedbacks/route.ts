@@ -1,7 +1,7 @@
 // app/api/arte/[id]/feedbacks/route.ts
+import { backendFetch } from "@/lib/serverBackend";
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
 
 /**
  * GET /api/arte/[id]/feedbacks?token=XYZ
@@ -20,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/preview/${token}`, { cache: "no-store" });
+    const res = await backendFetch(`/preview/${token}`, { cache: "no-store" });
     if (!res.ok) {
       const status = res.status === 404 ? 404 : 403;
       return NextResponse.json({ error: "Link inválido ou expirado." }, { status });

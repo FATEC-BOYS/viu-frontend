@@ -281,15 +281,7 @@ export default function FeedbackPanel({
 
                       <div className="mt-1 flex justify-end">
                         <Badge
-                          variant={
-                            f.status === "RESOLVIDO"
-                              ? "default"
-                              : f.status === "EM_ANALISE"
-                              ? "secondary"
-                              : f.status === "ARQUIVADO"
-                              ? "outline"
-                              : "destructive"
-                          }
+                          variant={f.status === "RESOLVIDO" ? "default" : "destructive"}
                           className="text-[10px] uppercase"
                         >
                           {f.status}
