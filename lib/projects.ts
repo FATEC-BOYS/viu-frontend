@@ -477,9 +477,8 @@ export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPa
   }
 }
 
-export async function lembrarAprovadores(
-  _aprovacaoId: string
-): Promise<{ ok: true }> {
+export async function lembrarAprovadores(aprovacaoId: string): Promise<{ ok: true }> {
+  await api.put(`/aprovacoes/${aprovacaoId}/lembrar`, {})
   return { ok: true }
 }
 
@@ -554,8 +553,16 @@ export async function listParticipantes(projetoId: string): Promise<Participante
   return parts
 }
 
-export async function listConvites(_projetoId: string): Promise<ConviteRow[]> {
-  return []
+export async function listConvites(projetoId: string): Promise<ConviteRow[]> {
+  const res = await api
+    .get<{ data: any[] }>(`/projetos/${projetoId}/convites`)
+    .catch(() => ({ data: [] as any[] }))
+  return (res.data ?? []).map((c: any) => ({
+    email: c.convidado?.email ?? '',
+    papel: c.papel ?? 'CLIENTE',
+    status: c.status,
+    criado_em: c.criadoEm ?? '',
+  })) as ConviteRow[]
 }
 
 export async function getNarrativaContagens(projetoId: string) {

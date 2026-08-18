@@ -1,5 +1,8 @@
 "use client";
 
+import { api, authHeaders } from "@/lib/api";
+import { podeComentar } from "@/lib/viewerApi";
+
 import {
   useCallback,
   useEffect,
@@ -246,6 +249,12 @@ export default function FeedbackViewer({
 
   /* — Send text feedback — */
   async function handleAddComment() {
+    // Comentar exige conta: Feedback.autorId é obrigatório e o autor sai do
+    // token. Ler pelo link segue público.
+    if (!podeComentar()) {
+      toast.error("Entre na sua conta para comentar nesta arte.");
+      return;
+    }
     if (!viewer?.email) { onAskIdentity(); return; }
     const payload = comment.trim();
     if (!payload) return;
@@ -254,7 +263,7 @@ export default function FeedbackViewer({
       setSending("text");
       const res = await fetch("/api/feedbacks", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         cache: "no-store",
         body: JSON.stringify({
           token,
@@ -314,7 +323,7 @@ export default function FeedbackViewer({
       }
       fd.append("file", blob, `gravacao_${Date.now()}.webm`);
 
-      const res = await fetch("/api/feedbacks", { method: "POST", body: fd });
+      const res = await fetch("/api/feedbacks", { method: "POST", headers: authHeaders(), body: fd });
       if (!res.ok) {
         let msg = "Erro ao enviar áudio.";
         try { const j = await res.json(); msg = j?.error || msg; } catch {}
@@ -387,33 +396,28 @@ export default function FeedbackViewer({
 
   /* — Resolve / reopen feedback — */
   async function toggleResolve(fb: FeedbackItem) {
-    const newStatus = fb.status === "RESOLVIDO" ? "ABERTO" : "RESOLVIDO";
+    // Resolver não é uma resposta na thread: o backend guarda o estado em
+    // resolvidoEm e expõe /resolver e /reabrir.
+    const resolvido = fb.status === "RESOLVIDO";
+    const acao = resolvido ? "reabrir" : "resolver";
+    const novo = resolvido ? "ABERTO" : "RESOLVIDO";
+    setFeedbacks((prev) =>
+      prev.map((x) => (x.id === fb.id ? { ...x, status: novo } : x)),
+    );
     try {
-      const res = await fetch(`/api/feedbacks/${fb.id}/respostas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conteudo: newStatus === "RESOLVIDO" ? "Marcado como resolvido" : "Reaberto",
-          statusAfter: newStatus,
-        }),
-      });
-      if (!res.ok) {
-        toast.error("Não foi possível alterar o status.");
-        return;
-      }
-      setFeedbacks((prev) =>
-        prev.map((f) => f.id === fb.id ? { ...f, status: newStatus } : f)
-      );
-      toast.success(newStatus === "RESOLVIDO" ? "Feedback resolvido!" : "Feedback reaberto.");
+      await api.put(`/feedbacks/${fb.id}/${acao}`, {});
     } catch {
-      toast.error("Erro ao alterar status.");
+      toast.error("Não foi possível alterar o status do comentário.");
+      setFeedbacks((prev) =>
+        prev.map((x) => (x.id === fb.id ? { ...x, status: fb.status } : x)),
+      );
     }
   }
 
   /* — Thread / replies — */
   async function loadReplies(feedbackId: string) {
     try {
-      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`);
+      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`, { headers: authHeaders() });
       if (!res.ok) return;
       const data = await res.json();
       setReplies((prev) => ({ ...prev, [feedbackId]: Array.isArray(data) ? data : [] }));
@@ -440,7 +444,7 @@ export default function FeedbackViewer({
       setReplyLoading((p) => ({ ...p, [feedbackId]: true }));
       const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ conteudo: text }),
       });
       if (!res.ok) { toast.error("Erro ao responder."); return; }

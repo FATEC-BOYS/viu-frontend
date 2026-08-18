@@ -1,5 +1,12 @@
 // lib/viewerApi.ts — sem Supabase Edge Functions; usa /api/feedbacks (proxy Next.js)
+import { authHeaders } from '@/lib/api'
+
 const NEXT_FEEDBACKS_URL = '/api/feedbacks'
+
+/** true quando há sessão — comentar por link exige conta (autor obrigatório). */
+export function podeComentar(): boolean {
+  return Object.keys(authHeaders()).length > 0
+}
 
 type BasePayload = {
   token: string
@@ -16,13 +23,11 @@ type BasePayload = {
 export async function postTextFeedback(payload: BasePayload & { content: string }) {
   const res = await fetch(NEXT_FEEDBACKS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       token: payload.token,
       conteudo: payload.content,
       tipo: 'TEXTO',
-      guestEmail: payload.viewerEmail,
-      guestNome: payload.viewerNome ?? null,
       posicao_x: payload.posX ?? null,
       posicao_y: payload.posY ?? null,
     }),
@@ -35,12 +40,10 @@ export async function postAudioFeedback(payload: BasePayload & { blob: Blob }) {
   const form = new FormData()
   form.set('token', payload.token)
   form.set('arteId', payload.arteId)
-  form.set('email', payload.viewerEmail)
-  if (payload.viewerNome) form.set('nome', payload.viewerNome)
   form.set('file', payload.blob, `feedback-${Date.now()}.webm`)
   if (payload.posX != null) form.set('posicao_x', String(payload.posX))
   if (payload.posY != null) form.set('posicao_y', String(payload.posY))
-  const res = await fetch(NEXT_FEEDBACKS_URL, { method: 'POST', body: form })
+  const res = await fetch(NEXT_FEEDBACKS_URL, { method: 'POST', headers: authHeaders(), body: form })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }

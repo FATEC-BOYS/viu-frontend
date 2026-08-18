@@ -293,11 +293,6 @@ export default function ProjetoPage() {
   async function lembrarAprovadores(aprovacaoId: string) {
     await lembrarAprovadoresApi(aprovacaoId);
   }
-  async function overrideOwner(_arteId: string) {
-    // TODO: sem endpoint no backend — o override do dono ainda não existe na API.
-    // Recarrega o painel para não deixar a UI em estado mentiroso.
-    await loadApproval();
-  }
 
   const [actLoading, setActLoading] = useState(false);
   const [actRows, setActRows] = useState<UIAtividadeItem[]>([]);
@@ -467,7 +462,6 @@ export default function ProjetoPage() {
             <AprovacaoPanel
               painel={painel}
               onLembrar={lembrarAprovadores}
-              onOverride={overrideOwner}
             />
           )
         )}
