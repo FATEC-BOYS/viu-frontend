@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,12 +33,14 @@ interface Counters {
   feedbacks: number;
   artes: number;
   projetos: number;
-  usuarios: number;
+  // null quando o usuário não é ADMIN e não pode consultar /usuarios
+  usuarios: number | null;
 }
 
-const initialCounters: Counters = { feedbacks: 0, artes: 0, projetos: 0, usuarios: 0 };
+const initialCounters: Counters = { feedbacks: 0, artes: 0, projetos: 0, usuarios: null };
 
 export default function StatusPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [checks, setChecks] = useState<HealthCheck[]>([]);
@@ -62,7 +65,10 @@ export default function StatusPage() {
         safeGet('/feedbacks?limit=1'),
         safeGet('/artes?limit=1'),
         safeGet('/projetos?limit=1'),
-        safeGet('/usuarios?limit=1'),
+        // /usuarios é restrito a ADMIN — checar o banco por ele fazia todo
+        // designer ver "Banco de dados: ERRO". /projetos já prova a conexão,
+        // e o contador de usuários só é consultado por quem pode vê-lo.
+        user?.tipo === 'ADMIN' ? safeGet('/usuarios?limit=1') : Promise.resolve(null),
       ]);
 
       const apiOk = feedbacksRes !== null;
@@ -75,8 +81,10 @@ export default function StatusPage() {
         },
         {
           label: 'Banco de dados',
-          status: usuariosRes !== null ? 'ok' : 'error',
-          detail: usuariosRes !== null ? `${usuariosRes.pagination?.total ?? 0} usuários` : 'Falha na consulta',
+          status: projetosRes !== null ? 'ok' : 'error',
+          detail: projetosRes !== null
+            ? `${projetosRes.pagination?.total ?? 0} projetos`
+            : 'Falha na consulta',
         },
       ]);
 
@@ -84,7 +92,7 @@ export default function StatusPage() {
         feedbacks: feedbacksRes?.pagination?.total ?? 0,
         artes: artesRes?.pagination?.total ?? 0,
         projetos: projetosRes?.pagination?.total ?? 0,
-        usuarios: usuariosRes?.pagination?.total ?? 0,
+        usuarios: usuariosRes?.pagination?.total ?? null,
       });
 
       setLastRun(new Date());
@@ -202,8 +210,10 @@ export default function StatusPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{counters.usuarios}</div>
-            <p className="text-xs text-muted-foreground mt-1">Registro total</p>
+            <div className="text-3xl font-bold">{counters.usuarios ?? "—"}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {counters.usuarios === null ? "Visível só para administradores" : "Registro total"}
+            </p>
           </CardContent>
         </Card>
       </div>

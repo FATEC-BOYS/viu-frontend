@@ -9,7 +9,9 @@ export type UserProfile = {
   nome: string
   email: string
   avatar?: string | null
-  tipo: 'DESIGNER' | 'CLIENTE'
+  // ADMIN existe no backend (o seed cria admin@viu.com) e faltava aqui, então
+  // qualquer checagem por admin no front era erro de tipo.
+  tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN'
   emailVerificado?: boolean
 }
 

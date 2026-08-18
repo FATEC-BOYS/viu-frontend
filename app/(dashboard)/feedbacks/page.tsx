@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, authHeaders } from '@/lib/api';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -221,7 +221,10 @@ function FeedbackDetail({
   async function loadThread() {
     try {
       setLoadingThread(true);
-      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, { cache: 'no-store' });
+      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
+        cache: 'no-store',
+        headers: authHeaders(),
+      });
       if (!res.ok) throw new Error('Falha ao carregar respostas');
       const data = await res.json();
       setThread(data);
@@ -244,7 +247,7 @@ function FeedbackDetail({
       setSending(true);
       const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         cache: 'no-store',
         body: JSON.stringify({ conteudo: reply.trim() }),
       });
@@ -298,7 +301,7 @@ function FeedbackDetail({
               {thread.map((r) => (
                 <div key={r.id} className="rounded-md border p-2">
                   <div className="flex items-center justify-between">
-                    <div className="text-xs font-medium">{r.autor.nome ?? 'Usuário'}</div>
+                    <div className="text-xs font-medium">{r.autor?.nome ?? 'Usuário'}</div>
                     <div className="text-[10px] text-muted-foreground">{formatDateTime(r.criado_em)}</div>
                   </div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">{r.conteudo}</div>
