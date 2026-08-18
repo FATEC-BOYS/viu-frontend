@@ -54,7 +54,8 @@ export type FeedbackItem = {
   tipo: "TEXTO" | "AUDIO";
   arquivo?: string | null;
   transcricao?: string | null;
-  status: "ABERTO" | "EM_ANALISE" | "RESOLVIDO" | "ARQUIVADO";
+  // derivado de resolvidoEm — o schema não guarda estados intermediários
+  status: "ABERTO" | "RESOLVIDO";
   criado_em: string;
   autor_id?: string | null;
   autor_nome?: string | null;
@@ -176,7 +177,7 @@ export default function FeedbackViewer({
   /* — Filtered feedbacks — */
   const visibleFeedbacks = useMemo(() => {
     if (showResolved) return feedbacks;
-    return feedbacks.filter((f) => f.status !== "RESOLVIDO" && f.status !== "ARQUIVADO");
+    return feedbacks.filter((f) => f.status !== "RESOLVIDO");
   }, [feedbacks, showResolved]);
 
   const positionedFeedbacks = visibleFeedbacks.filter(
@@ -815,12 +816,7 @@ export default function FeedbackViewer({
                   {/* Footer: badge + thread toggle */}
                   <div className="mt-2 flex items-center justify-between">
                     <Badge
-                      variant={
-                        fb.status === "RESOLVIDO" ? "default"
-                          : fb.status === "EM_ANALISE" ? "secondary"
-                          : fb.status === "ARQUIVADO" ? "outline"
-                          : "destructive"
-                      }
+                      variant={fb.status === "RESOLVIDO" ? "default" : "destructive"}
                       className="text-[10px] uppercase"
                     >
                       {fb.status}

@@ -24,7 +24,9 @@ import {
    ========================= */
 type FeedbackTipo = 'TEXTO' | 'AUDIO';
 type AutorTipo = 'CLIENTE' | 'DESIGNER';
-type FeedbackStatus = 'ABERTO' | 'EM_ANALISE' | 'RESOLVIDO' | 'ARQUIVADO';
+// O schema não tem coluna de status: uma thread está aberta ou resolvida,
+// conforme resolvidoEm. Estados intermediários não existem no banco.
+type FeedbackStatus = 'ABERTO' | 'RESOLVIDO';
 
 type RowBase = {
   id: string;
@@ -73,10 +75,8 @@ function TipoBadge({ tipo }: { tipo: FeedbackTipo | string }) {
 }
 function StatusBadge({ status }: { status: FeedbackStatus }) {
   const map: Record<FeedbackStatus, { label: string; cls: string }> = {
-    ABERTO:     { label: 'Aberto',     cls: 'bg-amber-100 text-amber-900 border-amber-200' },
-    EM_ANALISE: { label: 'Em análise', cls: 'bg-blue-100 text-blue-900 border-blue-200' },
-    RESOLVIDO:  { label: 'Resolvido',  cls: 'bg-emerald-100 text-emerald-900 border-emerald-200' },
-    ARQUIVADO:  { label: 'Arquivado',  cls: 'bg-slate-100 text-slate-900 border-slate-200' },
+    ABERTO:    { label: 'Aberto',    cls: 'bg-amber-100 text-amber-900 border-amber-200' },
+    RESOLVIDO: { label: 'Resolvido', cls: 'bg-emerald-100 text-emerald-900 border-emerald-200' },
   };
   const cfg = map[status];
   return <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${cfg.cls}`}>{cfg.label}</span>;
@@ -92,7 +92,7 @@ function mapFeedback(fb: any): FeedbackRow {
   return {
     id: fb.id,
     conteudo: fb.conteudo,
-    status: fb.status,
+    status: (fb.resolvidoEm ?? fb.resolvido_em) ? 'RESOLVIDO' : 'ABERTO',
     tipo: fb.tipo,
     arquivo: fb.arquivo ?? null,
     criado_em: fb.criadoEm ?? fb.criado_em ?? '',
@@ -128,11 +128,10 @@ function ListItem({
   const TipoIcon = fb.tipo === 'AUDIO' ? Mic : Type;
 
   const pill = useMemo(() => {
-    if (isResolved) return { label: 'Resolvido', tone: 'emerald' };
-    if (fb.status === 'EM_ANALISE') return { label: 'A bola está com: Cliente', tone: 'blue' };
-    if (fb.status === 'ABERTO') return { label: 'A bola está com: Designer', tone: 'amber' };
-    return { label: 'Arquivado', tone: 'slate' };
-  }, [fb.status, isResolved]);
+    return isResolved
+      ? { label: 'Resolvido', tone: 'emerald' }
+      : { label: 'Aguardando resposta', tone: 'amber' };
+  }, [isResolved]);
 
   const toneMap: Record<string, string> = {
     amber: 'bg-amber-100 text-amber-900 border-amber-200',
@@ -247,7 +246,7 @@ function FeedbackDetail({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ conteudo: reply.trim(), statusAfter: 'EM_ANALISE' }),
+        body: JSON.stringify({ conteudo: reply.trim() }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Falha ao enviar resposta');
@@ -342,15 +341,15 @@ function FeedbackDetail({
    ========================= */
 function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; onOpen: (id: string)=>void; onMove: (id: string, to: FeedbackStatus)=>void; }) {
   const cols: { key: FeedbackStatus; title: string }[] = [
-    { key: 'ABERTO', title: 'Aberto' }, { key: 'EM_ANALISE', title: 'Em análise' }, { key: 'RESOLVIDO', title: 'Resolvido' }, { key: 'ARQUIVADO', title: 'Arquivado' },
+    { key: 'ABERTO', title: 'Aberto' }, { key: 'RESOLVIDO', title: 'Resolvido' },
   ];
   const grouped = useMemo(() => {
-    const m: Record<FeedbackStatus, FeedbackRow[]> = { ABERTO:[], EM_ANALISE:[], RESOLVIDO:[], ARQUIVADO:[] };
+    const m: Record<FeedbackStatus, FeedbackRow[]> = { ABERTO:[], RESOLVIDO:[] };
     items.forEach(i => m[i.status].push(i)); return m;
   }, [items]);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2">
       {cols.map(c => (
         <div key={c.key} className="rounded-md border p-3">
           <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-semibold">{c.title}</h4><Badge variant="secondary">{grouped[c.key].length}</Badge></div>
@@ -365,9 +364,7 @@ function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; on
                     <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder={fb.status} /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ABERTO">Aberto</SelectItem>
-                      <SelectItem value="EM_ANALISE">Em análise</SelectItem>
                       <SelectItem value="RESOLVIDO">Resolvido</SelectItem>
-                      <SelectItem value="ARQUIVADO">Arquivado</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -614,9 +611,7 @@ export default function FeedbacksPage() {
           <SelectContent>
             <SelectItem value="todos">Todos Status</SelectItem>
             <SelectItem value="ABERTO">Aberto</SelectItem>
-            <SelectItem value="EM_ANALISE">Em análise</SelectItem>
             <SelectItem value="RESOLVIDO">Resolvido</SelectItem>
-            <SelectItem value="ARQUIVADO">Arquivado</SelectItem>
           </SelectContent>
         </Select>
         <Select value={tipoFilter} onValueChange={(v) => setTipoFilter(v as FilterTipo)}>
@@ -710,9 +705,13 @@ export default function FeedbacksPage() {
             items={filteredOrdered}
             onOpen={(id) => setSelectedId(id)}
             onMove={async (fbId, to) => {
+              const anterior = rows.find(r => r.id === fbId)?.status;
+              if (anterior === to) return;
               setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: to } : x));
               try {
-                await api.put(`/feedbacks/${fbId}`, { status: to });
+                // não existe PUT de status: a thread é resolvida ou reaberta
+                const acao = to === 'RESOLVIDO' ? 'resolver' : 'reabrir';
+                await api.put(`/feedbacks/${fbId}/${acao}`, {});
               } catch {
                 toast.error('Não consegui mover, desfazendo…');
                 setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: rows.find(r => r.id === fbId)?.status ?? x.status } : x));
