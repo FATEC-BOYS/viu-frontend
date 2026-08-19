@@ -13,7 +13,7 @@ import {
   Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -100,6 +100,8 @@ export function Sidebar() {
 
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
   const fetchingRef = useRef(false);
+  const { user } = useAuth();
+  const ehAdmin = user?.tipo === 'ADMIN';
 
   const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
 
@@ -211,8 +213,19 @@ export function Sidebar() {
         { title: 'Links Compartilhados', href: '/links', icon: LinkIcon },
         { title: 'Configurações', href: '/configuracoes', icon: Settings }
       ]
-    }
+    },
+    // Esconder o menu é só para não poluir a navegação de quem não usa: o
+    // backend continua devolvendo 403 nessas rotas para quem não é ADMIN.
+    ...(ehAdmin ? [{
+      title: 'Administração',
+      collapsible: true,
+      items: [
+        { title: 'Saques', href: '/admin/saques', icon: ArrowDownToLine },
+        { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
+      ]
+    }] : [])
   ]), [
+    ehAdmin,
     contadores.tarefasPendentes,
     contadores.feedbacksPendentes,
     contadores.notificacoesNaoLidas,
