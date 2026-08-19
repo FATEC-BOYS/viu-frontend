@@ -1,5 +1,7 @@
 'use client';
 
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -152,7 +154,7 @@ function LinkRow({
 
   return (
     <div
-      className={`relative rounded-md border bg-card p-3 hover:shadow-sm transition ${expired ? 'opacity-70' : ''} ${leftStripe}
+      className={`relative rounded-md border bg-card p-3 card-interativo ${expired ? 'opacity-70' : ''} ${leftStripe}
       before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:rounded-l-md`}
     >
       {/* Top row */}
@@ -201,7 +203,7 @@ function LinkRow({
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Tornar permanente
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(link.id)} className="text-red-600">
+              <DropdownMenuItem onClick={() => onDelete(link.id)} className="text-red-600 dark:text-red-400">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Excluir
               </DropdownMenuItem>
@@ -439,12 +441,12 @@ export default function LinksPage() {
   const empty = filtered.length === 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Links Compartilhados ✦ </h1>
-          <p className="text-muted-foreground">Gerencie os links públicos de Artes e Projetos</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Links Compartilhados ✦ </h1>
+          <p className="text-sm text-muted-foreground">Gerencie os links públicos de Artes e Projetos</p>
         </div>
         {/* Escondido por enquanto */}
         <Button className="hidden">
@@ -495,15 +497,15 @@ export default function LinksPage() {
 
       {/* Lista */}
       {empty ? (
-        <div className="rounded-md border p-12 text-center">
-          <Share2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Nenhum link encontrado</h3>
-          <p className="text-muted-foreground">
-            {searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
+        <EmptyState
+          icon={Share2}
+          title="Nenhum link encontrado"
+          description={
+            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
               ? 'Tente ajustar os filtros de busca.'
-              : 'Quando você gerar links de compartilhamento, eles aparecem aqui.'}
-          </p>
-        </div>
+              : 'Quando você gerar links de compartilhamento, eles aparecem aqui.'
+          }
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map((l) => (
@@ -522,6 +524,6 @@ export default function LinksPage() {
           ))}
         </div>
       )}
-    </div>
+    </FadeIn>
   );
 }

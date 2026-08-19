@@ -1,5 +1,7 @@
 'use client';
 
+import { prioridadeLabel, statusLabel } from "@/lib/tarefas";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -93,7 +95,7 @@ function getPriorityBadge(p: Tarefa['prioridade']) {
     MEDIA: 'default',
     BAIXA: 'secondary',
   } as const;
-  return <Badge variant={map[p]}>{p}</Badge>;
+  return <Badge variant={map[p]}>{prioridadeLabel[p] ?? p}</Badge>;
 }
 
 function mapTarefa(t: any): Tarefa {
@@ -262,14 +264,14 @@ export default function PrazosPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <CalendarIcon className="h-7 w-7" /> Prazos
           </h1>
-          <p className="text-muted-foreground">Veja o que vence hoje, o que está atrasado e o que vem por aí.</p>
+          <p className="text-sm text-muted-foreground">Veja o que vence hoje, o que está atrasado e o que vem por aí.</p>
         </div>
         <div className="flex items-center gap-2">
           <Input
@@ -451,7 +453,7 @@ export default function PrazosPage() {
                   <div key={t.id} className="text-sm">
                     <div className="flex items-center justify-between">
                       <p className="font-medium">{t.titulo}</p>
-                      <Badge variant="secondary">{t.prioridade}</Badge>
+                      <Badge variant="secondary">{prioridadeLabel[t.prioridade] ?? t.prioridade}</Badge>
                     </div>
                     <p className="text-muted-foreground">{t.projeto?.nome ?? '—'}</p>
                   </div>
@@ -466,7 +468,7 @@ export default function PrazosPage() {
           )}
         </div>
       </div>
-    </div>
+    </FadeIn>
   );
 }
 
@@ -486,7 +488,7 @@ function RowTarefa({ t, overdue }: { t: Tarefa; overdue?: boolean }) {
         <div className="text-right space-y-1 min-w-[130px]">
           <div className="flex items-center justify-end gap-2">
             {getPriorityBadge(t.prioridade)}
-            <Badge variant="outline">{t.status}</Badge>
+            <Badge variant="outline">{statusLabel[t.status] ?? t.status}</Badge>
           </div>
           <div className="text-xs text-muted-foreground">
             {formatWeekday(t.prazo)} • {formatDate(t.prazo)}

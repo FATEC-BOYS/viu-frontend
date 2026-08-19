@@ -91,7 +91,7 @@ export function TaskCard({
   return (
     <Card
       onClick={() => onOpen(tarefa)}
-      className={`group hover:shadow-md transition-shadow cursor-pointer border-l-4 ${leftBorder}`}
+      className={`group cursor-pointer border-l-4 card-interativo ${leftBorder}`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
@@ -110,9 +110,11 @@ export function TaskCard({
                   <FolderOpen className="size-3 shrink-0" />
                   <span className="truncate">{tarefa.projeto.nome}</span>
                 </p>
-                <p className="text-[11px] text-muted-foreground truncate">
-                  Cliente: {tarefa.projeto.cliente.nome}
-                </p>
+                {tarefa.projeto.cliente?.nome && (
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    Cliente: {tarefa.projeto.cliente.nome}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -136,7 +138,7 @@ export function TaskCard({
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-1 text-muted-foreground">
               <User className="size-3 shrink-0" />
-              Responsa
+              Responsável
             </div>
             <p className="font-medium truncate">{tarefa.responsavel.nome}</p>
           </div>
@@ -148,7 +150,11 @@ export function TaskCard({
             </div>
             <p
               className={`font-medium ${
-                overdue ? "text-red-600" : urgent ? "text-orange-600" : ""
+                overdue
+                  ? "text-red-600 dark:text-red-400 dark:text-red-400"
+                  : urgent
+                    ? "text-orange-600 dark:text-orange-400 dark:text-orange-400"
+                    : ""
               }`}
             >
               {formatDateBR(tarefa.prazo)}

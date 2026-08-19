@@ -101,7 +101,7 @@ export default function EquipeAcessoCard({
       <CardContent className="space-y-6">
         {/* Owner */}
         <div className="flex items-center gap-3">
-          <Crown className="h-4 w-4 text-yellow-600" />
+          <Crown className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
           <div className="text-sm">
             Owner:{" "}
             <span className="font-medium">

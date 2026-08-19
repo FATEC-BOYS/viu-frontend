@@ -1,5 +1,6 @@
 'use client'
 
+import { FadeIn } from "@/components/layout/Motion";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card'
@@ -23,6 +24,9 @@ import StepArte from '@/components/dashboard/StepArte'
 import StepFeedback from '@/components/dashboard/StepFeedback'
 import StepAprovacao from '@/components/dashboard/StepAprovacao'
 import StepConcluido from '@/components/dashboard/StepConcluido'
+import { prioridadeLabel, statusLabel } from '@/lib/tarefas'
+import type { ProjetoStatus } from '@/lib/projects'
+import StatusBadge from '@/components/projetos/StatusBadge'
 
 type Projeto = {
   id: string
@@ -102,14 +106,14 @@ function FinanceiroCard({
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Saldo disponível</p>
             <motion.p
-              key={saldo.saldoDisponivel}
+              key={saldo.saldo}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-2xl font-bold tabular-nums text-emerald-400"
+              className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 dark:text-emerald-400"
             >
-              {saldo.saldoDisponivelFormatado}
+              {saldo.saldoFormatado}
             </motion.p>
-            {saldo.saldoDisponivel > 0 && (
+            {saldo.saldo > 0 && (
               <Button asChild size="sm" variant="ghost" className="mt-1 h-7 px-0 gap-1 text-xs">
                 <Link href="/saques">
                   Sacar <ArrowRight className="h-3 w-3" />
@@ -309,13 +313,13 @@ export default function DashboardPage() {
     .slice(0, 6)
 
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight">
             {mostrarOnboarding ? 'Vamos começar ✶' : 'Dashboard ✶'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {mostrarOnboarding
               ? `Oi, ${displayName}! Complete os passos abaixo e desbloqueie sua primeira entrega.`
               : `Bem-vindo(a), ${displayName}. Aqui vai um panorama do seu estúdio hoje.`}
@@ -358,7 +362,8 @@ export default function DashboardPage() {
                 <div className="rounded-md border p-3">
                   <p className="text-xs text-muted-foreground">Artes</p>
                   <p className="text-2xl font-semibold">{metricas.totalArtes}</p>
-                  <p className="text-[11px] text-muted-foreground">no total</p>
+                  {/* dizia só "no total" embaixo do total — legenda sem informação */}
+                  <p className="text-[11px] text-muted-foreground">{metricas.artesAprovadas} aprovadas</p>
                 </div>
                 <div className="rounded-md border p-3">
                   <p className="text-xs text-muted-foreground">Feedbacks recentes</p>
@@ -380,7 +385,7 @@ export default function DashboardPage() {
               <CardDescription>Feedbacks e comentários</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 h-full overflow-auto pr-1">
+              <div className="space-y-3 h-full overflow-y-auto overflow-x-hidden pr-1">
                 {feedbacks.slice(0, 10).map(fb => (
                   <div key={fb.id} className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition">
                     <div className="w-8 h-8 bg-primary/10 rounded-full grid place-items-center">
@@ -429,15 +434,15 @@ export default function DashboardPage() {
               <CardDescription>Progresso e prazos</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="grid gap-3 max-h-full overflow-auto pr-1">
+              <div className="grid grid-cols-1 gap-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
                 {projetosEmAndamento.slice(0, 8).map(projeto => (
-                  <div key={projeto.id} className="rounded-lg border p-3 hover:shadow-sm transition">
+                  <div key={projeto.id} className="rounded-lg border p-3 card-interativo">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <h4 className="font-medium truncate">{projeto.nome}</h4>
                         <p className="text-xs text-muted-foreground truncate">Cliente: {projeto.cliente?.nome || '—'}</p>
                       </div>
-                      <Badge variant="secondary" className="shrink-0">{projeto.status}</Badge>
+                      <StatusBadge status={projeto.status as ProjetoStatus} />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs">
                       <span>{projeto._count?.artes ?? 0} artes</span>
@@ -469,7 +474,7 @@ export default function DashboardPage() {
               <CardDescription>Prazos mais próximos</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-auto pr-1">
+              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
                 {tarefas.slice(0, 10).map(tarefa => (
                   <div key={tarefa.id} className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition">
                     <div className="flex items-start justify-between gap-2">
@@ -477,10 +482,10 @@ export default function DashboardPage() {
                         <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
                         <p className="text-xs text-muted-foreground truncate">{tarefa.projeto?.nome}</p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">{tarefa.prioridade}</Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">{prioridadeLabel[tarefa.prioridade] ?? tarefa.prioridade}</Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="text-[10px]">{tarefa.status}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{statusLabel[tarefa.status] ?? tarefa.status}</Badge>
                       <span className="text-[11px] text-muted-foreground">
                         {tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR') : '—'}
                       </span>
@@ -503,7 +508,7 @@ export default function DashboardPage() {
               <CardDescription>O que vence primeiro</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-auto pr-1">
+              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
                 {proximosPrazos.length > 0 ? (
                   proximosPrazos.map(p => (
                     <div key={p.id} className="rounded-md border p-3 hover:bg-muted/40 transition">
@@ -539,6 +544,6 @@ export default function DashboardPage() {
           />
         </section>
       )}
-    </div>
+    </FadeIn>
   )
 }

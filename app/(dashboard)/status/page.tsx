@@ -1,5 +1,6 @@
 'use client';
 
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -112,12 +113,12 @@ export default function StatusPage() {
   }, [checks]);
 
   return (
-    <div className="p-6 space-y-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Server className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Status do Sistema</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Status do Sistema</h1>
             <p className="text-sm text-muted-foreground">
               Saúde da aplicação (Vercel + viu-backend) e métricas rápidas
             </p>
@@ -140,8 +141,8 @@ export default function StatusPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
-            {overallStatus === 'ok' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
-            {(overallStatus === 'warn' || overallStatus === 'error') && <XCircle className="h-5 w-5 text-red-600" />}
+            {overallStatus === 'ok' && <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
+            {(overallStatus === 'warn' || overallStatus === 'error') && <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
             Status Geral
             <StatusPill status={overallStatus} />
           </CardTitle>
@@ -234,7 +235,7 @@ export default function StatusPage() {
           </InfoRow>
         </CardContent>
       </Card>
-    </div>
+    </FadeIn>
   );
 }
 

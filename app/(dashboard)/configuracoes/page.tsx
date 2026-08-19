@@ -1,5 +1,7 @@
 'use client';
 
+import PageHeader from "@/components/layout/PageHeader";
+import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -369,13 +371,12 @@ export default function ConfiguracoesPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-          <p className="text-sm text-muted-foreground">Ajuste preferências da sua conta e do app</p>
-        </div>
-        <div className="flex gap-2">
+    <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
+      <PageHeader
+        title="Configurações"
+        description="Ajuste preferências da sua conta e do app"
+        actions={
+          <>
           <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
             <Download className="h-4 w-4 mr-2" /> Exportar
           </Button>
@@ -383,8 +384,9 @@ export default function ConfiguracoesPage() {
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             Salvar
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
@@ -571,6 +573,6 @@ export default function ConfiguracoesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </FadeIn>
   );
 }

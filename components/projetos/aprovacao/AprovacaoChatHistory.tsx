@@ -62,17 +62,17 @@ export default function AprovacaoChatHistory({
               <div
                 className={cn(
                   "mt-1 inline-flex items-start gap-2 rounded-lg border px-3 py-2 text-sm",
-                  isAprovar && "bg-emerald-50 border-emerald-200",
+                  isAprovar && "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200",
                   isRejeitar && "bg-rose-50 border-rose-200",
                   isComent && "bg-muted",
-                  isEnviado && "bg-blue-50 border-blue-200"
+                  isEnviado && "bg-blue-50 dark:bg-blue-950/40 border-blue-200"
                 )}
               >
                 <span className="mt-0.5">
-                  {isAprovar && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                  {isAprovar && <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
                   {isRejeitar && <XCircle className="h-4 w-4 text-rose-600" />}
                   {isComent && <MessageSquare className="h-4 w-4 text-muted-foreground" />}
-                  {isEnviado && <Send className="h-4 w-4 text-blue-600" />}
+                  {isEnviado && <Send className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
                 </span>
 
                 <div className="min-w-0">

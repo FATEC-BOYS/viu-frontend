@@ -213,7 +213,7 @@ export default function GerenciarAcessosDrawer({
           {/* Owner fixo */}
           {owner && (
             <div className="rounded-lg border p-3 flex items-center gap-3 bg-muted/30">
-              <Crown className="h-4 w-4 text-yellow-600" />
+              <Crown className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               <Avatar className="h-7 w-7">
                 {owner.avatar ? <AvatarImage src={owner.avatar} alt={owner.nome} /> : <AvatarFallback>{owner.nome.slice(0,2).toUpperCase()}</AvatarFallback>}
               </Avatar>

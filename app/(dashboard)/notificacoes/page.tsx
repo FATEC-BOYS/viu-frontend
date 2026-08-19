@@ -1,5 +1,6 @@
 'use client';
 
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 
@@ -13,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 
 import {
   Bell, Search, Calendar, CheckCircle2, Circle, Loader2, MessageSquare,
-  Clock, XCircle, CheckCheck, Trash2, Settings, MailOpen, Mail,
+  Clock, XCircle, CheckCheck, Trash2, Settings, MailOpen, Mail, FolderPlus, ImagePlus,
 } from 'lucide-react';
 
 /* ===================== Tipos ===================== */
@@ -22,7 +23,7 @@ interface Notificacao {
   id: string;
   titulo: string;
   conteudo: string;
-  tipo: 'FEEDBACK' | 'APROVACAO' | 'REJEICAO' | 'PRAZO' | 'PROJETO' | 'SISTEMA' | string;
+  tipo: 'NOVO_PROJETO' | 'NOVA_ARTE' | 'NOVO_FEEDBACK' | 'APROVACAO' | 'PRAZO' | 'SISTEMA' | string;
   canal: 'SISTEMA' | 'EMAIL' | 'PUSH' | string;
   lida: boolean;
   criado_em: string;
@@ -34,11 +35,11 @@ type SortKey = 'criado_em' | 'titulo' | 'tipo' | 'status';
 /* ===================== Pequenos helpers ===================== */
 
 const TYPE_ICON: Record<string, { icon: any; label: string; dot: string }> = {
-  FEEDBACK: { icon: MessageSquare, label: 'Feedback', dot: 'bg-blue-500' },
+  NOVO_PROJETO: { icon: FolderPlus, label: 'Novo projeto', dot: 'bg-purple-500' },
+  NOVA_ARTE: { icon: ImagePlus, label: 'Nova arte', dot: 'bg-blue-500' },
+  NOVO_FEEDBACK: { icon: MessageSquare, label: 'Novo feedback', dot: 'bg-sky-500' },
   APROVACAO: { icon: CheckCircle2, label: 'Aprovação', dot: 'bg-emerald-500' },
-  REJEICAO: { icon: XCircle, label: 'Rejeição', dot: 'bg-red-500' },
   PRAZO: { icon: Clock, label: 'Prazo', dot: 'bg-amber-500' },
-  PROJETO: { icon: Bell, label: 'Projeto', dot: 'bg-purple-500' },
   SISTEMA: { icon: Settings, label: 'Sistema', dot: 'bg-slate-400' },
 };
 function typeMeta(tipo: string) {
@@ -116,8 +117,13 @@ function NotificacaoRow({
             <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="h-3 w-3" />
               <span>{fromNow(n.criado_em)}</span>
-              <span className="opacity-50">•</span>
-              <span>de {n.usuario?.nome || 'Sistema'}</span>
+              {/* sem remetente a linha virava "de —"; melhor não ter a parte */}
+              {n.usuario?.nome && n.usuario.nome !== '—' && (
+                <>
+                  <span className="opacity-50">•</span>
+                  <span>de {n.usuario.nome}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -281,11 +287,11 @@ export default function NotificacoesPage() {
   }
 
   return (
-    <div className="grid gap-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 grid gap-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Notificações ✦ </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Notificações ✦ </h1>
           <Badge variant="secondary" className="h-6">{stats.total} no total</Badge>
           <Badge className="h-6 gap-1">
             <Mail className="h-3 w-3" /> {stats.unread} não lidas
@@ -322,11 +328,11 @@ export default function NotificacoesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos tipos</SelectItem>
-                <SelectItem value="FEEDBACK">Feedback</SelectItem>
+                <SelectItem value="NOVO_PROJETO">Novo projeto</SelectItem>
+                <SelectItem value="NOVA_ARTE">Nova arte</SelectItem>
+                <SelectItem value="NOVO_FEEDBACK">Novo feedback</SelectItem>
                 <SelectItem value="APROVACAO">Aprovação</SelectItem>
-                <SelectItem value="REJEICAO">Rejeição</SelectItem>
                 <SelectItem value="PRAZO">Prazo</SelectItem>
-                <SelectItem value="PROJETO">Projeto</SelectItem>
                 <SelectItem value="SISTEMA">Sistema</SelectItem>
               </SelectContent>
             </Select>
@@ -371,7 +377,7 @@ export default function NotificacoesPage() {
         <Separator />
         {/* chips rápidos */}
         <div className="flex flex-wrap items-center gap-2">
-          {(['FEEDBACK','APROVACAO','REJEICAO','PRAZO','PROJETO','SISTEMA'] as const).map(t => {
+          {(['NOVO_PROJETO','NOVA_ARTE','NOVO_FEEDBACK','APROVACAO','PRAZO','SISTEMA'] as const).map(t => {
             const m = typeMeta(t);
             return (
               <Button
@@ -441,6 +447,6 @@ export default function NotificacoesPage() {
           </p>
         </div>
       )}
-    </div>
+    </FadeIn>
   );
 }

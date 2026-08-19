@@ -138,7 +138,7 @@ function DraggableCard({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className="rounded-lg border p-3 bg-background hover:shadow-sm cursor-grab active:cursor-grabbing"
+      className="rounded-lg border p-3 bg-background cursor-grab active:cursor-grabbing card-interativo"
       title={p.nome}
       role="button"
     >

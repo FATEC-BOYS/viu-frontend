@@ -400,3 +400,35 @@
   font-family: var(--viu-font-mono);
   font-feature-settings: "tnum" 1, "ss02" 1;
 }
+
+/* ==========================================================================
+   Interações de item de lista/grade
+   Cada tela inventava seu próprio hover: shadow-sm aqui, shadow-lg ali,
+   translate em duas e nada nas outras — a mesma ação parecia coisas
+   diferentes conforme a aba. Uma classe só, aplicada onde o item é
+   clicável.
+   ========================================================================== */
+.card-interativo {
+  transition-property: box-shadow, transform, border-color;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-interativo:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -12px color-mix(in oklch, var(--foreground) 30%, transparent);
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+}
+.card-interativo:active {
+  transform: translateY(0);
+  transition-duration: 80ms;
+}
+
+/* Quem pediu menos movimento no sistema recebe só a mudança de cor. */
+@media (prefers-reduced-motion: reduce) {
+  .card-interativo,
+  .card-interativo:hover,
+  .card-interativo:active {
+    transform: none;
+    transition-property: border-color;
+  }
+}

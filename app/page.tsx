@@ -210,7 +210,7 @@ export default function HomePage() {
                     <Button
                       size="lg"
                       variant="outline"
-                      className="w-full sm:w-auto border-orange-500 text-orange-600 hover:bg-orange-50"
+                      className="w-full sm:w-auto border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:bg-orange-950/40"
                       onClick={goToDashboardOrLogin}
                     >
                       Ver demonstração

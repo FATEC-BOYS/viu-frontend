@@ -625,12 +625,12 @@ export default function FeedbackViewer({
                 className="absolute z-30 -translate-x-1/2 -translate-y-full animate-in zoom-in-50 fade-in duration-200"
                 style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
               >
-                <div className="flex items-center gap-1 rounded-full px-1.5 py-0.5 shadow-lg border-2 bg-red-50 border-red-400 dark:bg-red-950 dark:border-red-500">
+                <div className="flex items-center gap-1 rounded-full px-1.5 py-0.5 shadow-lg border-2 bg-red-50 dark:bg-red-950/40 border-red-400 dark:bg-red-950 dark:border-red-500">
                   <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-bold text-white">
                     +
                   </div>
                 </div>
-                <div className="w-2.5 h-2.5 rotate-45 -mt-1.5 ml-[calc(50%-5px)] bg-red-50 border-b-2 border-r-2 border-red-400 dark:bg-red-950 dark:border-red-500" />
+                <div className="w-2.5 h-2.5 rotate-45 -mt-1.5 ml-[calc(50%-5px)] bg-red-50 dark:bg-red-950/40 border-b-2 border-r-2 border-red-400 dark:bg-red-950 dark:border-red-500" />
               </div>
             )}
           </div>
@@ -638,7 +638,7 @@ export default function FeedbackViewer({
 
         {/* Pin indicator */}
         {pin && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-950 border-b text-xs text-blue-700 dark:text-blue-300">
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-950/40 dark:bg-blue-950 border-b text-xs text-blue-700 dark:text-blue-300">
             <MessageCircle className="h-3.5 w-3.5" />
             <span>
               Comentário posicionado em ({pin.x.toFixed(0)}%, {pin.y.toFixed(0)}%)
@@ -767,8 +767,8 @@ export default function FeedbackViewer({
                               onClick={(e) => { e.stopPropagation(); toggleResolve(fb); }}
                               className={`p-1 rounded transition-colors ${
                                 isResolved
-                                  ? "text-green-500 hover:text-green-700 bg-green-50 dark:bg-green-950"
-                                  : "text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950"
+                                  ? "text-green-500 hover:text-green-700 bg-green-50 dark:bg-green-950/40 dark:bg-green-950"
+                                  : "text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:bg-green-950/40 dark:hover:bg-green-950"
                               }`}
                             >
                               {isResolved ? <CheckCheck className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}

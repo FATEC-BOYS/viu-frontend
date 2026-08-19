@@ -1,5 +1,7 @@
 'use client';
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { iniciais } from "@/lib/iniciais";
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -36,7 +38,7 @@ import {
 /* =========================
    Tipos
    ========================= */
-type ArteStatus = 'EM_ANALISE' | 'APROVADO' | 'REJEITADO' | 'PENDENTE' | 'RASCUNHO';
+type ArteStatus = 'EM_ANALISE' | 'APROVADO' | 'REJEITADO' | 'REVISAO';
 type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
 
 type Arte = {
@@ -297,22 +299,18 @@ export default function ClienteDetailPage() {
           <Button variant="ghost" size="sm" asChild>
             <Link href="/clientes"><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Link>
           </Button>
-          <div className="w-12 h-12 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center">
-            {clienteSafe.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={clienteSafe.avatar} alt={clienteSafe.nome} className="w-12 h-12 object-cover" />
-            ) : (
-              <span className="text-primary font-semibold">
-                {clienteSafe.nome.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
-            )}
-          </div>
+          <Avatar className="h-12 w-12 shrink-0">
+            <AvatarImage src={clienteSafe.avatar || undefined} alt={clienteSafe.nome} className="object-cover" />
+            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+              {iniciais(clienteSafe.nome)}
+            </AvatarFallback>
+          </Avatar>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{clienteSafe.nome}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{clienteSafe.nome}</h1>
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> {clienteSafe.email}</span>
               {clienteSafe.telefone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" /> {clienteSafe.telefone}</span>}
-              <Badge variant={clienteSafe.vinculado ? 'default' : 'secondary'} className="ml-1">
+              <Badge variant={clienteSafe.vinculado ? 'secondary' : 'destructive'} className="ml-1">
                 {clienteSafe.vinculado ? 'Vínculo ativo' : 'Vínculo rompido'}
               </Badge>
             </div>
@@ -333,8 +331,8 @@ export default function ClienteDetailPage() {
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-5">
         <Card><CardContent className="p-4"><div className="text-2xl font-bold">{estatisticas.total}</div><p className="text-sm text-muted-foreground">Projetos</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-blue-600">{estatisticas.ativos}</div><p className="text-sm text-muted-foreground">Em andamento</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-emerald-600">{estatisticas.concluidos}</div><p className="text-sm text-muted-foreground">Concluídos</p></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{estatisticas.ativos}</div><p className="text-sm text-muted-foreground">Em andamento</p></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{estatisticas.concluidos}</div><p className="text-sm text-muted-foreground">Concluídos</p></CardContent></Card>
         <Card><CardContent className="p-4"><div className="text-2xl font-bold">{formatBRLFromCents(estatisticas.orcamentoTotal)}</div><p className="text-sm text-muted-foreground">Orçamento total</p></CardContent></Card>
         <Card>
           <CardContent className="p-4">
@@ -413,7 +411,7 @@ export default function ClienteDetailPage() {
                     const totalArtes = p.artes?.length || 0;
                     const aprovadas = p.artes?.filter((a) => a.status === 'APROVADO').length || 0;
                     return (
-                      <div key={p.id} className="rounded-lg border p-4 hover:shadow-sm transition">
+                      <div key={p.id} className="rounded-lg border p-4 card-interativo">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="font-medium truncate">{p.nome}</h4>
                           <div className="shrink-0">{statusPill(p.status)}</div>

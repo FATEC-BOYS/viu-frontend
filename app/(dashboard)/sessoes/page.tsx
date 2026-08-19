@@ -1,5 +1,7 @@
 'use client'
 
+import PageHeader from "@/components/layout/PageHeader";
+import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
@@ -85,13 +87,12 @@ export default function SessoesPage() {
   const outrasAtivas = ativas.filter((s) => !s.isCurrent)
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sessões ativas</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os dispositivos com acesso à sua conta.</p>
-        </div>
-        {outrasAtivas.length > 0 && (
+    <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
+      <PageHeader
+        title="Sessões ativas"
+        description="Gerencie os dispositivos com acesso à sua conta."
+        actions={
+          outrasAtivas.length > 0 && (
           <Button
             variant="destructive"
             size="sm"
@@ -103,8 +104,9 @@ export default function SessoesPage() {
               : <ShieldAlert className="h-4 w-4 mr-2" />}
             Revogar outras sessões
           </Button>
-        )}
-      </div>
+          )
+        }
+      />
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -229,6 +231,6 @@ export default function SessoesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </FadeIn>
   )
 }

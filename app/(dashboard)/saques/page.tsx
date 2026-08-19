@@ -1,5 +1,7 @@
 'use client'
 
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -53,7 +55,7 @@ function useCountUp(target: number, duration = 900) {
 const STATUS_SAQUE_CFG: Record<SaqueStatus, { label: string; icon: React.ElementType; cls: string }> = {
   SOLICITADO: { label: 'Solicitado', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
   PROCESSANDO: { label: 'Processando', icon: Loader2, cls: 'text-blue-400 bg-blue-400/10' },
-  CONCLUIDO: { label: 'Concluído', icon: CheckCircle2, cls: 'text-emerald-400 bg-emerald-400/10' },
+  CONCLUIDO: { label: 'Concluído', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
   REJEITADO: { label: 'Rejeitado', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
 }
 
@@ -70,19 +72,18 @@ function StatusChip({ status }: { status: SaqueStatus }) {
 // --- sub-components ---
 
 function SaldoCard({ info }: { info: SaldoInfo }) {
-  const displayCents = useCountUp(info.saldoDisponivel)
+  const displayCents = useCountUp(info.saldo)
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-      className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-orange-900/30 to-orange-950/50 p-6"
+      className="relative overflow-hidden rounded-2xl border border-primary/25 bg-primary/5 p-6"
     >
-      <motion.div
-        className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-primary/5"
-        animate={{ scale: [1, 1.1, 1] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-2xl"
       />
       <div className="relative z-10">
         <div className="flex items-center gap-2 mb-3">
@@ -91,14 +92,14 @@ function SaldoCard({ info }: { info: SaldoInfo }) {
         </div>
         <motion.p
           className="text-4xl font-bold tabular-nums text-foreground"
-          key={info.saldoDisponivel}
+          key={info.saldo}
         >
           {formatReais(displayCents)}
         </motion.p>
         <div className="flex gap-4 mt-4">
           <div>
             <p className="text-[11px] text-muted-foreground">Total recebido</p>
-            <p className="text-sm font-medium text-emerald-400 tabular-nums">{info.totalRecebidoFormatado}</p>
+            <p className="text-sm font-medium tabular-nums text-emerald-600 dark:text-emerald-600 dark:text-emerald-400">{info.totalRecebidoFormatado}</p>
           </div>
           <div>
             <p className="text-[11px] text-muted-foreground">Total sacado</p>
@@ -206,7 +207,7 @@ export default function SaquesPage() {
     try {
       const res = await pagamentosApi.solicitarSaque(saqueChaveId, valor)
       setSaques(prev => [res.data, ...prev])
-      setSaldo(prev => prev ? { ...prev, saldoDisponivel: prev.saldoDisponivel - valor } : prev)
+      setSaldo(prev => prev ? { ...prev, saldo: prev.saldo - valor } : prev)
       toast.success('Saque solicitado!')
       setSaqueOpen(false)
       setSaqueValor('')
@@ -246,7 +247,7 @@ export default function SaquesPage() {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-2xl">
+    <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
       <motion.div
         initial={{ opacity: 0, y: -14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -254,10 +255,10 @@ export default function SaquesPage() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Saques</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Receba seus ganhos via PIX.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Saques</h1>
+          <p className="text-sm text-muted-foreground">Receba seus ganhos via PIX.</p>
         </div>
-        {saldo && saldo.saldoDisponivel > 0 && (
+        {saldo && saldo.saldo > 0 && (
           <Button
             className="rounded-xl gap-2"
             onClick={() => setSaqueOpen(true)}
@@ -283,14 +284,13 @@ export default function SaquesPage() {
         </div>
         <AnimatePresence>
           {chaves.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-8 text-muted-foreground border border-dashed border-border rounded-xl"
-            >
-              <Key className="h-7 w-7 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Nenhuma chave PIX cadastrada.</p>
-            </motion.div>
+            <EmptyState
+              icon={Key}
+              title="Nenhuma chave PIX cadastrada"
+              description="Cadastre uma chave para poder receber seus saques."
+              actionLabel="Adicionar chave"
+              onAction={() => setChaveOpen(true)}
+            />
           ) : (
             chaves.map((c, i) => (
               <ChavePixCard
@@ -311,13 +311,11 @@ export default function SaquesPage() {
         <h2 className="text-sm font-semibold">Histórico</h2>
         <AnimatePresence>
           {saques.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-8 text-muted-foreground"
-            >
-              <p className="text-sm">Nenhum saque realizado ainda.</p>
-            </motion.div>
+            <EmptyState
+              icon={ArrowDownToLine}
+              title="Nenhum saque realizado ainda"
+              description="Seus saques aparecem aqui assim que o primeiro for solicitado."
+            />
           ) : (
             saques.map((s, i) => (
               <motion.div
@@ -379,7 +377,7 @@ export default function SaquesPage() {
               />
               {saldo && (
                 <p className="text-xs text-muted-foreground">
-                  Disponível: {saldo.saldoDisponivelFormatado} · Mínimo R$ 5,00
+                  Disponível: {saldo.saldoFormatado} · Mínimo R$ 5,00
                 </p>
               )}
             </div>
@@ -444,6 +442,6 @@ export default function SaquesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </FadeIn>
   )
 }

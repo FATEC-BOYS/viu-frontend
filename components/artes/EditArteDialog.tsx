@@ -81,9 +81,8 @@ export function EditArteDialog({
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="RASCUNHO">Rascunho</SelectItem>
-                  <SelectItem value="PENDENTE">Pendente</SelectItem>
                   <SelectItem value="EM_ANALISE">Em Análise</SelectItem>
+                  <SelectItem value="REVISAO">Em revisão</SelectItem>
                   <SelectItem value="APROVADO">Aprovado</SelectItem>
                   <SelectItem value="REJEITADO">Rejeitado</SelectItem>
                 </SelectContent>
