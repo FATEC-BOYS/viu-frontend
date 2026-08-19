@@ -265,27 +265,27 @@ function PasswordInputs({
             </summary>
             <ul className="mt-2 space-y-1 pl-1">
               <li className="flex items-center gap-1.5">
-                {v.lengthOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.lengthOK ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={v.lengthOK ? "text-foreground" : "text-muted-foreground"}>Mín. 12 caracteres</span>
               </li>
               <li className="flex items-center gap-1.5">
-                {v.lowerOK && v.upperOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.lowerOK && v.upperOK ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={(v.lowerOK && v.upperOK) ? "text-foreground" : "text-muted-foreground"}>Maiúsculas e minúsculas</span>
               </li>
               <li className="flex items-center gap-1.5">
-                {v.numberOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.numberOK ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={v.numberOK ? "text-foreground" : "text-muted-foreground"}>Pelo menos um número</span>
               </li>
               <li className="flex items-center gap-1.5">
-                {v.symbolOK ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.symbolOK ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={v.symbolOK ? "text-foreground" : "text-muted-foreground"}>Pelo menos um símbolo</span>
               </li>
               <li className="flex items-center gap-1.5">
-                {v.notEmailPart ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.notEmailPart ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={v.notEmailPart ? "text-foreground" : "text-muted-foreground"}>Evite partes do e-mail</span>
               </li>
               <li className="flex items-center gap-1.5">
-                {v.noCommonSeq ? <Check className="h-3 w-3 text-green-600 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {v.noCommonSeq ? <Check className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" /> : <X className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className={v.noCommonSeq ? "text-foreground" : "text-muted-foreground"}>Evite sequências óbvias</span>
               </li>
             </ul>

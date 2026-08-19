@@ -1,8 +1,10 @@
 'use client';
 
+import Thumb from "@/components/layout/Thumb";
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 
 import { listArtesOverview, type ArteOverview, type ArteStatus } from "@/lib/artes";
@@ -73,7 +75,7 @@ function StatusBadge({ status }: { status: string }) {
     EM_ANALISE: { label: "Em Análise", variant: "outline" as const, icon: Clock },
     APROVADO:   { label: "Aprovado",   variant: "default" as const, icon: CheckCircle2 },
     REJEITADO:  { label: "Rejeitado",  variant: "destructive" as const, icon: XCircle },
-    PENDENTE:   { label: "Pendente",   variant: "secondary" as const, icon: AlertCircle },
+    REVISAO:    { label: "Em revisão", variant: "secondary" as const, icon: AlertCircle },
   };
   const config =
     statusConfig[status as keyof typeof statusConfig] ?? {
@@ -140,23 +142,10 @@ function ArteCard({
   }
 
   return (
-    <Card className="group overflow-hidden border hover:shadow-lg transition">
+    <Card className="group overflow-hidden border card-interativo">
       {/* Thumb com overlay de status */}
       <div className="relative aspect-video bg-muted/50">
-        {previewUrl ? (
-          <Image
-            src={previewUrl}
-            alt={arte.nome}
-            width={1280}
-            height={720}
-            className="object-cover w-full h-full"
-            unoptimized
-          />
-        ) : (
-          <div className="w-full h-full grid place-items-center text-muted-foreground">
-            <FileImage className="h-10 w-10" />
-          </div>
-        )}
+        <Thumb src={previewUrl} alt={arte.nome} sizes="(max-width: 768px) 100vw, 33vw" iconClassName="h-10 w-10" />
         <div className="absolute left-2 top-2">
           <StatusBadge status={arte.status} />
         </div>
@@ -190,8 +179,8 @@ function ArteCard({
       </CardHeader>
 
       <CardContent className="pt-0">
-        <div className="flex items-center justify-between text-xs">
-          <div className="truncate">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <div className="min-w-0 flex-1 truncate">
             <span className="text-muted-foreground">Projeto: </span>
             <button
               className="underline underline-offset-2 hover:opacity-80"
@@ -200,11 +189,11 @@ function ArteCard({
               {arte.projeto_nome}
             </button>
           </div>
-          <span className="text-muted-foreground">{formatDate(arte.criado_em)}</span>
+          <span className="shrink-0 text-muted-foreground">{formatDate(arte.criado_em)}</span>
         </div>
 
-        <div className="flex items-center justify-between text-xs mt-2">
-          <div className="truncate">
+        <div className="flex items-center justify-between gap-2 text-xs mt-2">
+          <div className="min-w-0 flex-1 truncate">
             <span className="text-muted-foreground">Cliente: </span>
             <button
               className="underline underline-offset-2 hover:opacity-80"
@@ -323,7 +312,7 @@ function ArtesPageInner() {
     emAnalise: rows.filter(a => a.status === "EM_ANALISE").length,
     aprovadas: rows.filter(a => a.status === "APROVADO").length,
     rejeitadas: rows.filter(a => a.status === "REJEITADO").length,
-    pendentes: rows.filter(a => a.status === "PENDENTE").length,
+    emRevisao: rows.filter(a => a.status === "REVISAO").length,
   }), [rows]);
 
   // ========= Wizard =========
@@ -379,19 +368,35 @@ function ArtesPageInner() {
 
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
 
+  const temFiltro =
+    Boolean(searchTerm) ||
+    statusFilter !== "todos" ||
+    tipoFilter !== "todos" ||
+    projetoFilter !== "todos" ||
+    clienteFilter !== "todos" ||
+    autorFilter !== "todos";
+
   /* ===================== UI — “tcholinha” ===================== */
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header compacto */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Artes ✦</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Artes ✦</h1>
           <Badge variant="secondary" className="h-6">{count} itens</Badge>
           <div className="hidden md:flex items-center gap-1 text-xs">
-            <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" /> {estatisticas.emAnalise}</Badge>
-            <Badge className="gap-1"><CheckCircle2 className="h-3 w-3" /> {estatisticas.aprovadas}</Badge>
-            <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
-            <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" /> {estatisticas.pendentes}</Badge>
+            {estatisticas.emAnalise > 0 && (
+              <Badge variant="outline" className="gap-1" title="Em análise"><Clock className="h-3 w-3" /> {estatisticas.emAnalise}</Badge>
+            )}
+            {estatisticas.aprovadas > 0 && (
+              <Badge className="gap-1" title="Aprovadas"><CheckCircle2 className="h-3 w-3" /> {estatisticas.aprovadas}</Badge>
+            )}
+            {estatisticas.rejeitadas > 0 && (
+              <Badge variant="destructive" className="gap-1" title="Rejeitadas"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
+            )}
+            {estatisticas.emRevisao > 0 && (
+              <Badge variant="secondary" className="gap-1" title="Em revisão"><AlertCircle className="h-3 w-3" /> {estatisticas.emRevisao}</Badge>
+            )}
           </div>
         </div>
 
@@ -458,7 +463,7 @@ function ArtesPageInner() {
             { key: "EM_ANALISE", label: "Em Análise" },
             { key: "APROVADO", label: "Aprovado" },
             { key: "REJEITADO", label: "Rejeitado" },
-            { key: "PENDENTE", label: "Pendente" },
+            { key: "REVISAO", label: "Em revisão" },
           ].map(s => (
             <Button
               key={s.key}
@@ -559,25 +564,15 @@ function ArtesPageInner() {
           ))}
         </div>
       ) : (
-        <Card className="p-12">
-          <div className="text-center">
-            <FileImage className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma arte encontrada</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchTerm || statusFilter !== "todos" || tipoFilter !== "todos" ||
-               projetoFilter !== "todos" || clienteFilter !== "todos" || autorFilter !== "todos"
-                ? "Tente ajustar os filtros."
-                : "Comece criando sua primeira arte."}
-            </p>
-            {!searchTerm && statusFilter === "todos" && tipoFilter === "todos" &&
-              projetoFilter === "todos" && clienteFilter === "todos" && autorFilter === "todos" && (
-              <Button onClick={handleOpenNewArte}>
-                <Upload className="h-4 w-4 mr-2" />
-                Nova Arte
-              </Button>
-            )}
-          </div>
-        </Card>
+        <EmptyState
+          icon={FileImage}
+          title="Nenhuma arte encontrada"
+          description={temFiltro ? "Tente ajustar os filtros." : "Comece criando sua primeira arte."}
+          // com filtro ativo o vazio é resultado da busca, não falta de conteúdo:
+          // oferecer "Nova Arte" ali empurra para o caminho errado
+          actionLabel={temFiltro ? undefined : "Nova Arte"}
+          onAction={temFiltro ? undefined : handleOpenNewArte}
+        />
       )}
 
       {/* Quick Look */}
@@ -638,7 +633,7 @@ function ArtesPageInner() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </FadeIn>
   );
 }
 

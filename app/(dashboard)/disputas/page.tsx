@@ -1,5 +1,7 @@
 'use client'
 
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Scale, Plus, AlertTriangle, ShieldCheck, Clock, TrendingUp, X, Loader2, ChevronRight } from 'lucide-react'
@@ -43,7 +45,7 @@ const STATUS_CONFIG: Record<DisputaStatus, { label: string; color: string; icon:
   },
   RESOLVIDA_DESIGNER: {
     label: 'Resolvida (designer)',
-    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-600 dark:text-emerald-400',
     icon: <ShieldCheck className="h-3 w-3" />,
   },
   RESOLVIDA_CLIENTE: {
@@ -187,7 +189,7 @@ function AbrirDisputaModal({
             </p>
           </div>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/40 p-3 dark:border-amber-900 dark:bg-amber-950/30">
             <p className="text-xs text-amber-700 dark:text-amber-400">
               <strong>Aviso:</strong> disputas são tratadas com imparcialidade. Todas as interações são
               registradas em log de auditoria imutável. Disputas infundadas podem ser sancionadas conforme o
@@ -224,7 +226,7 @@ function DisputaCard({ disputa, index }: { disputa: Disputa; index: number }) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06, type: 'spring', stiffness: 260, damping: 22 }}
-      className="group rounded-xl border bg-card p-5 shadow-sm hover:shadow-md transition-shadow"
+      className="group rounded-xl border bg-card p-5 shadow-sm card-interativo"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -241,7 +243,7 @@ function DisputaCard({ disputa, index }: { disputa: Disputa; index: number }) {
             <span>Projeto: <strong className="text-foreground">{disputa.projeto?.nome ?? '—'}</strong></span>
             <span>Aberta em: <strong className="text-foreground">{criadoEm}</strong></span>
             {disputa.saldoBloqueado > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
+              <span className="text-amber-600 dark:text-amber-400 dark:text-amber-400 font-medium">
                 Saldo bloqueado: {formatSaldoBloqueado(disputa.saldoBloqueado)}
               </span>
             )}
@@ -295,7 +297,7 @@ export default function DisputasPage() {
   const emAnalise = disputas.filter((d) => d.status === 'EM_ANALISE').length
 
   return (
-    <div className="space-y-6 p-6 max-w-3xl mx-auto">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -308,9 +310,9 @@ export default function DisputasPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
               <Scale className="h-5 w-5 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Disputas</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Disputas</h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 ml-[3.25rem]">
+          <p className="text-sm text-muted-foreground">
             Canal seguro para registrar e acompanhar divergências entre clientes e designers.
           </p>
         </div>
@@ -330,8 +332,8 @@ export default function DisputasPage() {
         >
           {[
             { label: 'Total', value: disputas.length, color: 'text-foreground' },
-            { label: 'Abertas', value: abertas, color: 'text-red-600 dark:text-red-400' },
-            { label: 'Em análise', value: emAnalise, color: 'text-yellow-600 dark:text-yellow-400' },
+            { label: 'Abertas', value: abertas, color: 'text-red-600 dark:text-red-400 dark:text-red-400' },
+            { label: 'Em análise', value: emAnalise, color: 'text-yellow-600 dark:text-yellow-400 dark:text-yellow-400' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl border bg-card p-4 text-center">
               <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
@@ -372,23 +374,15 @@ export default function DisputasPage() {
           ))}
         </div>
       ) : filtradas.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-20 text-center"
-        >
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-            <ShieldCheck className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold">
-            {statusFilter === 'todas' ? 'Nenhuma disputa registrada' : 'Nenhuma disputa com esse status'}
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            {statusFilter === 'todas'
+        <EmptyState
+          icon={ShieldCheck}
+          title={statusFilter === 'todas' ? 'Nenhuma disputa registrada' : 'Nenhuma disputa com esse status'}
+          description={
+            statusFilter === 'todas'
               ? 'Tudo em ordem por aqui. Caso haja algum problema, use o botão acima.'
-              : 'Tente outro filtro.'}
-          </p>
-        </motion.div>
+              : 'Tente outro filtro.'
+          }
+        />
       ) : (
         <AnimatePresence mode="popLayout">
           <div className="space-y-3">
@@ -404,6 +398,6 @@ export default function DisputasPage() {
         onOpenChange={setModalOpen}
         onSuccess={handleNovaDisputa}
       />
-    </div>
+    </FadeIn>
   )
 }

@@ -112,8 +112,7 @@ export function ArteQuickLookSheet({
       EM_ANALISE: { variant: "outline", label: "Em Análise" },
       APROVADO: { variant: "default", label: "Aprovado" },
       REJEITADO: { variant: "destructive", label: "Rejeitado" },
-      PENDENTE: { variant: "secondary", label: "Pendente" },
-      RASCUNHO: { variant: "secondary", label: "Rascunho" },
+      REVISAO: { variant: "secondary", label: "Em revisão" },
     };
     const conf = map[status] ?? { variant: "outline", label: status };
     return <Badge variant={conf.variant}>{conf.label}</Badge>;

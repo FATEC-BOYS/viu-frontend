@@ -26,10 +26,10 @@ export default function InlineAlert({
     <Info className="h-4 w-4" />;
 
   const toneClasses = {
-    success: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    warn: "bg-amber-50 text-amber-800 border-amber-200",
+    success: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 border-emerald-200",
+    warn: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 border-amber-200",
     error: "bg-rose-50 text-rose-800 border-rose-200",
-    info: "bg-blue-50 text-blue-800 border-blue-200",
+    info: "bg-blue-50 dark:bg-blue-950/40 text-blue-800 border-blue-200",
   }[tone];
 
   return (

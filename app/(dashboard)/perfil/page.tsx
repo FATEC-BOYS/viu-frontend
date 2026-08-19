@@ -1,5 +1,6 @@
 'use client'
 
+import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useRef } from 'react'
 import { LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -70,7 +71,7 @@ function StatCard({ title, value, subtitle, icon: Icon }: {
 }
 
 const STATUS_ASSINATURA_CFG: Record<string, { label: string; cls: string }> = {
-  ATIVA: { label: 'Ativa', cls: 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20' },
+  ATIVA: { label: 'Ativa', cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 border-emerald-500/20' },
   PENDENTE: { label: 'Pendente', cls: 'bg-amber-400/10 text-amber-400 border-amber-400/20' },
   CANCELADA: { label: 'Cancelada', cls: 'bg-red-400/10 text-red-400 border-red-400/20' },
   PAUSADA: { label: 'Pausada', cls: 'bg-blue-400/10 text-blue-400 border-blue-400/20' },
@@ -83,8 +84,10 @@ function getInitials(name: string) {
 
 async function fetchTotal(path: string): Promise<number> {
   try {
-    const res = await api.get<{ total?: number }>(path)
-    return res.total ?? 0
+    // o total vem dentro de pagination; lendo res.total todas as estatísticas
+    // do perfil davam 0, mesmo com projetos e artes na conta
+    const res = await api.get<{ pagination?: { total?: number } }>(path)
+    return res.pagination?.total ?? 0
   } catch {
     return 0
   }
@@ -237,11 +240,11 @@ export default function PerfilPage() {
   const isDesigner = usuario.tipo === 'DESIGNER'
 
   return (
-    <div className="space-y-6 p-6 max-w-6xl mx-auto">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Meu Perfil</h1>
-          <p className="text-muted-foreground">Gerencie suas informações pessoais e configurações</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Meu Perfil</h1>
+          <p className="text-sm text-muted-foreground">Gerencie suas informações pessoais e configurações</p>
         </div>
         <Badge variant="secondary" className="gap-2">
           <Shield className="h-3 w-3" />
@@ -460,7 +463,7 @@ export default function PerfilPage() {
           {/* --- saldo designer card --- */}
           {isDesigner && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-              <Card className="border-primary/20 bg-gradient-to-br from-orange-900/10 to-transparent">
+              <Card className="border-primary/20 bg-primary/5">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Wallet className="h-4 w-4 text-primary" />
@@ -476,8 +479,8 @@ export default function PerfilPage() {
                     <div className="space-y-2">
                       <div>
                         <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Disponível</p>
-                        <p className="text-2xl font-bold tabular-nums text-emerald-400">
-                          {saldo.saldoDisponivelFormatado}
+                        <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400 dark:text-emerald-400">
+                          {saldo.saldoFormatado}
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -529,6 +532,6 @@ export default function PerfilPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </FadeIn>
   )
 }

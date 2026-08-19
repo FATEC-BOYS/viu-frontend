@@ -7,7 +7,11 @@ export type Plano = {
   precoMensal: number
   precoMensalFormatado: string
   taxaPlataforma: number
-  taxaPlataformaPercent: string
+  // nome vindo de GET /planos — o front lia taxaPlataformaPercent, que não
+  // existe no payload, e a UI mostrava "Taxa reduzida ()"
+  taxaPlataformaFormatada: string
+  precoAnual?: number | null
+  precoAnualFormatado?: string | null
   limitesProjetos?: number | null
   limitesArtes?: number | null
   limitesStorageMb?: number | null
@@ -67,8 +71,10 @@ export type Saque = {
 }
 
 export type SaldoInfo = {
-  saldoDisponivel: number
-  saldoDisponivelFormatado: string
+  // nomes vindos de GET /saques/saldo — antes o front lia saldo,
+  // que não existe no payload, e o card mostrava "R$ NaN"
+  saldo: number
+  saldoFormatado: string
   totalRecebido: number
   totalRecebidoFormatado: string
   totalSacado: number

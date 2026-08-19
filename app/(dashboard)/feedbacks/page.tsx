@@ -1,7 +1,10 @@
 'use client';
 
+import { arteStatusLabel } from "@/lib/artes";
+import Thumb from "@/components/layout/Thumb";
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, authHeaders } from '@/lib/api';
@@ -142,23 +145,19 @@ function ListItem({
 
   return (
     <div
-      className={`group relative grid grid-cols-[86px_1fr_auto] gap-3 rounded-md border p-3 transition hover:shadow-sm hover:-translate-y-0.5 ${selected ? 'ring-2 ring-primary' : ''} ${isResolved ? 'opacity-80' : ''}`}
+      className={`group relative grid grid-cols-[86px_1fr_auto] gap-3 rounded-md border p-3 card-interativo ${selected ? 'ring-2 ring-primary' : ''} ${isResolved ? 'opacity-80' : ''}`}
       role="button"
       onClick={() => onOpen(fb.id)}
     >
       <div className="relative h-[72px] w-[86px] overflow-hidden rounded-md border bg-muted">
-        {fb.preview_signed_url ? (
-          <Image src={fb.preview_signed_url} alt={fb.arte_nome} fill sizes="86px" className="object-cover" />
-        ) : (
-          <div className="grid h-full w-full place-items-center text-[10px] text-muted-foreground">sem preview</div>
-        )}
+        <Thumb src={fb.preview_signed_url} alt={fb.arte_nome} sizes="86px" iconClassName="h-4 w-4" />
         {hasPos && (
           <div className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${fb.posicao_x}%`, top: `${fb.posicao_y}%` }}>
             <span className="inline-block h-3 w-3 rounded-full bg-red-500 ring-2 ring-white shadow" />
           </div>
         )}
         {fb.arte_status_atual && (
-          <span className="absolute left-1 top-1 rounded bg-background/80 px-1 text-[10px] border">{fb.arte_status_atual}</span>
+          <span className="absolute left-1 top-1 rounded border bg-background/90 px-1 text-[10px]">{arteStatusLabel(fb.arte_status_atual)}</span>
         )}
       </div>
 
@@ -277,8 +276,9 @@ function FeedbackDetail({
       </CardHeader>
       <CardContent className="space-y-4 p-4">
         {fb.preview_signed_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={fb.preview_signed_url} alt={fb.arte_nome} className="aspect-[16/10] w-full rounded-md border object-cover" />
+          <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md border">
+            <Thumb src={fb.preview_signed_url} alt={fb.arte_nome} sizes="(max-width: 1024px) 100vw, 420px" iconClassName="h-8 w-8" />
+          </div>
         )}
         {fb.conteudo && <div className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{fb.conteudo}</div>}
         {fb.tipo === 'AUDIO' && (fb.audio_signed_url || fb.arquivo) && <AudioInline src={fb.audio_signed_url || fb.arquivo!} />}
@@ -358,7 +358,7 @@ function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; on
           <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-semibold">{c.title}</h4><Badge variant="secondary">{grouped[c.key].length}</Badge></div>
           <div className="space-y-2">
             {grouped[c.key].map(fb => (
-              <div key={fb.id} className="cursor-pointer rounded-md border bg-card p-2 text-sm hover:shadow-sm" onClick={() => onOpen(fb.id)}>
+              <div key={fb.id} className="cursor-pointer rounded-md border bg-card p-2 text-sm card-interativo" onClick={() => onOpen(fb.id)}>
                 <div className="mb-1 flex items-center gap-2"><TipoBadge tipo={fb.tipo} /><span className="text-[11px] text-muted-foreground truncate">{fb.projeto_nome}</span></div>
                 <div className="truncate">{fb.conteudo || fb.arte_nome}</div>
                 <div className="mt-2 flex items-center justify-between">
@@ -393,7 +393,7 @@ function FeedbackTimelineView({ items, onOpen }: { items: FeedbackRow[]; onOpen:
           <div className="mb-2 text-sm font-semibold">{day}</div>
           <div className="space-y-2">
             {arr.map(fb => (
-              <div key={fb.id} className="cursor-pointer rounded-md border p-3 hover:shadow-sm" onClick={() => onOpen(fb.id)}>
+              <div key={fb.id} className="cursor-pointer rounded-md border p-3 card-interativo" onClick={() => onOpen(fb.id)}>
                 <div className="mb-1 flex items-center justify-between"><div className="flex items-center gap-2"><TipoBadge tipo={fb.tipo} /><span className="text-xs text-muted-foreground">{fb.projeto_nome} • {fb.cliente_nome}</span></div><span className="text-[11px] text-muted-foreground">{formatTime(fb.criado_em)}</span></div>
                 <div className="text-sm">{fb.conteudo || <em className="text-muted-foreground">sem texto</em>}</div>
               </div>
@@ -585,11 +585,11 @@ export default function FeedbacksPage() {
   const selected = selectedId ? filteredOrdered.find(f => f.id === selectedId) || rows.find(f => f.id === selectedId) : null;
 
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Feedbacks ✦</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Feedbacks ✦</h1>
         </div>
         <div className="flex items-center gap-2">
           <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
@@ -655,17 +655,15 @@ export default function FeedbacksPage() {
       <Tabs value={mode}>
         <TabsContent value="cards" className="mt-0">
           {empty ? (
-            <Card className="p-12">
-              <div className="text-center">
-                <MessageSquare className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                <h3 className="mb-2 text-lg font-semibold">Nenhum feedback encontrado</h3>
-                <p className="text-muted-foreground">
-                  {searchTerm || tipoFilter !== 'todos' || autorFilter !== 'todos' || projetoFilter !== 'todos' || statusFilter !== 'todos'
-                    ? 'Tente ajustar os filtros.'
-                    : 'Os feedbacks aparecerão aqui conforme forem enviados.'}
-                </p>
-              </div>
-            </Card>
+            <EmptyState
+              icon={MessageSquare}
+              title="Nenhum feedback encontrado"
+              description={
+                searchTerm || tipoFilter !== 'todos' || autorFilter !== 'todos' || projetoFilter !== 'todos' || statusFilter !== 'todos'
+                  ? 'Tente ajustar os filtros.'
+                  : 'Os feedbacks aparecerão aqui conforme forem enviados.'
+              }
+            />
           ) : (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
               <div className="space-y-3">
@@ -727,6 +725,6 @@ export default function FeedbacksPage() {
           <FeedbackTimelineView items={filteredOrdered} onOpen={(id) => setSelectedId(id)} />
         </TabsContent>
       </Tabs>
-    </div>
+    </FadeIn>
   );
 }

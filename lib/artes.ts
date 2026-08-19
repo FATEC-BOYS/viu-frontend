@@ -1,12 +1,14 @@
 // lib/artes.ts — sem Supabase, usa API REST do backend
 import { api } from '@/lib/api'
 
+// O backend só emite EM_ANALISE | APROVADO | REJEITADO | REVISAO
+// (src/types/enums.ts). PENDENTE e RASCUNHO nunca existiram: filtravam nada e
+// deixavam a arte em revisão sem rótulo.
 export type ArteStatus =
   | 'EM_ANALISE'
   | 'APROVADO'
   | 'REJEITADO'
-  | 'PENDENTE'
-  | 'RASCUNHO'
+  | 'REVISAO'
 
 export type ArteOverview = {
   id: string
@@ -226,4 +228,15 @@ export async function listVersoes(arteId: string): Promise<VersaoGroup[]> {
       criado_em: a.criadoEm ?? a.criado_em ?? null,
     },
   ]
+}
+
+/** Rótulo legível do status da arte. O enum cru vazava para a UI em vários lugares. */
+export function arteStatusLabel(status?: string | null) {
+  switch (status) {
+    case 'EM_ANALISE': return 'Em análise'
+    case 'APROVADO': return 'Aprovado'
+    case 'REJEITADO': return 'Rejeitado'
+    case 'REVISAO': return 'Em revisão'
+    default: return status ?? '—'
+  }
 }

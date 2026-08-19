@@ -1,5 +1,6 @@
 "use client";
 
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -182,11 +183,11 @@ export default function TarefasPage() {
   const empty = filtered.length === 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header (mesma diagramação dos projetos) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Tarefas ✦</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Tarefas ✦</h1>
           <Badge variant="secondary" className="h-6">{stats.total} tarefas</Badge>
         </div>
 
@@ -287,6 +288,6 @@ export default function TarefasPage() {
 
       {/* Painel lateral */}
       <TaskSheet open={openSheet} onOpenChange={setOpenSheet} tarefa={active} />
-    </div>
+    </FadeIn>
   );
 }

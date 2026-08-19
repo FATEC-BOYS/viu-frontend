@@ -15,7 +15,7 @@ import { api } from '@/lib/api'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
-  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-400 bg-emerald-400/10' },
+  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
   CANCELADA: { label: 'Cancelada', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
   ESTORNADA: { label: 'Estornada', icon: AlertCircle, cls: 'text-purple-400 bg-purple-400/10' },
 }
@@ -156,7 +156,7 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
                   <>
                     <Separator />
                     <div className="flex items-center justify-between px-4 py-2 bg-emerald-500/5">
-                      <p className="text-xs text-emerald-400">
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 dark:text-emerald-400">
                         {fatura.dataPagamento
                           ? `Pago em ${new Date(fatura.dataPagamento).toLocaleDateString('pt-BR')}`
                           : 'Pagamento confirmado'}

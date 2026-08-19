@@ -44,7 +44,7 @@ export default function ArtesDenseList({
         <Card
           key={a.id}
           className={cn(
-            "p-2 group transition-all hover:shadow-sm border"
+            "p-2 group border card-interativo"
           )}
         >
           <div className="flex items-center gap-3">

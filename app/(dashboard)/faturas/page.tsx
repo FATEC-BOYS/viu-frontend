@@ -1,5 +1,7 @@
 'use client'
 
+import PageHeader from "@/components/layout/PageHeader";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
@@ -14,7 +16,7 @@ import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Pendente', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
-  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-400 bg-emerald-400/10' },
+  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
   CANCELADA: { label: 'Cancelada', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
   ESTORNADA: { label: 'Estornada', icon: RotateCcw, cls: 'text-purple-400 bg-purple-400/10' },
 }
@@ -42,7 +44,7 @@ function FaturaRow({ fatura, index, tipo }: { fatura: Fatura; index: number; tip
       transition={{ delay: index * 0.06, type: 'spring', stiffness: 300, damping: 24 }}
     >
       <Link href={`/faturas/${fatura.id}`}>
-        <div className="group flex items-center gap-4 p-4 rounded-xl border border-border/60 bg-card hover:border-primary/40 hover:bg-accent/30 transition-all cursor-pointer">
+        <div className="group flex items-center gap-4 p-4 rounded-xl border border-border/60 bg-card hover:bg-accent/30 cursor-pointer card-interativo">
           <div className="p-2 rounded-lg bg-muted flex-shrink-0">
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </div>
@@ -61,7 +63,7 @@ function FaturaRow({ fatura, index, tipo }: { fatura: Fatura; index: number; tip
           <div className="text-right flex-shrink-0">
             <p className="text-sm font-semibold tabular-nums">{fatura.valorFormatado}</p>
             {tipo === 'designer' && fatura.status === 'PAGA' && (
-              <p className="text-xs text-emerald-400 mt-0.5">Líquido: {fatura.valorLiquidoDesignerFormatado}</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 mt-0.5">Líquido: {fatura.valorLiquidoDesignerFormatado}</p>
             )}
           </div>
 
@@ -92,18 +94,8 @@ export default function FaturasPage() {
   const outras = faturas.filter(f => f.status !== 'PENDENTE' && f.status !== 'PAGA')
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
-      <motion.div
-        initial={{ opacity: 0, y: -14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
-        className="flex items-center justify-between"
-      >
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Faturas</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Acompanhe seus pagamentos.</p>
-        </div>
-      </motion.div>
+    <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
+      <PageHeader title="Faturas" description="Acompanhe seus pagamentos." />
 
       {/* Tab */}
       <motion.div
@@ -184,6 +176,6 @@ export default function FaturasPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </FadeIn>
   )
 }

@@ -36,7 +36,7 @@ export default function StepCliente() {
   const isDone = state === 'done'
 
   return (
-    <Card className={cn('transition-colors', isDone ? 'border-green-400 bg-green-50' : 'border-primary/20 bg-primary/5')}>
+    <Card className={cn('transition-colors', isDone ? 'border-green-400 bg-green-50 dark:bg-green-950/40' : 'border-primary/20 bg-primary/5')}>
       <CardHeader className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={cn('rounded-xl p-2', isDone ? 'bg-green-100 text-green-700' : 'bg-primary/10 text-primary')}>

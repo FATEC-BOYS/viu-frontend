@@ -13,9 +13,9 @@ function pillClasses(tone: PillTone) {
   // usamos variant válido e ajustamos a cor via classes utilitárias
   switch (tone) {
     case "success":
-      return "border-emerald-200 text-emerald-800 bg-emerald-50";
+      return "border-emerald-200 text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40";
     case "warning":
-      return "border-amber-200 text-amber-800 bg-amber-50";
+      return "border-amber-200 text-amber-800 bg-amber-50 dark:bg-amber-950/40";
     default:
       return "border-muted-foreground/20 text-foreground bg-background";
   }

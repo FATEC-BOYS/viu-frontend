@@ -1,5 +1,9 @@
 'use client'
 
+import EmptyState from "@/components/layout/EmptyState";
+import PageHeader from "@/components/layout/PageHeader";
+import { FadeIn } from "@/components/layout/Motion";
+import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -21,7 +25,7 @@ const STATUS_CONFIG: Record<AssinaturaStatus, {
   icon: React.ElementType
   className: string
 }> = {
-  ATIVA: { label: 'Ativa', icon: CheckCircle2, className: 'text-emerald-400 bg-emerald-400/10' },
+  ATIVA: { label: 'Ativa', icon: CheckCircle2, className: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
   PENDENTE: { label: 'Pendente', icon: Clock, className: 'text-amber-400 bg-amber-400/10' },
   CANCELADA: { label: 'Cancelada', icon: XCircle, className: 'text-red-400 bg-red-400/10' },
   PAUSADA: { label: 'Pausada', icon: PauseCircle, className: 'text-blue-400 bg-blue-400/10' },
@@ -45,6 +49,7 @@ function fmt(iso: string | null | undefined) {
 }
 
 export default function AssinaturaPage() {
+  const router = useRouter()
   const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
   const [loading, setLoading] = useState(true)
   const [canceling, setCanceling] = useState(false)
@@ -73,15 +78,11 @@ export default function AssinaturaPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
-      <motion.div
-        initial={{ opacity: 0, y: -14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 24 }}
-      >
-        <h1 className="text-xl font-bold tracking-tight">Minha assinatura</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gerencie seu plano e pagamentos recorrentes.</p>
-      </motion.div>
+    <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
+      <PageHeader
+        title="Minha assinatura"
+        description="Gerencie seu plano e pagamentos recorrentes."
+      />
 
       <AnimatePresence mode="wait">
         {loading ? (
@@ -95,18 +96,14 @@ export default function AssinaturaPage() {
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}
-            className="rounded-2xl border border-dashed border-border p-12 text-center space-y-4"
           >
-            <motion.div
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-            >
-              <CreditCard className="h-10 w-10 text-muted-foreground mx-auto" />
-            </motion.div>
-            <p className="text-sm text-muted-foreground">Você ainda não tem uma assinatura ativa.</p>
-            <Button asChild>
-              <a href="/planos">Ver planos disponíveis</a>
-            </Button>
+            <EmptyState
+              icon={CreditCard}
+              title="Você ainda não tem uma assinatura ativa"
+              description="Escolha um plano para liberar os limites da sua conta."
+              actionLabel="Ver planos disponíveis"
+              onAction={() => router.push('/planos')}
+            />
           </motion.div>
         ) : (
           <motion.div
@@ -118,7 +115,7 @@ export default function AssinaturaPage() {
             className="rounded-2xl border border-border/60 overflow-hidden"
           >
             {/* Header card */}
-            <div className="bg-gradient-to-br from-orange-900/20 to-orange-950/30 p-6">
+            <div className="bg-primary/5 p-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <motion.div
@@ -136,7 +133,7 @@ export default function AssinaturaPage() {
                 <StatusBadge status={assinatura.status} />
               </div>
 
-              <Separator className="my-4 bg-white/10" />
+              <Separator className="my-4" />
 
               <div className="text-3xl font-bold tabular-nums">
                 {assinatura.plano.precoMensal === 0
@@ -166,7 +163,7 @@ export default function AssinaturaPage() {
                 <InfoItem
                   icon={CreditCard}
                   label="Taxa da plataforma"
-                  value={assinatura.plano.taxaPlataformaPercent}
+                  value={assinatura.plano.taxaPlataformaFormatada}
                 />
               </div>
 
@@ -214,7 +211,7 @@ export default function AssinaturaPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </FadeIn>
   )
 }
 

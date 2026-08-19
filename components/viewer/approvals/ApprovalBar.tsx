@@ -74,7 +74,7 @@ export default function ApprovalBar({
             <div key={a.id} className="border rounded-md px-2.5 py-1 text-xs flex items-center gap-2">
               <span className="font-medium">{a.nome || a.email}</span>
               {a.visto_em && <span className="text-muted-foreground">• viu</span>}
-              {a.aprovado_em && <span className="text-green-600">• aprovado</span>}
+              {a.aprovado_em && <span className="text-green-600 dark:text-green-400">• aprovado</span>}
             </div>
           ))
         ) : (

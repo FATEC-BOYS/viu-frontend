@@ -1,5 +1,7 @@
 'use client'
 
+import EmptyState from "@/components/layout/EmptyState";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users2, Plus, Loader2, UserCheck, FolderOpen, ChevronRight, Trash2 } from 'lucide-react'
@@ -153,7 +155,7 @@ function EquipeCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, type: 'spring', stiffness: 280, damping: 24 }}
     >
-      <Link href={`/equipes/${equipe.id}`} className="group block rounded-xl border bg-card p-5 shadow-sm hover:shadow-md transition-shadow">
+      <Link href={`/equipes/${equipe.id}`} className="group block rounded-xl border bg-card p-5 shadow-sm card-interativo">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
@@ -209,7 +211,7 @@ export default function EquipesPage() {
   }, [])
 
   return (
-    <div className="space-y-6 p-6 max-w-3xl mx-auto">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -221,9 +223,9 @@ export default function EquipesPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
               <Users2 className="h-5 w-5 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Equipes</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Equipes</h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 ml-[3.25rem]">
+          <p className="text-sm text-muted-foreground">
             Organize designers, revisores e clientes em equipes para compartilhar projetos.
           </p>
         </div>
@@ -262,23 +264,13 @@ export default function EquipesPage() {
           ))}
         </div>
       ) : equipes.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-20 text-center"
-        >
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-            <Users2 className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold">Nenhuma equipe ainda</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Crie uma equipe para começar a colaborar.
-          </p>
-          <Button onClick={() => setModalOpen(true)} className="mt-4">
-            <Plus className="h-4 w-4 mr-2" />
-            Criar primeira equipe
-          </Button>
-        </motion.div>
+        <EmptyState
+          icon={Users2}
+          title="Nenhuma equipe ainda"
+          description="Crie uma equipe para começar a colaborar."
+          actionLabel="Criar primeira equipe"
+          onAction={() => setModalOpen(true)}
+        />
       ) : (
         <AnimatePresence mode="popLayout">
           <div className="space-y-3">
@@ -300,6 +292,6 @@ export default function EquipesPage() {
         onOpenChange={setModalOpen}
         onSuccess={(e) => setEquipes((prev) => [e, ...prev])}
       />
-    </div>
+    </FadeIn>
   )
 }

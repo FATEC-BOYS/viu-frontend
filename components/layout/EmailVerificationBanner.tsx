@@ -27,7 +27,7 @@ export function EmailVerificationBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800">
+    <div className="flex items-center justify-between gap-4 bg-yellow-50 dark:bg-yellow-950/40 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-800">
       <div className="flex items-center gap-2">
         <MailWarning className="h-4 w-4 shrink-0" />
         {sent
@@ -48,7 +48,7 @@ export function EmailVerificationBanner() {
         )}
         <button
           onClick={() => setDismissed(true)}
-          className="text-yellow-600 hover:text-yellow-800"
+          className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800"
           aria-label="Fechar"
         >
           <X className="h-4 w-4" />

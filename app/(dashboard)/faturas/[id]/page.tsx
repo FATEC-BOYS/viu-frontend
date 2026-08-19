@@ -125,7 +125,7 @@ function QrCodeDisplay({ qrCode, qrCodeText }: { qrCode: string; qrCodeText: str
                   exit={{ scale: 0 }}
                   transition={{ type: 'spring', stiffness: 400 }}
                 >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
                 </motion.span>
               ) : (
                 <motion.span key="copy"
@@ -156,19 +156,19 @@ function SuccessAnimation() {
         {[1, 2, 3].map(i => (
           <motion.div
             key={i}
-            className="absolute inset-0 rounded-full border-2 border-emerald-400"
+            className="absolute inset-0 rounded-full border-2 border-emerald-500"
             initial={{ scale: 1, opacity: 0.6 }}
             animate={{ scale: 1 + i * 0.5, opacity: 0 }}
             transition={{ duration: 1.2, delay: i * 0.2, repeat: Infinity }}
           />
         ))}
         <motion.div
-          className="w-20 h-20 rounded-full bg-emerald-400/20 flex items-center justify-center"
+          className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center"
           initial={{ scale: 0, rotate: -180 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 18 }}
         >
-          <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+          <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
         </motion.div>
       </div>
       <motion.div
@@ -291,7 +291,7 @@ export default function FaturaDetailPage() {
             className="space-y-5"
           >
             <div className="rounded-2xl border border-border/60 overflow-hidden">
-              <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-5">
+              <div className="bg-muted/50 p-5">
                 <p className="text-xs text-muted-foreground mb-1">Fatura</p>
                 <h2 className="text-lg font-bold">{fatura.projeto.nome}</h2>
                 {fatura.descricao && <p className="text-sm text-muted-foreground mt-1">{fatura.descricao}</p>}
@@ -308,7 +308,7 @@ export default function FaturaDetailPage() {
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Designer recebe</span>
-                  <span className="text-sm font-semibold tabular-nums text-emerald-400">{fatura.valorLiquidoDesignerFormatado}</span>
+                  <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 dark:text-emerald-400">{fatura.valorLiquidoDesignerFormatado}</span>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -338,7 +338,7 @@ export default function FaturaDetailPage() {
             )}
             {fatura.status !== 'PENDENTE' && (
               <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${
-                fatura.status === 'PAGA' ? 'bg-emerald-400/10 text-emerald-400' : 'bg-muted text-muted-foreground'
+                fatura.status === 'PAGA' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
               }`}>
                 {fatura.status === 'PAGA' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 {fatura.status === 'PAGA' ? 'Esta fatura já foi paga.' : `Fatura ${fatura.status.toLowerCase()}.`}

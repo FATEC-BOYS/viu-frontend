@@ -1,5 +1,8 @@
 "use client";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { iniciais } from "@/lib/iniciais";
+import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,16 +12,17 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Loader2, Settings2, Phone, Mail, Calendar, CheckCircle2, ChevronRight, Trash2, Undo2,
+  Plus, Loader2, Settings2, Phone, Mail, Calendar, CheckCircle2, ChevronRight, Trash2, Undo2, Pencil,
 } from "lucide-react";
 
 import ClienteWizard from "@/components/clientes/ClienteWizard";
 
 /* ============================== Tipos ============================== */
-type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO" | "PENDENTE" | "RASCUNHO";
+type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO" | "REVISAO";
 type ProjetoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
 
 type Arte = { id: string; status: ArteStatus };
@@ -89,30 +93,28 @@ function ClienteCard({
     .sort((a, b) => new Date(a.prazo!).getTime() - new Date(b.prazo!).getTime())[0];
 
   return (
-    <div className={`border rounded-lg p-3 transition ${selected ? "ring-2 ring-primary" : ""}`}>
+    <div className={`border rounded-lg p-3 card-interativo ${selected ? "ring-2 ring-primary" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center">
-              {c.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.avatar} alt={c.nome} className="w-10 h-10 object-cover" />
-              ) : (
-                <span className="text-primary font-semibold">
-                  {c.nome.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </div>
+            {/* <img> cru mostrava o ícone de imagem quebrada quando a URL do
+                avatar falhava; o Avatar do Radix cai nas iniciais sozinho */}
+            <Avatar className="h-10 w-10 shrink-0">
+              <AvatarImage src={c.avatar || undefined} alt={c.nome} className="object-cover" />
+              <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                {iniciais(c.nome)}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium truncate">{c.nome}</h4>
-                <Badge variant={c.vinculado ? "default" : "secondary"} className="shrink-0">
+                <Badge variant={c.vinculado ? "secondary" : "destructive"} className="shrink-0">
                   {c.vinculado ? "Vínculo ativo" : "Vínculo rompido"}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>
-                {c.telefone && <span className="hidden sm:flex items-center gap-1"><Phone className="h-3 w-3" />{c.telefone}</span>}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+                <span className="flex items-center gap-1 min-w-0"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{c.email}</span></span>
+                {c.telefone && <span className="hidden sm:flex items-center gap-1 shrink-0"><Phone className="h-3 w-3" />{c.telefone}</span>}
               </div>
             </div>
           </div>
@@ -120,9 +122,13 @@ function ClienteCard({
         {selectMode ? (
           <input type="checkbox" className="mt-1" checked={selected} onChange={onToggle} />
         ) : (
-          <div className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={onEdit}>Editar</Button>
-            <Button size="sm" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onEdit} aria-label={`Editar ${c.nome}`}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onDelete} aria-label={`Remover ${c.nome}`}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         )}
       </div>
@@ -139,9 +145,7 @@ function ClienteCard({
             <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />Artes aprovadas</span>
             <span className="font-medium">{aprovadas}/{totalArtes}</span>
           </div>
-          <div className="w-full bg-muted rounded-full h-2 mt-1">
-            <div className="bg-green-600 h-2 rounded-full" style={{ width: `${(aprovadas / totalArtes) * 100 || 0}%` }} />
-          </div>
+          <Progress className="mt-1" value={Math.round((aprovadas / totalArtes) * 100) || 0} />
         </div>
       )}
 
@@ -358,11 +362,11 @@ export default function ClientesPage() {
   const empty = filtered.length === 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Clientes ✦</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Clientes ✦</h1>
           <Badge variant="secondary" className="h-6">{estatisticas.total} clientes</Badge>
         </div>
 
@@ -550,6 +554,6 @@ export default function ClientesPage() {
           reload();
         }}
       />
-    </div>
+    </FadeIn>
   );
 }
