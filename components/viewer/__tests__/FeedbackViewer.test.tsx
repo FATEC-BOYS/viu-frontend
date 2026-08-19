@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FeedbackViewer, { type FeedbackItem, getInitials, avatarColor } from "../FeedbackViewer";
@@ -114,6 +114,13 @@ beforeEach(() => {
   defaultProps.onAskIdentity.mockReset();
   vi.mocked(toast.success).mockReset();
   vi.mocked(toast.error).mockReset();
+  // Comentar passou a exigir conta (podeComentar() lê o token do localStorage).
+  // Sem isso o envio para logo no guard e nunca chega ao fetch.
+  localStorage.setItem("viu_token", "token-de-teste");
+});
+
+afterEach(() => {
+  localStorage.clear();
 });
 
 /* ------------------------------------------------------------------ */

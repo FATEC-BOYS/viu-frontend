@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { postTextFeedback, postAudioFeedback, getAudioStreamUrl } from "../viewerApi";
 
+/*
+ * Estes testes foram escritos contra as Edge Functions do Supabase
+ * (submit-feedback, stream-audio, campos posX/posY). O viewer passou a usar o
+ * proxy do Next em /api/feedbacks, com os nomes de campo do backend
+ * (posicao_x/posicao_y), e as asserções nunca acompanharam.
+ */
+
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
@@ -26,13 +33,14 @@ describe("postTextFeedback", () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("submit-feedback");
+    expect(url).toBe("/api/feedbacks");
     expect(opts.method).toBe("POST");
     expect(opts.headers["Content-Type"]).toBe("application/json");
 
     const body = JSON.parse(opts.body);
-    expect(body.type).toBe("text");
-    expect(body.content).toBe("Ótimo trabalho!");
+    expect(body.tipo).toBe("TEXTO");
+    expect(body.conteudo).toBe("Ótimo trabalho!");
+    expect(body.token).toBe("tok_123");
     expect(result).toEqual({ id: "fb_1" });
   });
 
@@ -63,8 +71,8 @@ describe("postTextFeedback", () => {
     });
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.posX).toBe(100);
-    expect(body.posY).toBe(200);
+    expect(body.posicao_x).toBe(100);
+    expect(body.posicao_y).toBe(200);
   });
 });
 
@@ -80,9 +88,12 @@ describe("postAudioFeedback", () => {
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("submit-feedback");
+    expect(url).toBe("/api/feedbacks");
     expect(opts.method).toBe("POST");
     expect(opts.body).toBeInstanceOf(FormData);
+    expect(opts.body.get("token")).toBe("tok_123");
+    expect(opts.body.get("arteId")).toBe("arte_1");
+    expect(opts.body.get("file")).toBeInstanceOf(Blob);
     expect(result).toEqual({ id: "fb_audio_1" });
   });
 
@@ -98,10 +109,15 @@ describe("postAudioFeedback", () => {
 });
 
 describe("getAudioStreamUrl", () => {
-  it("builds stream URL with path and token params", () => {
-    const url = getAudioStreamUrl("feedbacks/arte_1/file.webm", "tok_abc");
-    expect(url).toContain("stream-audio");
-    expect(url).toContain("path=feedbacks");
-    expect(url).toContain("token=tok_abc");
+  // O áudio hoje vem numa URL já assinada pelo backend; a função só repassa.
+  it("devolve URL absoluta sem alterar", () => {
+    const url = getAudioStreamUrl("https://cdn.exemplo.com/a.webm?sig=x", "tok_abc");
+    expect(url).toBe("https://cdn.exemplo.com/a.webm?sig=x");
+  });
+
+  it("devolve caminho relativo sem alterar", () => {
+    expect(getAudioStreamUrl("/uploads/feedbacks/a.webm", "tok_abc")).toBe(
+      "/uploads/feedbacks/a.webm",
+    );
   });
 });

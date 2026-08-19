@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Uma execução por branch: push novo cancela a anterior em vez de enfileirar.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint, tipos, testes e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # O build do Next não checa tipos de arquivo que ele não empacota
+      # (testes, helpers não importados). O tsc pega.
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # O build não chama a API — as telas buscam dados no cliente. A
+          # variável existe só para o bundle não cair no default de localhost.
+          NEXT_PUBLIC_API_URL: https://api.exemplo.invalid
