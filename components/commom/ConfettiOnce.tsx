@@ -53,13 +53,9 @@ export default function ConfettiOnce({ active, duration = 1200, className }: {
             height: `${p.size * 0.6}px`,
             backgroundColor: `hsl(${p.hue} 90% 60%)`,
             // custom properties usadas no @keyframes:
-            // @ts-ignore
             "--dx": `${p.dx}px`,
-            // @ts-ignore
             "--rise": `-${80 + Math.random() * 40}vh`,
-            // @ts-ignore
             "--spin": `${360 + Math.floor(Math.random() * 360)}deg`,
-            // @ts-ignore
             "--dur": `${duration}ms`,
           } as React.CSSProperties}
         />
