@@ -26,6 +26,7 @@ import {
 import ProjetoHeader from "@/components/projetos/ProjetoHeader";
 import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
 import ProjetoAlertBanner from "@/components/projetos/ProjetoAlertBanner";
+import GerenciarAcessosDrawer from "@/components/projetos/pessoas/GerenciarAcessosDrawer";
 
 import ResumoCards from "@/components/projetos/overview/ResumoCards";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
@@ -92,6 +93,7 @@ export default function ProjetoPage() {
   } | null>(null);
 
   const [tab, setTab] = useState<ProjetoTabKey>("overview");
+  const [acessosAberto, setAcessosAberto] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -116,6 +118,8 @@ export default function ProjetoPage() {
       case "EM_ANDAMENTO": return { label: "Em andamento", tone: "default" as const };
       case "PAUSADO": return { label: "Pausado", tone: "warning" as const };
       case "CONCLUIDO": return { label: "Fechado", tone: "success" as const };
+      case "RASCUNHO": return { label: "Rascunho — aguardando aceite", tone: "warning" as const };
+      case "CANCELADO": return { label: "Cancelado", tone: "warning" as const };
       default: return { label: projeto.status, tone: "default" as const };
     }
   }, [projeto]);
@@ -351,10 +355,17 @@ export default function ProjetoPage() {
 
   return (
     <div className="p-6 space-y-4">
+      <GerenciarAcessosDrawer
+        open={acessosAberto}
+        onOpenChange={setAcessosAberto}
+        projetoId={projeto.id}
+      />
+
       <ProjetoHeader
         projeto={projeto}
         statusPill={statusPill ?? undefined}
         onEditar={() => router.push(`/projetos/${projeto.id}?edit=1`)}
+        onPessoas={() => setAcessosAberto(true)}
         onDuplicar={() => console.log("duplicar", projeto.id)}
         onExportar={() => console.log("exportar", projeto.id)}
         onArquivar={() => console.log("arquivar", projeto.id)}

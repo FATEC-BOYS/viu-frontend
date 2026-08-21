@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Drawer,
   DrawerContent,
@@ -9,36 +9,35 @@ import {
   DrawerDescription,
   DrawerFooter,
 } from "@/components/ui/drawer";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import AsyncUserSingleSelect from "@/components/projetos/AsyncUserSingleSelect";
 import { toast } from "sonner";
-import { Loader2, UserMinus, Crown, ShieldCheck } from "lucide-react";
+import { Loader2, MailPlus, ShieldCheck } from "lucide-react";
+import {
+  convitesApi,
+  formatConviteStatus,
+  formatExpiracao,
+  type ConviteDoProjeto,
+} from "@/lib/convites";
+import { getProjeto, type Projeto } from "@/lib/projects";
+import { iniciais } from "@/lib/iniciais";
 
-type Papel = "OWNER" | "DESIGNER" | "CLIENTE" | "APROVADOR" | "OBSERVADOR";
-
-type ParticipanteRow = {
-  id: string;
-  usuario_id: string;
-  nome: string;
-  email?: string | null;
-  avatar?: string | null;
-  papel: Papel;
-};
-
-type ConviteRow = {
-  id: string;
-  email: string;
-  papel: Papel;
-  status: "PENDENTE" | "ACEITO" | "CANCELADO" | "EXPIRADO";
-  criado_em: string;
-};
-
-type ContactResult = { id?: string; email: string; nome?: string | null; avatar?: string | null };
-
+/**
+ * Pessoas com acesso a um projeto.
+ *
+ * O modelo do backend é enxuto de propósito: um projeto tem exatamente um
+ * designer e um cliente (`Projeto.designerId` / `clienteId`), e o acesso da
+ * outra parte nasce de um convite aceito. Não existem papéis por projeto nem
+ * lista de participantes arbitrária — por isso aqui não há troca de papel nem
+ * remoção: o que existe é convidar, e acompanhar o convite.
+ *
+ * Convite só pode ser criado enquanto o projeto está em RASCUNHO; o aceite é o
+ * que move o projeto para EM_ANDAMENTO.
+ */
 export default function GerenciarAcessosDrawer({
   open,
   onOpenChange,
@@ -48,309 +47,144 @@ export default function GerenciarAcessosDrawer({
   onOpenChange: (v: boolean) => void;
   projetoId: string;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
-  const [participantes, setParticipantes] = useState<ParticipanteRow[]>([]);
-  const [convites, setConvites] = useState<ConviteRow[]>([]);
+  const [projeto, setProjeto] = useState<Projeto | null>(null);
+  const [convites, setConvites] = useState<ConviteDoProjeto[]>([]);
+  const [convidadoId, setConvidadoId] = useState<string | null>(null);
 
-  // form: adicionar
-  const [email, setEmail] = useState("");
-  const [papel, setPapel] = useState<Papel>("CLIENTE");
-  const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<ContactResult[]>([]);
-  const [selected, setSelected] = useState<ContactResult | null>(null);
-
-  const owner = useMemo(
-    () => participantes.find((p) => p.papel === "OWNER"),
-    [participantes]
-  );
-
-  async function loadAll() {
-    setLoading(true);
+  const carregar = useCallback(async () => {
+    setCarregando(true);
     try {
-      // participantes
-      const p = await fetch(`/api/projetos/${projetoId}/participantes`).then((r) => r.json());
-      // convites
-      const c = await fetch(`/api/projetos/${projetoId}/convites`).then((r) => r.json());
-      setParticipantes(p?.items ?? []);
-      setConvites(c?.items ?? []);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao carregar acessos");
+      const [resProjeto, resConvites] = await Promise.allSettled([
+        getProjeto(projetoId),
+        convitesApi.listarDoProjeto(projetoId),
+      ]);
+      if (resProjeto.status === "fulfilled") setProjeto(resProjeto.value);
+      if (resConvites.status === "fulfilled") setConvites(resConvites.value);
+      if (resProjeto.status === "rejected") {
+        toast.error("Não foi possível carregar os acessos do projeto");
+      }
     } finally {
-      setLoading(false);
+      setCarregando(false);
     }
-  }
+  }, [projetoId]);
 
   useEffect(() => {
-    if (open) loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projetoId]);
+    if (open) carregar();
+  }, [open, carregar]);
 
-  // busca segura por e-mail (sem listar a plataforma inteira)
-  const doSearch = useCallback(async (q: string) => {
-    setSearching(true);
+  const podeConvidar = projeto?.status === "RASCUNHO";
+
+  const convidar = useCallback(async () => {
+    if (!convidadoId) return;
+    setEnviando(true);
     try {
-      const res = await fetch(`/api/contacts/search?q=${encodeURIComponent(q)}`).then((r) => r.json());
-      setResults(Array.isArray(res?.items) ? res.items : []);
-    } catch {
-      setResults([]);
+      await convitesApi.convidar(projetoId, convidadoId);
+      toast.success("Convite enviado! A pessoa recebe um e-mail com o link de aceite.");
+      setConvidadoId(null);
+      await carregar();
+    } catch (e: unknown) {
+      toast.error((e as Error)?.message ?? "Não foi possível enviar o convite");
     } finally {
-      setSearching(false);
+      setEnviando(false);
     }
-  }, []);
-
-  // adicionar participante/convite
-  const handleAdd = useCallback(async () => {
-    const mail = (selected?.email || email).trim().toLowerCase();
-    if (!mail) return;
-
-    setSaving(true);
-    try {
-      // resolve: tenta achar/registrar contato pelo e-mail (retorna usuario_id|null)
-      const resolved = await fetch("/api/contacts/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: mail }),
-      }).then((r) => r.json());
-
-      if (resolved?.usuario_id) {
-        // já é usuário -> vira participante direto
-        await fetch(`/api/projetos/${projetoId}/participantes`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ usuario_id: resolved.usuario_id, papel }),
-        }).then((r) => {
-          if (!r.ok) throw new Error("Falha ao adicionar participante");
-        });
-        toast.success("Participante adicionado!");
-      } else {
-        // envia convite
-        await fetch(`/api/projetos/${projetoId}/convites`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: mail, papel }),
-        }).then((r) => {
-          if (!r.ok) throw new Error("Falha ao enviar convite");
-        });
-        toast.success("Convite enviado!");
-      }
-
-      setEmail("");
-      setSelected(null);
-      setResults([]);
-      await loadAll();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Não foi possível adicionar");
-    } finally {
-      setSaving(false);
-    }
-  }, [email, papel, projetoId, selected]);
-
-  // alterar papel de um participante (promover/rebaixar)
-  const changeRole = useCallback(
-    async (participanteId: string, novo: Papel) => {
-      try {
-        await fetch(`/api/projetos/${projetoId}/participantes/${participanteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ papel: novo }),
-        }).then((r) => {
-          if (!r.ok) throw new Error("Falha ao alterar papel");
-        });
-        toast.success("Papel atualizado!");
-        await loadAll();
-      } catch (e: any) {
-        toast.error(e?.message ?? "Erro ao alterar papel");
-      }
-    },
-    [projetoId]
-  );
-
-  // remover participante
-  const removePart = useCallback(
-    async (participanteId: string) => {
-      try {
-        await fetch(`/api/projetos/${projetoId}/participantes/${participanteId}`, {
-          method: "DELETE",
-        }).then((r) => {
-          if (!r.ok) throw new Error("Falha ao remover");
-        });
-        toast.success("Removido.");
-        await loadAll();
-      } catch (e: any) {
-        toast.error(e?.message ?? "Erro ao remover");
-      }
-    },
-    [projetoId]
-  );
-
-  // cancelar convite
-  const cancelInvite = useCallback(
-    async (conviteId: string) => {
-      try {
-        await fetch(`/api/projetos/${projetoId}/convites/${conviteId}`, { method: "DELETE" }).then((r) => {
-          if (!r.ok) throw new Error("Falha ao cancelar convite");
-        });
-        toast.success("Convite cancelado.");
-        await loadAll();
-      } catch (e: any) {
-        toast.error(e?.message ?? "Erro ao cancelar");
-      }
-    },
-    [projetoId]
-  );
+  }, [carregar, convidadoId, projetoId]);
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent side="right" className="w-[420px] max-w-[95vw]">
         <DrawerHeader>
-          <DrawerTitle>Gerenciar acessos</DrawerTitle>
-          <DrawerDescription>Adicione, remova e ajuste papéis neste projeto.</DrawerDescription>
+          <DrawerTitle>Pessoas do projeto</DrawerTitle>
+          <DrawerDescription>
+            Quem já tem acesso e quais convites estão em aberto.
+          </DrawerDescription>
         </DrawerHeader>
 
-        <div className="px-6 pb-6 space-y-6">
-          {/* Owner fixo */}
-          {owner && (
-            <div className="rounded-lg border p-3 flex items-center gap-3 bg-muted/30">
-              <Crown className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              <Avatar className="h-7 w-7">
-                {owner.avatar ? <AvatarImage src={owner.avatar} alt={owner.nome} /> : <AvatarFallback>{owner.nome.slice(0,2).toUpperCase()}</AvatarFallback>}
-              </Avatar>
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{owner.nome}</div>
-                <div className="text-xs text-muted-foreground truncate">{owner.email ?? "—"}</div>
+        <div className="space-y-6 px-6 pb-6">
+          {carregando ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Carregando…
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <div className="text-xs font-medium">Com acesso</div>
+                <PessoaLinha
+                  nome={projeto?.designer?.nome ?? "—"}
+                  papel="Designer"
+                />
+                <PessoaLinha
+                  nome={projeto?.cliente?.nome ?? "—"}
+                  papel="Cliente"
+                />
               </div>
-              <Badge variant="outline" className="rounded-full ml-auto">OWNER</Badge>
-            </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label htmlFor="convidar-pessoa" className="text-xs font-medium">
+                  Convidar cliente
+                </Label>
+                <AsyncUserSingleSelect
+                  tipo="CLIENTE"
+                  value={convidadoId}
+                  onChange={setConvidadoId}
+                  route="/api/contacts/search"
+                  placeholder="Buscar por nome ou e-mail"
+                />
+                <Button
+                  id="convidar-pessoa"
+                  className="w-full"
+                  onClick={convidar}
+                  disabled={!convidadoId || enviando || !podeConvidar}
+                >
+                  {enviando ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <MailPlus className="mr-2 h-4 w-4" aria-hidden />
+                  )}
+                  Enviar convite
+                </Button>
+                {!podeConvidar && (
+                  <p className="text-xs text-muted-foreground">
+                    Convites só podem ser enviados enquanto o projeto está em rascunho — é o
+                    aceite que coloca o projeto em andamento.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-medium">Convites</div>
+                <ul className="grid gap-2">
+                  {convites.map((c) => (
+                    <li key={c.id} className="flex items-center gap-2 rounded-lg border p-2">
+                      <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {c.convidado?.nome ?? c.convidado?.email ?? "—"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatConviteStatus(c.status)}
+                          {c.status === "PENDENTE" && ` • ${formatExpiracao(c.expiraEm)}`}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="ml-auto rounded-full text-xs">
+                        {new Date(c.criadoEm).toLocaleDateString("pt-BR")}
+                      </Badge>
+                    </li>
+                  ))}
+                  {convites.length === 0 && (
+                    <li className="rounded-md border p-3 text-xs text-muted-foreground">
+                      Nenhum convite enviado neste projeto.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </>
           )}
-
-          {/* Adicionar por e-mail */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium">Adicionar pessoa</div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="nome@dominio.com"
-                value={selected?.email ?? email}
-                onChange={(e) => { setSelected(null); setEmail(e.target.value); if (e.target.value.includes("@")) doSearch(e.target.value); }}
-                onBlur={() => {
-                  if (!email && !selected) return;
-                  if ((email || selected?.email)?.includes("@")) doSearch(email || selected?.email || "");
-                }}
-              />
-              <Select value={papel} onValueChange={(v: Papel) => setPapel(v)}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Papel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DESIGNER">Designer</SelectItem>
-                  <SelectItem value="CLIENTE">Cliente</SelectItem>
-                  <SelectItem value="APROVADOR">Aprovador</SelectItem>
-                  <SelectItem value="OBSERVADOR">Observador</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button onClick={handleAdd} disabled={saving || (!email && !selected)}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Adicionar
-              </Button>
-            </div>
-
-            {/* resultados (se houver) */}
-            {searching ? (
-              <div className="text-xs text-muted-foreground">Buscando…</div>
-            ) : results.length > 0 ? (
-              <ul className="border rounded-md divide-y">
-                {results.map((r, i) => (
-                  <li key={i} className="p-2 flex items-center gap-2 cursor-pointer hover:bg-muted"
-                      onClick={() => { setSelected(r); setEmail(""); }}>
-                    <Avatar className="h-6 w-6">
-                      {r.avatar ? <AvatarImage src={r.avatar} alt={r.email} /> : <AvatarFallback className="text-[10px]">{(r.nome ?? r.email).slice(0,2).toUpperCase()}</AvatarFallback>}
-                    </Avatar>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{r.nome ?? r.email}</div>
-                      <div className="text-xs text-muted-foreground truncate">{r.email}</div>
-                    </div>
-                    <Badge variant="outline" className="rounded-full ml-auto">{r.id ? "na plataforma" : "novo contato"}</Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <Separator />
-
-          {/* Lista de participantes (editável) */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium">Participantes</div>
-            <ul className="grid gap-2">
-              {participantes
-                .filter((p) => p.papel !== "OWNER")
-                .map((p) => (
-                <li key={p.id} className="rounded-lg border p-2 flex items-center gap-2">
-                  <Avatar className="h-7 w-7">
-                    {p.avatar ? <AvatarImage src={p.avatar} alt={p.nome} /> : <AvatarFallback>{p.nome.slice(0,2).toUpperCase()}</AvatarFallback>}
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{p.nome}</div>
-                    <div className="text-xs text-muted-foreground truncate">{p.email ?? "—"}</div>
-                  </div>
-
-                  <div className="ml-auto flex items-center gap-2">
-                    <Select value={p.papel} onValueChange={(v: Papel) => changeRole(p.id, v)}>
-                      <SelectTrigger className="w-[160px] h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DESIGNER">Designer</SelectItem>
-                        <SelectItem value="CLIENTE">Cliente</SelectItem>
-                        <SelectItem value="APROVADOR">Aprovador</SelectItem>
-                        <SelectItem value="OBSERVADOR">Observador</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Button size="icon" variant="outline" onClick={() => removePart(p.id)} title="Remover">
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </li>
-              ))}
-              {participantes.filter((p) => p.papel !== "OWNER").length === 0 && (
-                <li className="text-xs text-muted-foreground border rounded-md p-3">
-                  Sem participantes ainda.
-                </li>
-              )}
-            </ul>
-          </div>
-
-          {/* Convites pendentes */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium">Convites</div>
-            <ul className="grid gap-2">
-              {convites.map((c) => (
-                <li key={c.id} className="rounded-lg border p-2 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{c.email}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {c.papel.toLowerCase()} • {c.status.toLowerCase()} • {new Date(c.criado_em).toLocaleDateString("pt-BR")}
-                    </div>
-                  </div>
-                  <div className="ml-auto">
-                    {c.status === "PENDENTE" && (
-                      <Button size="sm" variant="outline" onClick={() => cancelInvite(c.id)}>
-                        Cancelar
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {convites.length === 0 && (
-                <li className="text-xs text-muted-foreground border rounded-md p-3">
-                  Sem convites por aqui.
-                </li>
-              )}
-            </ul>
-          </div>
         </div>
 
         <DrawerFooter>
@@ -360,5 +194,20 @@ export default function GerenciarAcessosDrawer({
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
+  );
+}
+
+function PessoaLinha({ nome, papel }: { nome: string; papel: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-2">
+      <Avatar className="h-7 w-7">
+        <AvatarImage src={undefined} alt="" />
+        <AvatarFallback>{iniciais(nome)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 truncate text-sm font-medium">{nome}</div>
+      <Badge variant="outline" className="ml-auto rounded-full">
+        {papel}
+      </Badge>
+    </div>
   );
 }

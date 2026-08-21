@@ -8,15 +8,19 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-type Status = Projeto["status"]; // "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO"
+type Status = Projeto["status"];
 
 const TITLES: Record<Status, string> = {
+  RASCUNHO: "Aguardando aceite",
   EM_ANDAMENTO: "Em andamento",
   PAUSADO: "Pausado",
   CONCLUIDO: "Concluído",
+  CANCELADO: "Cancelado",
 };
 
-const COLS: Status[] = ["EM_ANDAMENTO", "PAUSADO", "CONCLUIDO"];
+// Projeto cancelado não vira coluna — ele sai do fluxo de trabalho, e uma
+// coluna vazia permanente só ocupa espaço no quadro.
+const COLS: Status[] = ["RASCUNHO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO"];
 
 export default function BoardView({
   projects,
@@ -30,9 +34,11 @@ export default function BoardView({
   // grupos por status
   const groups = React.useMemo(() => {
     const g: Record<Status, Projeto[]> = {
+      RASCUNHO: [],
       EM_ANDAMENTO: [],
       PAUSADO: [],
       CONCLUIDO: [],
+      CANCELADO: [],
     };
     for (const p of projects) g[p.status as Status]?.push(p);
     return g;

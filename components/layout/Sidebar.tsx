@@ -13,9 +13,10 @@ import {
   Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { convitesApi, convitesEquipeApi } from '@/lib/convites';
 import { useAuth } from '@/contexts/AuthContext';
 
 import {
@@ -60,6 +61,7 @@ interface Contadores {
   feedbacksPendentes: MaybeNumber;
   notificacoesNaoLidas: MaybeNumber;
   projetsVencendo: MaybeNumber;
+  convitesPendentes: MaybeNumber;
 }
 
 interface NavItem {
@@ -95,7 +97,8 @@ export function Sidebar() {
     tarefasPendentes: undefined,
     feedbacksPendentes: undefined,
     notificacoesNaoLidas: undefined,
-    projetsVencendo: undefined
+    projetsVencendo: undefined,
+    convitesPendentes: undefined
   });
 
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
@@ -131,12 +134,15 @@ export function Sidebar() {
       if (fetchingRef.current) return;
       fetchingRef.current = true;
       try {
-        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos] = await Promise.allSettled([
+        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe] = await Promise.allSettled([
           api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
           api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
           api.get<{ pagination: { total: number } }>('/feedbacks?limit=1'),
           api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
           api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
+          // Convites não são paginados: o backend devolve só os pendentes.
+          convitesApi.listarPendentes(),
+          convitesEquipeApi.listarPendentes(),
         ]);
 
         if (!alive) return;
@@ -144,11 +150,15 @@ export function Sidebar() {
         const total = (r: PromiseSettledResult<{ pagination: { total: number } }>) =>
           r.status === 'fulfilled' ? (r.value.pagination?.total ?? 0) : 0;
 
+        const quantidade = (r: PromiseSettledResult<unknown[]>) =>
+          r.status === 'fulfilled' ? r.value.length : 0;
+
         setContadores({
           tarefasPendentes: total(resPendentes) + total(resEmAndamento),
           feedbacksPendentes: total(resFeedbacks),
           notificacoesNaoLidas: total(resNotificacoes),
           projetsVencendo: total(resProjetos),
+          convitesPendentes: quantidade(resConvites) + quantidade(resConvitesEquipe),
         });
       } catch (err) {
         console.error('Erro ao buscar contadores:', err);
@@ -182,7 +192,8 @@ export function Sidebar() {
         { title: 'Clientes', href: '/clientes', icon: Users },
         { title: 'Equipes', href: '/equipes', icon: Users2 },
         { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
-        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas }
+        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
+        { title: 'Convites', href: '/convites', icon: MailOpen, badge: contadores.convitesPendentes }
       ]
     },
     {
@@ -229,7 +240,8 @@ export function Sidebar() {
     contadores.tarefasPendentes,
     contadores.feedbacksPendentes,
     contadores.notificacoesNaoLidas,
-    contadores.projetsVencendo
+    contadores.projetsVencendo,
+    contadores.convitesPendentes
   ]);
 
   const toggleSection = (sectionTitle: string) => {

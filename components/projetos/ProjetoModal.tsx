@@ -19,7 +19,8 @@ import StepApproval from "./forms/StepApproval";
 import StepReview from "./forms/StepReview";
 import type { ProjetoExtraPayload } from "./project-extra-types";
 
-type StatusProjeto = "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
+import type { StatusProjeto } from "@/components/projetos/ProjetoForm";
+import { statusLabel as statusLabelProjeto } from "@/components/projetos/types";
 export type ProjetoInitial = {
   id: string; nome: string; descricao?: string | null; status: StatusProjeto;
   orcamento: number; prazo?: string | null; cliente_id?: string | null;
@@ -264,8 +265,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       .map((id) => clientes.find((c) => c.id === id)?.nome || id);
     const aprovadores = formData.aprovacao.aprovadoresClienteIds
       .map((id) => clientes.find((c) => c.id === id)?.nome || id);
-    const statusLabel = formData.status === "EM_ANDAMENTO" ? "Em andamento" :
-      formData.status === "CONCLUIDO" ? "Concluído" : "Pausado";
+    const statusLabel = statusLabelProjeto(formData.status);
     const orcFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(formData.orcamento || 0);
     const prazoFmt = formData.prazo ? new Date(formData.prazo).toLocaleDateString("pt-BR") : undefined;
     return {

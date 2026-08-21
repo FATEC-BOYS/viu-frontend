@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import {
   type Projeto,
   type ProjetoInput,
+  type ProjetoStatus,
   listProjetos,
   createProjeto,
   updateProjeto,
@@ -31,7 +32,7 @@ const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspi
 
 type ProjetoInitial = {
   id: string; nome: string; descricao?: string | null;
-  status: "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
+  status: ProjetoStatus;
   orcamento: number; prazo?: string | null; cliente_id?: string | null;
 };
 

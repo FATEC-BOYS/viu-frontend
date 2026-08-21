@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { MoreVertical, ArrowLeft } from "lucide-react";
+import { MoreVertical, ArrowLeft, Users } from "lucide-react";
 import type { Projeto } from "@/lib/projects";
 
 type PillTone = "default" | "warning" | "success";
@@ -25,6 +25,7 @@ export default function ProjetoHeader({
   projeto,
   statusPill,
   onEditar,
+  onPessoas,
   onDuplicar,
   onExportar,
   onArquivar,
@@ -32,6 +33,8 @@ export default function ProjetoHeader({
   projeto: Projeto;
   statusPill?: { label: string; tone: PillTone };
   onEditar: () => void;
+  /** Abre o painel de pessoas com acesso e convites do projeto. */
+  onPessoas?: () => void;
   onDuplicar: () => void;
   onExportar: () => void;
   onArquivar: () => void;
@@ -75,6 +78,12 @@ export default function ProjetoHeader({
             <ArrowLeft className="h-4 w-4" /> Voltar
           </Link>
         </Button>
+
+        {onPessoas && (
+          <Button variant="outline" size="sm" onClick={onPessoas}>
+            <Users className="mr-1 h-4 w-4" aria-hidden /> Pessoas
+          </Button>
+        )}
 
         <Button variant="outline" size="sm" onClick={onEditar}>
           Editar

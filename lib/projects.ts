@@ -1,7 +1,15 @@
 // lib/projects.ts — sem Supabase, usa API REST do backend
 import { api, getAll } from '@/lib/api'
 
-export type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO'
+// Os cinco status do backend (PROJETO_TRANSITIONS em src/utils/stateMachine.ts).
+// RASCUNHO e CANCELADO faltavam aqui: um projeto criado com convite nasce em
+// RASCUNHO e só sai de lá quando a outra parte aceita.
+export type ProjetoStatus =
+  | 'RASCUNHO'
+  | 'EM_ANDAMENTO'
+  | 'PAUSADO'
+  | 'CONCLUIDO'
+  | 'CANCELADO'
 
 export interface Projeto {
   id: string
