@@ -1,7 +1,8 @@
 "use client";
 
 import { FadeIn } from "@/components/layout/Motion";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
   type Projeto,
   type ProjetoInput,
   type ProjetoStatus,
-  listProjetos,
+  listAllProjetos,
   createProjeto,
   updateProjeto,
   deleteProjeto,
@@ -26,7 +27,7 @@ import BulkBar from "@/components/projetos/BulkBar";
 import BoardView from "@/components/projetos/BoardView";
 import CalendarView from "@/components/projetos/CalendarView";
 import FilterChips from "@/components/projetos/FilterChips";
-import type { Mode, StatusFiltro } from "@/components/projetos/types";
+import { parseMode, parseStatusFiltro, type Mode, type StatusFiltro } from "@/components/projetos/types";
 
 const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"];
 
@@ -37,7 +38,10 @@ type ProjetoInitial = {
   equipe_id?: string | null;
 };
 
-export default function ProjetosPage() {
+function ProjetosPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // data
   const [rows, setRows] = useState<Projeto[]>([]);
   const [filtered, setFiltered] = useState<Projeto[]>([]);
@@ -47,13 +51,16 @@ export default function ProjetosPage() {
   const [error, setError] = useState<string | null>(null);
 
   // ui
-  const [mode, setMode] = useState<Mode>("cards");
+  const [mode, setMode] = useState<Mode>(parseMode(searchParams.get("view")));
   const [openModal, setOpenModal] = useState(false);
   const [editing, setEditing] = useState<Projeto | null>(null);
 
-  // filtros
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFiltro>("todos");
+  // filtros — o estado inicial vem da URL para que voltar do detalhe de um
+  // projeto (ou recarregar a aba) não jogue a pessoa de volta na lista crua.
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") ?? "");
+  const [statusFilter, setStatusFilter] = useState<StatusFiltro>(
+    parseStatusFiltro(searchParams.get("status")),
+  );
   const [prazoPreset, setPrazoPreset] = useState<"todos" | "7" | "30" | "90">("todos");
   const [clienteFilter, setClienteFilter] = useState<string | "todos">("todos");
   const [orderBy, setOrderBy] = useState<"criado_em" | "prazo" | "nome">("criado_em");
@@ -63,6 +70,26 @@ export default function ProjetosPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedIds = useMemo(() => Object.entries(selected).filter(([,v])=>v).map(([k])=>k), [selected]);
+
+  // Espelha filtros e visualização na URL. `replace` em vez de `push`: o
+  // histórico do navegador é para navegação, não para cada tecla digitada.
+  const primeiraSincronizacao = useRef(true);
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchTerm.trim()) params.set("q", searchTerm.trim());
+    if (statusFilter !== "todos") params.set("status", statusFilter);
+    if (mode !== "cards") params.set("view", mode);
+
+    const query = params.toString();
+    const destino = query ? `/projetos?${query}` : "/projetos";
+    const atual = `${window.location.pathname}${window.location.search}`;
+
+    if (primeiraSincronizacao.current) {
+      primeiraSincronizacao.current = false;
+      if (destino === atual) return;
+    }
+    if (destino !== atual) router.replace(destino, { scroll: false });
+  }, [searchTerm, statusFilter, mode, router]);
 
   // loader frases
   useEffect(() => {
@@ -76,7 +103,7 @@ export default function ProjetosPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      const { rows } = await listProjetos({ search: searchTerm, status: statusFilter, orderBy, ascending, limit: 100, offset: 0 });
+      const rows = await listAllProjetos({ search: searchTerm, status: statusFilter });
       setRows(rows);
       setError(null);
     } catch (e: any) {
@@ -353,5 +380,17 @@ export default function ProjetosPage() {
         onSubmit={editing ? onUpdate : onCreate}
       />
     </FadeIn>
+  );
+}
+
+/**
+ * useSearchParams exige um limite de Suspense para não forçar a rota inteira
+ * a renderizar sob demanda.
+ */
+export default function ProjetosPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando projetos…</div>}>
+      <ProjetosPageContent />
+    </Suspense>
   );
 }

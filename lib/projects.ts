@@ -1,5 +1,5 @@
 // lib/projects.ts — sem Supabase, usa API REST do backend
-import { api, getAll } from '@/lib/api'
+import { api, getAll, MAX_PAGE_SIZE } from '@/lib/api'
 
 // Os cinco status do backend (PROJETO_TRANSITIONS em src/utils/stateMachine.ts).
 // RASCUNHO e CANCELADO faltavam aqui: um projeto criado com convite nasce em
@@ -150,20 +150,48 @@ export async function listProjetos(params?: {
   orderBy?: string
   ascending?: boolean
   limit?: number
-  offset?: number
+  page?: number
 }) {
-  const { search, status, limit = 50, offset = 0 } = params || {}
+  const { search, status, limit = 50, page = 1 } = params || {}
   const qs = new URLSearchParams()
-  qs.set('limit', String(limit))
-  qs.set('offset', String(offset))
+  // O backend pagina por `page` (validatePagination), não por `offset`. Com
+  // offset a query era simplesmente ignorada e toda página trazia a primeira.
+  qs.set('limit', String(Math.min(limit, MAX_PAGE_SIZE)))
+  qs.set('page', String(page))
   if (status && status !== 'todos') qs.set('status', status)
   if (search?.trim()) qs.set('search', search.trim())
 
-  const res = await api.get<{ data: any[]; total?: number; count?: number }>(
-    `/projetos?${qs}`
-  )
+  const res = await api.get<{
+    data: any[]
+    total?: number
+    count?: number
+    pagination?: { total: number }
+  }>(`/projetos?${qs}`)
   const rows = (res.data ?? []).map(mapProjeto)
-  return { rows, count: (res as any).total ?? (res as any).count ?? rows.length }
+  return {
+    rows,
+    count: res.pagination?.total ?? res.total ?? res.count ?? rows.length,
+  }
+}
+
+/**
+ * Todos os projetos que casam com o filtro, seguindo a paginação até o fim.
+ *
+ * A listagem pedia `limit: 100` e parava aí: quem tivesse mais de cem
+ * projetos perdia o resto sem nenhum aviso na tela.
+ */
+export async function listAllProjetos(params?: {
+  search?: string
+  status?: ProjetoStatus | 'todos'
+}): Promise<Projeto[]> {
+  const { search, status } = params || {}
+  const qs = new URLSearchParams()
+  if (status && status !== 'todos') qs.set('status', status)
+  if (search?.trim()) qs.set('search', search.trim())
+
+  const sufixo = qs.toString()
+  const linhas = await getAll<any>(`/projetos${sufixo ? `?${sufixo}` : ''}`)
+  return linhas.map(mapProjeto)
 }
 
 export async function getProjeto(id: string): Promise<Projeto> {

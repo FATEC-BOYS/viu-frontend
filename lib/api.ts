@@ -53,7 +53,67 @@ async function tryRefresh(): Promise<string | null> {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+export interface ApiError extends Error {
+  status: number
+  body: unknown
+}
+
+function erroDeApi(mensagem: string, status: number, body: unknown): ApiError {
+  const err = new Error(mensagem) as ApiError
+  err.status = status
+  err.body = body
+  return err
+}
+
+/**
+ * Redireciona para o login preservando a rota atual.
+ *
+ * Sessão expirada terminava em um erro solto na tela: a pessoa via
+ * "Sessão expirada" e continuava numa página vazia, sem saber que era só
+ * entrar de novo.
+ */
+function irParaLogin() {
+  if (typeof window === 'undefined') return
+  if (window.location.pathname.startsWith('/login')) return
+  const destino = `${window.location.pathname}${window.location.search}`
+  window.location.href = `/login?next=${encodeURIComponent(destino)}`
+}
+
+/** 204 e afins não têm corpo; `res.json()` direto quebrava nesses casos. */
+async function lerCorpo(res: Response): Promise<any> {
+  const texto = await res.text()
+  if (!texto) return {}
+  try {
+    return JSON.parse(texto)
+  } catch {
+    return { message: texto }
+  }
+}
+
+const RETRY_MAX_429 = 2
+
+function ehIdempotente(init: RequestInit): boolean {
+  const metodo = (init.method ?? 'GET').toUpperCase()
+  return metodo === 'GET' || metodo === 'HEAD'
+}
+
+/**
+ * Espera indicada pelo servidor no header Retry-After, em milissegundos.
+ * Sem header, backoff exponencial a partir de 1s.
+ */
+function esperaDoRetryAfter(res: Response, tentativa: number): number {
+  const header = res.headers.get('retry-after')
+  const segundos = header ? Number(header) : NaN
+  if (Number.isFinite(segundos) && segundos >= 0) return Math.min(segundos * 1000, 10_000)
+  return Math.min(1000 * 2 ** tentativa, 10_000)
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  retry = true,
+  tentativa429 = 0,
+): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -68,15 +128,40 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     if (newToken) {
       return request<T>(path, init, false)
     }
-    throw new Error('Sessão expirada. Faça login novamente.')
+    irParaLogin()
+    throw erroDeApi('Sessão expirada. Faça login novamente.', 401, null)
   }
 
-  const body = await res.json()
+  // 429: o backend limita rotas sensíveis (login, upload, transcrição). Só
+  // repetimos o que é seguro repetir — refazer um POST às cegas duplicaria
+  // feedback, convite ou saque.
+  if (res.status === 429 && ehIdempotente(init) && tentativa429 < RETRY_MAX_429) {
+    const espera = esperaDoRetryAfter(res, tentativa429)
+    await new Promise((resolve) => setTimeout(resolve, espera))
+    return request<T>(path, init, retry, tentativa429 + 1)
+  }
+
+  const body = await lerCorpo(res)
   if (!res.ok) {
-    const err = new Error(body.message ?? `Erro ${res.status}`) as Error & { status: number; body: unknown }
-    err.status = res.status
-    err.body = body
-    throw err
+    if (res.status === 403) {
+      throw erroDeApi(
+        body.message ?? 'Você não tem permissão para esta ação.',
+        403,
+        body,
+      )
+    }
+    if (res.status === 429) {
+      throw erroDeApi(
+        body.message ?? 'Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo.',
+        429,
+        body,
+      )
+    }
+    if (res.status === 401) {
+      irParaLogin()
+      throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+    }
+    throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
   }
   return body
 }
