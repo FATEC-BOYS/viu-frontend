@@ -14,6 +14,7 @@ import { Stepper } from "@/components/ui/stepper";
 
 import type { ClienteOption, UsuarioOption, ProjetoFormValues } from "./ProjetoForm";
 import StepBasic from "./forms/StepBasic";
+import { projetoSchema, validarCampos } from "@/lib/schemas";
 import StepParticipants from "./forms/StepParticipants";
 import StepApproval from "./forms/StepApproval";
 import StepReview from "./forms/StepReview";
@@ -217,12 +218,27 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, open]);
 
-  const invalidBasic = useMemo(() => {
-    const nomeOk = formData.nome.trim().length > 0;
-    const orcOk = Number.isFinite(formData.orcamento);
-    const cliOk = souCliente || isCuidLike(formData.cliente_id);
-    return !(nomeOk && orcOk && cliOk);
-  }, [formData, souCliente]);
+  /**
+   * Erros do primeiro passo, pelas mesmas regras do backend (lib/schemas).
+   * Antes o botão "Próximo" só ficava cinza com um title genérico — a pessoa
+   * não sabia qual campo estava errado.
+   *
+   * Quando quem cria é o próprio cliente, o cliente do projeto é ele mesmo e
+   * o campo nem aparece; por isso ele sai da validação nesse caso.
+   */
+  const errosBasic = useMemo(() => {
+    const resultado = validarCampos(projetoSchema, {
+      nome: formData.nome,
+      descricao: formData.descricao || undefined,
+      orcamento: formData.orcamento,
+      clienteId: souCliente ? (user?.id ?? null) : (formData.cliente_id || null),
+      equipeId: formData.equipe_id || null,
+      prazo: formData.prazo || undefined,
+    });
+    return resultado.ok ? {} : resultado.erros;
+  }, [formData, souCliente, user?.id]);
+
+  const invalidBasic = Object.keys(errosBasic).length > 0;
 
   const handleSubmitFinal = async (skipBriefingEval = false) => {
     setSalvando(true);
@@ -315,7 +331,14 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
             />
           ) : (
             <>
-              {step === 0 && <StepBasic values={formData} setValues={setFormData} souCliente={souCliente} />}
+              {step === 0 && (
+                <StepBasic
+                  values={formData}
+                  setValues={setFormData}
+                  souCliente={souCliente}
+                  erros={errosBasic}
+                />
+              )}
               {step === 1 && <StepParticipants values={formData} setValues={setFormData} souCliente={souCliente} />}
               {step === 2 && <StepApproval values={formData} setValues={setFormData} />}
               {step === 3 && <StepReview resumo={resumo} />}
@@ -356,7 +379,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
               <Button
                 onClick={() => setStep(step + 1)}
                 disabled={step === 0 && (loading || invalidBasic)}
-                title={step === 0 && invalidBasic ? "Preencha nome, valor e cliente" : undefined}
+                title={step === 0 && invalidBasic ? Object.values(errosBasic)[0] : undefined}
               >
                 Próximo
               </Button>

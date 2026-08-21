@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
+import { loginSchema, validarCampos } from '@/lib/schemas';
 // TODO: Google OAuth — importar SocialAuthButtons e adicionar botão abaixo do formulário.
 // Fluxo esperado: clique → window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
 // O backend redireciona para o Google e retorna em /auth/google/callback com um JWT.
@@ -29,12 +30,23 @@ function LoginContent() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
+  const [erros, setErros] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSending(true);
     setMsg(null);
+
+    // Formato de e-mail e senha vazia são erros que dá para apontar no campo,
+    // sem gastar uma ida ao servidor para voltar com "credenciais inválidas".
+    const validacao = validarCampos(loginSchema, { email, senha: password });
+    if (!validacao.ok) {
+      setErros(validacao.erros);
+      return;
+    }
+    setErros({});
+
+    setSending(true);
     try {
       await signIn(email, password);
       router.push(nextParam || '/dashboard');
@@ -144,7 +156,14 @@ function LoginContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={sending}
+                aria-invalid={erros.email ? true : undefined}
+                aria-describedby={erros.email ? 'email-erro' : undefined}
               />
+              {erros.email && (
+                <p id="email-erro" className="text-sm text-destructive">
+                  {erros.email}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
@@ -157,7 +176,14 @@ function LoginContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={sending}
+                aria-invalid={erros.senha ? true : undefined}
+                aria-describedby={erros.senha ? 'senha-erro' : undefined}
               />
+              {erros.senha && (
+                <p id="senha-erro" className="text-sm text-destructive">
+                  {erros.senha}
+                </p>
+              )}
             </div>
             {msg && (
               <p className="text-sm text-center text-destructive" aria-live="polite">{msg}</p>

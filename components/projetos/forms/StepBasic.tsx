@@ -7,23 +7,55 @@ import type { ProjetoFormValues, StatusProjeto } from "../ProjetoForm";
 import AsyncUserSingleSelect from "../AsyncUserSingleSelect";
 import EquipeSelect from "../EquipeSelect";
 
+/**
+ * `erros` vem do schema compartilhado em lib/schemas — as mensagens são as
+ * mesmas que o backend devolveria, e cada uma fica ligada ao seu campo por
+ * aria-describedby para leitores de tela.
+ */
 export default function StepBasic({
-  values, setValues, souCliente,
+  values, setValues, souCliente, erros = {},
 }: {
   values: ProjetoFormValues;
   setValues: (v: ProjetoFormValues) => void;
   souCliente: boolean;
+  erros?: Record<string, string>;
 }) {
+  const mensagem = (campo: string) =>
+    erros[campo] ? (
+      <p id={`${campo}-erro`} className="text-sm text-destructive">
+        {erros[campo]}
+      </p>
+    ) : null;
+
+  const acessibilidade = (campo: string) => ({
+    "aria-invalid": erros[campo] ? true : undefined,
+    "aria-describedby": erros[campo] ? `${campo}-erro` : undefined,
+  });
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="nome">Nome do Projeto</Label>
-        <Input id="nome" value={values.nome} onChange={(e) => setValues({ ...values, nome: e.target.value })} required />
+        <Input
+          id="nome"
+          value={values.nome}
+          onChange={(e) => setValues({ ...values, nome: e.target.value })}
+          required
+          {...acessibilidade("nome")}
+        />
+        {mensagem("nome")}
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="descricao">Descrição</Label>
-        <Textarea id="descricao" rows={3} value={values.descricao || ""} onChange={(e) => setValues({ ...values, descricao: e.target.value })} />
+        <Textarea
+          id="descricao"
+          rows={3}
+          value={values.descricao || ""}
+          onChange={(e) => setValues({ ...values, descricao: e.target.value })}
+          {...acessibilidade("descricao")}
+        />
+        {mensagem("descricao")}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -40,16 +72,21 @@ export default function StepBasic({
         </div>
 
         <div className="space-y-2">
-          <Label>Valor (R$)</Label>
-          <Input type="number" step="0.01"
+          <Label htmlFor="orcamento">Valor (R$)</Label>
+          <Input id="orcamento" type="number" step="0.01"
             value={Number.isFinite(values.orcamento) ? values.orcamento : 0}
             onChange={(e) => setValues({ ...values, orcamento: parseFloat(e.target.value) || 0 })}
-            required inputMode="decimal" />
+            required inputMode="decimal"
+            {...acessibilidade("orcamento")} />
+          {mensagem("orcamento")}
         </div>
 
         <div className="space-y-2">
-          <Label>Data de Entrega</Label>
-          <Input type="date" value={values.prazo || ""} onChange={(e) => setValues({ ...values, prazo: e.target.value })} />
+          <Label htmlFor="prazo">Data de Entrega</Label>
+          <Input id="prazo" type="date" value={values.prazo || ""}
+            onChange={(e) => setValues({ ...values, prazo: e.target.value })}
+            {...acessibilidade("prazo")} />
+          {mensagem("prazo")}
         </div>
 
         <div className="space-y-2">
@@ -71,6 +108,7 @@ export default function StepBasic({
               placeholder="Buscar ou adicionar por e-mail…"
               route="/api/contacts/search"
             />
+            {mensagem("clienteId")}
           </div>
         )}
       </div>
