@@ -81,6 +81,22 @@ export type SaldoInfo = {
   totalSacadoFormatado: string
 }
 
+/**
+ * Lançamento do extrato financeiro (GET /ledger).
+ *
+ * CREDITO nasce de fatura paga, DEBITO de saque concluído; `referencia` é
+ * "fatura:<id>" ou "saque:<id>". É a fonte da verdade do saldo — os totais de
+ * GET /saques/saldo saem daqui.
+ */
+export type LedgerEntry = {
+  id: string
+  tipo: 'CREDITO' | 'DEBITO'
+  valor: number
+  descricao: string
+  referencia?: string | null
+  criadoEm: string
+}
+
 export type PixPaymentResult = {
   pagamentoId: string
   qrCode: string
@@ -140,6 +156,10 @@ export const pagamentosApi = {
 
   getSaldo: () =>
     api.get<{ data: SaldoInfo }>('/saques/saldo'),
+
+  /** Extrato do próprio usuário; ADMIN pode passar o id de um designer. */
+  getLedger: (designerId?: string) =>
+    api.get<{ data: LedgerEntry[] }>(designerId ? `/ledger/${designerId}` : '/ledger'),
 
   getSaques: () =>
     api.get<{ data: Saque[] }>('/saques'),

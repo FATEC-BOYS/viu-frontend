@@ -34,6 +34,7 @@ type ProjetoInitial = {
   id: string; nome: string; descricao?: string | null;
   status: ProjetoStatus;
   orcamento: number; prazo?: string | null; cliente_id?: string | null;
+  equipe_id?: string | null;
 };
 
 export default function ProjetosPage() {
@@ -183,6 +184,7 @@ export default function ProjetosPage() {
       id: p.id, nome: p.nome, descricao: p.descricao ?? null,
       status: p.status, orcamento: p.orcamento ?? 0,
       prazo: p.prazo ?? null, cliente_id: p.cliente?.id ?? null,
+      equipe_id: p.equipe?.id ?? null,
     };
   }
 

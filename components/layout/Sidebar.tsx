@@ -204,6 +204,7 @@ export function Sidebar() {
         { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
         { title: 'Faturas', href: '/faturas', icon: Receipt },
         { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
+        { title: 'Extrato', href: '/extrato', icon: Receipt },
         { title: 'Disputas', href: '/disputas', icon: Scale },
       ]
     },

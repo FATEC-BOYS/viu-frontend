@@ -15,6 +15,7 @@ export interface ProjetoFormValues {
   orcamento: number;   // R$
   prazo?: string;      // yyyy-mm-dd
   cliente_id: string | null;
+  equipe_id: string | null;
   aprovacao: {
     exigirAprovacaoDesigner: boolean;
     aprovadoresClienteIds: string[];

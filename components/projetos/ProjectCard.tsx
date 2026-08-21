@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar as CalendarIcon, DollarSign } from "lucide-react";
+import { Calendar as CalendarIcon, DollarSign, Users2 } from "lucide-react";
 import type { Projeto } from "@/lib/projects";
 import PeopleStack from "./PeopleStack";
 import StatusBadge from "./StatusBadge";
@@ -84,6 +84,12 @@ export default function ProjectCard({
             <DollarSign className="h-3 w-3" />
             {formatBRLFromCents(p.orcamento ?? 0)}
           </Badge>
+          {p.equipe && (
+            <Badge variant="outline" className="gap-1">
+              <Users2 className="h-3 w-3" />
+              {p.equipe.nome}
+            </Badge>
+          )}
           {(p as any)?.metricas?.artesAtivas != null && (
             <Badge variant="outline">{(p as any).metricas.artesAtivas} artes ativas</Badge>
           )}

@@ -20,6 +20,8 @@ export interface Projeto {
   prazo: string | null
   designer: { id: string; nome: string }
   cliente: { id: string; nome: string }
+  // GET /projetos já devolvia `equipe`; o front simplesmente ignorava.
+  equipe: { id: string; nome: string; slug: string } | null
   criado_em: string
   atualizado_em: string
 }
@@ -31,6 +33,8 @@ export interface ProjetoInput {
   orcamento: number
   prazo: string | null
   cliente_id: string
+  /** Agrupamento visual do projeto. Opcional — projeto sem equipe é o padrão. */
+  equipe_id?: string | null
 }
 
 // Os ids são CUIDs gerados no banco ('c' + 24 hex), não UUIDs. O regex de UUID
@@ -75,6 +79,9 @@ function mapProjeto(p: any): Projeto {
     prazo: p.prazo ?? null,
     designer: { id: p.designer?.id ?? '', nome: p.designer?.nome ?? '' },
     cliente: { id: p.cliente?.id ?? '', nome: p.cliente?.nome ?? '' },
+    equipe: p.equipe
+      ? { id: p.equipe.id, nome: p.equipe.nome, slug: p.equipe.slug ?? '' }
+      : null,
     criado_em: p.criadoEm ?? p.criado_em ?? '',
     atualizado_em: p.atualizadoEm ?? p.atualizado_em ?? '',
   }
@@ -177,6 +184,7 @@ export async function createProjeto(payload: ProjetoInput & { skipBriefingEval?:
     prazo: payload.prazo ?? null,
     clienteId: payload.cliente_id,
     designerId,
+    ...(payload.equipe_id ? { equipeId: payload.equipe_id } : {}),
     ...(payload.skipBriefingEval ? { skipBriefingEval: true } : {}),
   })
   return mapProjeto(res.data)
@@ -191,6 +199,8 @@ export async function updateProjeto(id: string, patch: Partial<ProjetoInput>) {
   if (patch.status !== undefined) body.status = patch.status
   if (patch.prazo !== undefined) body.prazo = patch.prazo ?? null
   if (patch.cliente_id !== undefined) body.clienteId = patch.cliente_id
+  // null é significativo aqui: desvincula o projeto da equipe.
+  if (patch.equipe_id !== undefined) body.equipeId = patch.equipe_id
   if (patch.orcamento !== undefined) {
     body.orcamento =
       typeof patch.orcamento === 'number' && Number.isFinite(patch.orcamento)

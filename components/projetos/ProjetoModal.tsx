@@ -24,6 +24,7 @@ import { statusLabel as statusLabelProjeto } from "@/components/projetos/types";
 export type ProjetoInitial = {
   id: string; nome: string; descricao?: string | null; status: StatusProjeto;
   orcamento: number; prazo?: string | null; cliente_id?: string | null;
+  equipe_id?: string | null;
 };
 
 interface DimensionScore {
@@ -146,6 +147,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     orcamento: 0,
     prazo: "",
     cliente_id: "",
+    equipe_id: null,
     aprovacao: {
       exigirAprovacaoDesigner: true,
       aprovadoresClienteIds: [],
@@ -201,11 +203,13 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         orcamento: (initial.orcamento ?? 0) / 100,
         prazo: initial.prazo ? initial.prazo.substring(0, 10) : "",
         cliente_id: initial.cliente_id ?? prev.cliente_id ?? "",
+        equipe_id: initial.equipe_id ?? null,
       }));
     } else {
       setFormData((prev) => ({
         ...prev,
         nome: "", descricao: "", status: "EM_ANDAMENTO", orcamento: 0, prazo: "", cliente_id: prev.cliente_id || "",
+        equipe_id: null,
       }));
     }
     setEvalResult(null);
@@ -234,6 +238,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         status: formData.status,
         prazo: prazoISO,
         cliente_id: clienteId,
+        equipe_id: formData.equipe_id,
         orcamento: Number.isFinite(formData.orcamento) ? formData.orcamento : 0,
       };
 

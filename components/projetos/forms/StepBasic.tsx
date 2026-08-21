@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { ProjetoFormValues, StatusProjeto } from "../ProjetoForm";
 import AsyncUserSingleSelect from "../AsyncUserSingleSelect";
+import EquipeSelect from "../EquipeSelect";
 
 export default function StepBasic({
   values, setValues, souCliente,
@@ -49,6 +50,15 @@ export default function StepBasic({
         <div className="space-y-2">
           <Label>Data de Entrega</Label>
           <Input type="date" value={values.prazo || ""} onChange={(e) => setValues({ ...values, prazo: e.target.value })} />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="equipe">Equipe</Label>
+          <EquipeSelect
+            id="equipe"
+            value={values.equipe_id}
+            onChange={(equipeId) => setValues({ ...values, equipe_id: equipeId })}
+          />
         </div>
 
         {!souCliente && (
