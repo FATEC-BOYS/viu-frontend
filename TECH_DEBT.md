@@ -10,164 +10,152 @@ para que alguém novo entenda o problema sem ler o histórico de PRs.
 
 ## 🔴 Crítico
 
-### Fluxo de convite designer ↔ cliente ausente na UI
-**Risco:** o formulário de criação de projeto (`app/(dashboard)/projetos/new/page.tsx`) permite
-selecionar qualquer usuário ativo como designer/cliente sem que a outra parte aceite.
-Quando o backend implementar convites, a UI precisará de uma tela de "pendente de aceite" e
-de um link de aprovação recebido por e-mail.
+### Token de sessão em `localStorage`
+**Risco:** qualquer XSS na aplicação lê o token e passa a agir como o usuário, sem prazo para
+acabar.
 
----
+O plano de migração para cookie `HttpOnly` está escrito em `contexts/AuthContext.tsx:30`, com
+os cinco passos (cookie no login, CORS com credenciais, remoção das leituras de
+`localStorage`, logout limpando o cookie, `credentials: 'include'` nas chamadas).
 
-### Formulário de projeto não expõe equipeId
-O backend já aceita `equipeId` em `POST /projetos` (Fase A — agrupamento visual), mas o
-formulário de criação de projeto não tem campo para selecionar equipe. Um projeto criado via
-API pode ter equipe, mas a UI não mostra nem permite definir essa relação.
-
-Localização: `app/(dashboard)/projetos/new/page.tsx`.
-Solução: adicionar `<ComboboxEquipes>` reutilizando a busca já implementada em
-`app/(dashboard)/equipes/[id]/page.tsx`.
-
----
-
-### Cards de projeto não exibem equipe vinculada
-O endpoint `GET /projetos` já retorna `equipe { id, nome, slug }`, mas os cards na listagem
-(`app/(dashboard)/projetos/page.tsx`) não exibem essa informação.
+É também o que destrava server actions autenticadas: sem cookie, o servidor Next não tem como
+falar com o backend em nome do usuário — foi por isso que as server actions do viewer foram
+removidas em vez de corrigidas.
 
 ---
 
 ## 🟠 Alto
 
-### Sem feedback visual para erros de autorização
-Quando o backend retorna 403 ou 401, a maioria das páginas exibe uma mensagem genérica ou
-não exibe nada. O usuário não sabe se o problema é de sessão expirada, falta de permissão
-ou recurso inexistente.
+### Google OAuth: botão pronto, backend ausente
+`components/auth/SocialAuthButtons.tsx` está pronto e há `TODO` nas telas de login e cadastro,
+mas o backend não tem nenhuma rota OAuth. Enquanto isso não existir do outro lado, o
+componente não deve ser exibido — botão que promete e não entrega é pior que ausência.
 
-Solução: interceptor global em `lib/api.ts` para 401 (redirecionar para login) e 403
-(exibir toast explicativo e voltar para a rota anterior).
-
----
-
-### Rate limiting não tratado na UI
-Respostas 429 não são tratadas. O usuário vê um erro genérico. Implementar retry com
-backoff exponencial para operações idempotentes e mensagem amigável para os demais.
+Ver a entrada equivalente no TECH_DEBT do backend.
 
 ---
 
-### Upload sem progresso e sem validação client-side
-`app/(dashboard)/artes/new/page.tsx` (ou equivalente): o upload envia o arquivo sem
-barra de progresso e sem validar tipo/tamanho antes de enviar. Arquivo de 500 MB chega
-ao servidor antes de qualquer feedback.
-
-Itens:
-- Validar `file.type` e `file.size` antes do `fetch`
-- `XMLHttpRequest` com evento `progress` para barra de progresso
-- Mostrar preview de imagem antes do upload
-
----
-
-### Sem paginação real nas listagens
-As páginas de projetos, artes e equipes usam paginação do backend, mas a UI não preserva
-a página atual na URL (`?page=2`). Ao voltar do detalhe, o usuário volta para a página 1.
-
-Solução: sincronizar `page` e `limit` com `useSearchParams` e `router.push`.
+### Upload sem barra de progresso e sem limite de tamanho
+`components/artes/wizard/StepUpload.tsx` já valida o tipo do arquivo contra o que a pessoa
+selecionou e mostra preview de imagem. Falta:
+- Validar `file.size` antes do envio — hoje um arquivo enorme sobe até o backend recusar
+- Progresso real de upload (`XMLHttpRequest` com evento `progress`); em
+  `NovaVersaoDialog.tsx` a barra é falsa, com um comentário admitindo isso
 
 ---
 
 ### Estados de loading inconsistentes
-Algumas páginas usam `loading.tsx` do Next.js, outras usam estado local `isLoading`, outras
-não têm fallback. O resultado é experiência visual fragmentada.
+Algumas páginas usam `loading.tsx` do Next, outras estado local `isLoading`, outras não têm
+fallback. O resultado é uma experiência visual fragmentada.
 
-Padronizar: `loading.tsx` para navegação entre rotas; `<Skeleton>` para dados dentro da
-página já carregada; `<Spinner>` apenas para ações do usuário (submit de formulário).
+Padronizar: `loading.tsx` para navegação entre rotas; `<Skeleton>` para dados dentro da página
+já carregada; `<Spinner>` apenas para ações do usuário (submit de formulário).
 
 ---
 
 ## 🟡 Médio
 
-### Centro de notificações ausente
-Quando o backend implementar notificações, a UI precisará de:
-- Sino no header com badge de contagem
-- Dropdown com lista de notificações recentes
-- Página `/notificacoes` com histórico completo
-- Marcar como lida (individual e "marcar todas")
+### Centro de notificações no header
+Existe a página `/notificacoes` e o contador na sidebar. Falta o sino no topo com dropdown das
+mais recentes, para não exigir uma troca de página só para ver o que chegou.
 
 ---
 
-### Busca global
-Hoje cada seção tem sua própria busca local. Falta uma busca global (Cmd+K) que retorne
-projetos, artes, clientes e equipes em uma única interface.
-
-Bibliotecas candidatas: `cmdk` (já popular no ecossistema shadcn/ui).
-
----
-
-### Equipes: picker de equipeId em projetos e formulários
-Reutilizar o componente de busca de equipes (`app/(dashboard)/equipes/[id]/page.tsx`)
-como `<ComboboxEquipes>` compartilhado para:
-- Formulário de criação/edição de projeto
-- Filtros da listagem de projetos
+### Busca global cobre só projetos e artes
+A paleta Ctrl/Cmd+K (`components/layout/BuscaGlobal.tsx`) consome `GET /buscar`, que indexa
+apenas `projetos` e `artes`. Equipes, clientes e feedbacks ficam de fora — a limitação é do
+endpoint, não da interface.
 
 ---
 
 ### Acessibilidade
-- Formulários sem `aria-describedby` ligando campo ao erro
-- Modais sem `aria-modal` e foco não aprisionado
+- Formulários: login e criação de projeto já ligam campo e erro por `aria-describedby`; o
+  resto ainda não
+- Modais sem `aria-modal` e sem foco aprisionado
 - Tabelas de dados sem `<caption>` ou `scope` nas colunas
-- Cores de status (badges) não passam em WCAG AA sem ícone de suporte
+- Cores de status (badges) não passam em WCAG AA sem ícone de apoio
 
 ---
 
 ### Tema escuro incompleto
-Algumas páginas têm variáveis de cor hardcoded (`text-gray-900`, `bg-white`) que não
-respondem ao `dark:` modifier do Tailwind. Fazer um pass visual completo em dark mode.
+Ainda há cores fixas (`text-gray-900`, `bg-white`) que não respondem ao `dark:` do Tailwind.
+Falta um passe visual completo em modo escuro.
 
 ---
 
-### Formulários sem validação client-side
-A maioria dos formulários depende do erro retornado pelo backend para mostrar mensagens.
-Adicionar validação com `zod` + `react-hook-form` reutilizando os schemas de
-`viu-backend/src/schemas/validation.ts` (publicar como pacote compartilhado ou copiar
-os schemas relevantes para `lib/schemas.ts`).
+### Validação client-side nos demais formulários
+`lib/schemas.ts` espelha os schemas do backend e já cobre login e criação de projeto. Faltam:
+recuperação de senha, edição de perfil, criação de equipe, tarefas e faturas.
+
+Ao mudar uma regra em `viu-backend/src/schemas/validation.ts`, mudar aqui também — não há nada
+que force isso automaticamente.
 
 ---
 
-### Sem testes de componente
-Nenhuma cobertura de testes no frontend. Prioridade mínima:
-- Testes unitários para funções utilitárias em `lib/`
-- Testes de componente para formulários críticos (login, criação de projeto)
-- Testes de integração E2E para o fluxo principal: login → criar projeto → upload de arte
-  → feedback → aprovação
+### Cobertura de testes desequilibrada
+Existem testes de `lib/` (api, schemas, helpers, viewerApi) e do viewer (FeedbackViewer,
+FeedbackPanel, IdentityGate, useAudioRecorder). Não há teste de nenhuma tela do dashboard nem
+E2E.
 
-Ferramentas: Vitest + Testing Library para unitários; Playwright para E2E.
+Prioridade: E2E do fluxo principal (login → criar projeto → upload de arte → feedback →
+aprovação) com Playwright.
+
+---
+
+### Componentes sem uso
+`components/viewer/versions/VersionTimeline.tsx`, `components/feedback/FeedbackPanel.tsx` e
+`components/feedback/ReplyThread.tsx` não são importados por ninguém. Decidir entre ligar à
+API real ou remover, como já foi feito com as server actions do viewer, o `AudioRecorder`, o
+`ApprovalBar` e o `ViewerIdentityGate`.
 
 ---
 
 ## 🟢 Futuro
 
 ### Editor de feedback posicional
-Hoje feedbacks posicionais (`posicaoX`, `posicaoY`) existem no schema mas não há UI de
-anotação sobre a imagem. Implementar canvas de anotação com pins clicáveis.
+`posicaoX`/`posicaoY` existem no schema e o viewer já envia coordenadas, mas não há UI de
+anotação sobre a imagem com pins clicáveis.
 
 ---
 
 ### Comparação de versões de arte
-Quando versionamento de arte for implementado no backend, construir um viewer side-by-side
-com slider de comparação.
+O backend tem `ArteVersao` com histórico e restauração; falta o viewer lado a lado com slider
+de comparação.
 
 ---
 
 ### Integrações na UI
 - Botão "Exportar para Google Drive"
 - Preview de frames do Figma via embed
-- Configuração de webhook de saída (Zapier/Make) no painel de projeto
+- Configuração de webhook de saída (Zapier/Make) no painel do projeto
 
 ---
 
 ### App mobile (PWA ou nativo)
-O fluxo de aprovação de arte é naturalmente mobile — o cliente revisa em qualquer lugar.
-PWA como primeiro passo (manifest + service worker); React Native como fase posterior se
-houver demanda de notificações push e câmera para upload.
+O fluxo de aprovação é naturalmente mobile — o cliente revisa em qualquer lugar. PWA como
+primeiro passo (manifest + service worker); React Native depois, se houver demanda de push e
+câmera.
 
 ---
 
-*Última atualização: 2026-07-04*
+## ✅ Resolvido
+
+- **Fluxo de convite na interface**: `/convites` lista as pendências (projeto e equipe) e
+  `/convites/:token` e `/equipes/convites/:token` são o destino dos e-mails. O painel
+  "Pessoas" do projeto envia convites contra a API real.
+- **Retorno do checkout de assinatura**: `/pagamento/assinatura/confirmacao`, o `back_url` do
+  Mercado Pago, consultando `/assinaturas/minha` até o webhook chegar.
+- **Equipe em projetos**: seletor no formulário (`equipeId`) e badge no card da listagem.
+- **Busca global**: paleta Ctrl/Cmd+K sobre `GET /buscar`.
+- **Extrato financeiro**: `/extrato` sobre `GET /ledger` — o saldo agora mostra de onde vem.
+- **403 e 429 na interface**: `lib/api.ts` trata os dois, repete 429 com backoff só em
+  GET/HEAD (respeitando `Retry-After`) e leva ao login preservando a rota quando a sessão
+  expira.
+- **Paginação**: `listProjetos` mandava `offset`, que o backend ignora — toda página trazia a
+  primeira e a lista parava nos 100 primeiros. Filtros e visualização agora vivem na URL.
+- **Status de projeto**: `ProjetoStatus` listava três valores; faltavam `RASCUNHO` e
+  `CANCELADO`, justamente os do fluxo de convite.
+
+---
+
+*Última atualização: 2026-08-21*
