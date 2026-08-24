@@ -1,4 +1,4 @@
-import { backendFetch } from "@/lib/serverBackend";
+import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
 const PAGE_SIZE_DEFAULT = 10;
@@ -19,8 +19,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ items: [], error: "tipo inválido" }, { status: 400 });
   }
 
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) return NextResponse.json({ items: [] }, { status: 401 });
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) return NextResponse.json({ items: [] }, { status: 401 });
 
   const isEmailQuery = EMAIL_RE.test(qRaw);
   const q = qRaw.toLowerCase();
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     // GET /usuarios é restrito a ADMIN; /usuarios/buscar é o typeahead aberto a
     // qualquer autenticado. Ele não filtra por tipo, então filtramos aqui.
     const res = await backendFetch(`/usuarios/buscar?q=${encodeURIComponent(qRaw)}&limit=20`,
-      { headers: { Authorization: authHeader }, cache: "no-store" }
+      { headers: { ...auth }, cache: "no-store" }
     );
     if (!res.ok) return NextResponse.json({ items: [] }, { status: 200 });
 

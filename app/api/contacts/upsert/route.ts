@@ -1,3 +1,4 @@
+import { credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
@@ -5,8 +6,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 // Contatos são agora resolvidos diretamente pelo backend via /usuarios.
 // Não há tabela de contatos local — o upsert é no-op para compatibilidade.
 export async function POST(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) return NextResponse.json({ ok: false }, { status: 401 });
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) return NextResponse.json({ ok: false }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as {
     email?: string;

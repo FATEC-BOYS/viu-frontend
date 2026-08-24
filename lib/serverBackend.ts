@@ -21,3 +21,32 @@ export function backendFetch(path: string, init: RequestInit = {}) {
     },
   })
 }
+
+const COOKIES_DE_SESSAO = ['viu_token', 'viu_refresh_token']
+
+/**
+ * Credenciais a repassar do navegador para o backend nas rotas BFF.
+ *
+ * A sessão é um cookie HttpOnly: o navegador o entrega ao servidor Next (mesma
+ * origem), e é este que precisa reencaminhá-lo — um fetch de servidor não
+ * herda cookie nenhum.
+ *
+ * Só os cookies de sessão seguem adiante; repassar o header inteiro mandaria
+ * para a API qualquer outro cookie do domínio, que não é da conta dela.
+ *
+ * `Authorization` continua tendo precedência, para clientes que usam bearer.
+ */
+export function credenciaisDaRequisicao(req: Request): Record<string, string> | null {
+  const authHeader = req.headers.get('authorization')
+  if (authHeader) return { Authorization: authHeader }
+
+  const cookieHeader = req.headers.get('cookie')
+  if (!cookieHeader) return null
+
+  const daSessao = cookieHeader
+    .split(';')
+    .map((parte) => parte.trim())
+    .filter((parte) => COOKIES_DE_SESSAO.some((nome) => parte.startsWith(`${nome}=`)))
+
+  return daSessao.length > 0 ? { cookie: daSessao.join('; ') } : null
+}

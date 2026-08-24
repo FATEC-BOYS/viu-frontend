@@ -17,7 +17,6 @@ export type UserProfile = {
 
 type AuthContextType = {
   user: UserProfile | null
-  token: string | null
   signIn: (email: string, senha: string) => Promise<void>
   completeTwoFactorLogin: (userId: string, code: string) => Promise<void>
   signOut: () => void
@@ -27,70 +26,71 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// TODO(security): migrate tokens from localStorage to HttpOnly cookies to prevent XSS token theft.
-// Risk: localStorage is accessible to any JS running on the page — an XSS attack can read TOKEN_KEY
-// and impersonate the user indefinitely.
-// Migration path:
-//   1. Backend: on /auth/login and /auth/2fa/login, set `Set-Cookie: viu_token=...; HttpOnly; SameSite=Strict; Secure`
-//      and remove token from the JSON response body. Do the same for refreshToken.
-//   2. Backend: CORS must allow credentials (`credentials: true`, explicit origin — no wildcard).
-//   3. Frontend (this file): remove TOKEN_KEY / USER_KEY / REFRESH_KEY localStorage reads and writes;
-//      remove the Authorization header injection in lib/api.ts (browser sends cookie automatically);
-//      `storeSession` becomes a no-op (only persist non-sensitive user profile if needed).
-//   4. Backend /auth/logout: clear the cookie with `Set-Cookie: viu_token=; Max-Age=0; HttpOnly`.
-//   5. Update all fetch/axios calls to pass `credentials: 'include'` (withCredentials: true).
-const TOKEN_KEY = 'viu_token'
+/**
+ * Sessão do usuário.
+ *
+ * A credencial vive em cookie HttpOnly gravado pelo backend — este arquivo não
+ * tem acesso a ela, e é esse o ponto: um XSS na página não encontra token
+ * nenhum para roubar.
+ *
+ * O que fica no localStorage é só o perfil (nome, e-mail, tipo), para a
+ * interface não piscar deslogada enquanto `/auth/me` responde. Não é
+ * credencial: apagá-lo não derruba a sessão, e mantê-lo não sustenta nenhuma.
+ */
 const USER_KEY = 'viu_user'
-const REFRESH_KEY = 'viu_refresh_token'
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
+function lerPerfilEmCache(): UserProfile | null {
+  if (typeof window === 'undefined') return null
   try {
-    const segment = token.split('.')[1]
-    return JSON.parse(atob(segment.replace(/-/g, '+').replace(/_/g, '/')))
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? (JSON.parse(raw) as UserProfile) : null
   } catch {
     return null
   }
 }
 
-function loadFromStorage(): { token: string | null; user: UserProfile | null } {
-  if (typeof window === 'undefined') return { token: null, user: null }
-  const token = localStorage.getItem(TOKEN_KEY)
-  const raw = localStorage.getItem(USER_KEY)
-  if (!token || !raw) return { token: null, user: null }
-
-  const payload = decodeJwtPayload(token)
-  const exp = payload?.exp as number | undefined
-  if (!exp || exp * 1000 < Date.now()) {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    return { token: null, user: null }
-  }
-
+function guardarPerfil(usuario: UserProfile | null) {
   try {
-    return { token, user: JSON.parse(raw) as UserProfile }
+    if (usuario) localStorage.setItem(USER_KEY, JSON.stringify(usuario))
+    else localStorage.removeItem(USER_KEY)
   } catch {
-    return { token: null, user: null }
+    // Modo privado ou storage indisponível: só perdemos a hidratação otimista.
   }
-}
-
-function storeSession(token: string, refreshToken: string | undefined, usuario: UserProfile) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(usuario))
-  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    const { token: t, user: u } = loadFromStorage()
-    setToken(t)
-    setUser(u)
-    setLoading(false)
+    let ativo = true
+
+    // Mostra o perfil em cache de imediato e confirma com o servidor: só ele
+    // sabe se o cookie ainda vale. Cache sem sessão vira interface logada que
+    // toma 401 na primeira ação.
+    setUser(lerPerfilEmCache())
+
+    api
+      .get<{ data: UserProfile }>('/auth/me')
+      .then((res) => {
+        if (!ativo) return
+        setUser(res.data)
+        guardarPerfil(res.data)
+      })
+      .catch(() => {
+        if (!ativo) return
+        setUser(null)
+        guardarPerfil(null)
+      })
+      .finally(() => {
+        if (ativo) setLoading(false)
+      })
+
+    return () => {
+      ativo = false
+    }
   }, [])
 
   const signIn = useCallback(async (email: string, senha: string) => {
@@ -106,49 +106,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw err
     }
 
-    storeSession(data.token!, data.refreshToken, data.usuario!)
-    setToken(data.token!)
+    // A resposta traz só o usuário: o token vem nos cookies do Set-Cookie.
     setUser(data.usuario!)
+    guardarPerfil(data.usuario!)
   }, [])
 
   const completeTwoFactorLogin = useCallback(async (userId: string, code: string) => {
-    const res = await api.post<{ data: { token: string; refreshToken: string; usuario: UserProfile }; success: boolean }>(
+    const res = await api.post<{ data: { usuario: UserProfile }; success: boolean }>(
       '/auth/2fa/login',
       { userId, code }
     )
-    const { token: newToken, refreshToken, usuario } = res.data
-    storeSession(newToken, refreshToken, usuario)
-    setToken(newToken)
-    setUser(usuario)
+    setUser(res.data.usuario)
+    guardarPerfil(res.data.usuario)
   }, [])
 
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
     setUser((prev) => {
       if (!prev) return prev
       const updated = { ...prev, ...patch }
-      localStorage.setItem(USER_KEY, JSON.stringify(updated))
+      guardarPerfil(updated)
       return updated
     })
   }, [])
 
   const signOut = useCallback(() => {
-    const currentToken = localStorage.getItem(TOKEN_KEY)
-    if (currentToken) {
-      fetch(`${BASE_URL}/auth/logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-      }).catch(() => {})
-    }
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    localStorage.removeItem(REFRESH_KEY)
-    setToken(null)
+    // Quem apaga os cookies é o servidor; daqui não há como remover um
+    // HttpOnly. Sem esta chamada a sessão continuaria válida no backend.
+    fetch(`${BASE_URL}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(() => {})
+
+    guardarPerfil(null)
     setUser(null)
     router.push('/login')
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, token, signIn, completeTwoFactorLogin, signOut, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, signIn, completeTwoFactorLogin, signOut, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   )

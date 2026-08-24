@@ -1,5 +1,5 @@
 // lib/artes.ts — sem Supabase, usa API REST do backend
-import { api } from '@/lib/api'
+import { api, apiUpload } from '@/lib/api'
 
 // O backend só emite EM_ANALISE | APROVADO | REJEITADO | REVISAO
 // (src/types/enums.ts). PENDENTE e RASCUNHO nunca existiram: filtravam nada e
@@ -195,16 +195,10 @@ export async function createNovaVersao(params: {
   if (params.largura_px != null) form.set('largura_px', String(params.largura_px))
   if (params.altura_px != null) form.set('altura_px', String(params.altura_px))
 
-  const token =
-    typeof window !== 'undefined' ? localStorage.getItem('viu_token') : null
-  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
-  const res = await fetch(`${base}/artes/${params.arteId}/versoes`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  })
-  if (!res.ok) throw new Error(await res.text())
-  const data = await res.json()
+  const data = await apiUpload<{ data?: { versao?: number; arquivo?: string } }>(
+    `/artes/${params.arteId}/versoes`,
+    form,
+  )
   return { versao: data.data?.versao ?? 1, path: data.data?.arquivo ?? '' }
 }
 

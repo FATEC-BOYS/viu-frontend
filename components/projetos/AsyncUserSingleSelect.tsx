@@ -1,5 +1,4 @@
 "use client";
-import { authHeaders } from "@/lib/api";
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -51,7 +50,6 @@ export default function AsyncUserSingleSelect({
       try {
         setResolving(true);
         const res = await fetch(`${resolveRoute}?id=${encodeURIComponent(value)}&tipo=${tipo}`, {
-          headers: authHeaders(),
         });
         if (!active) return;
         if (res.ok) {
@@ -83,7 +81,6 @@ export default function AsyncUserSingleSelect({
       try {
         const res = await fetch(`${route}?q=${encodeURIComponent(query)}&tipo=${tipo}`, {
           signal: ctrl.signal,
-          headers: authHeaders(),
         });
         if (res.ok) {
           const data = await res.json();

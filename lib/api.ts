@@ -1,21 +1,42 @@
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
-const TOKEN_KEY = 'viu_token'
-const REFRESH_KEY = 'viu_refresh_token'
+/**
+ * Cliente HTTP do backend.
+ *
+ * A sessão vive em cookie HttpOnly: o navegador anexa o cookie sozinho quando
+ * a requisição vai com `credentials: 'include'`, e o JavaScript da página
+ * nunca vê o token — que é o ponto de ter saído do localStorage.
+ *
+ * Aqui não há mais nada de token para ler, guardar ou injetar em header.
+ */
+const USER_KEY = 'viu_user'
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(TOKEN_KEY)
+/**
+ * Só o perfil (nome, e-mail, tipo) fica no localStorage, para a interface não
+ * piscar deslogada a cada carga. Não é credencial: quem manda é o cookie, e
+ * apagar isto não derruba a sessão nem mantê-lo a sustenta.
+ */
+export function temSessao(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return Boolean(localStorage.getItem(USER_KEY))
+  } catch {
+    return false
+  }
 }
 
 let isRefreshing = false
-let refreshQueue: Array<(token: string | null) => void> = []
+let refreshQueue: Array<(ok: boolean) => void> = []
 
-async function tryRefresh(): Promise<string | null> {
-  const refreshToken = typeof window !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null
-  if (!refreshToken) return null
-
+/**
+ * Renova a sessão. O refresh token vem do cookie — não há corpo para enviar.
+ *
+ * Chamadas simultâneas que tomam 401 juntas compartilham a mesma renovação:
+ * cada refresh rotaciona a sessão no servidor, então duas em paralelo
+ * derrubariam uma à outra.
+ */
+async function tryRefresh(): Promise<boolean> {
   if (isRefreshing) {
     return new Promise((resolve) => { refreshQueue.push(resolve) })
   }
@@ -24,30 +45,36 @@ async function tryRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
     })
-    if (!res.ok) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_KEY)
-      refreshQueue.forEach((cb) => cb(null))
-      refreshQueue = []
-      return null
+
+    let ok = res.ok
+    if (ok) {
+      const body = await res.json().catch(() => null)
+      if (body?.data?.usuario) {
+        try {
+          localStorage.setItem(USER_KEY, JSON.stringify(body.data.usuario))
+        } catch {
+          // Modo privado ou storage cheio: perder o cache do perfil não impede
+          // a sessão de funcionar.
+        }
+      }
+    } else {
+      try {
+        localStorage.removeItem(USER_KEY)
+      } catch {
+        ok = false
+      }
     }
-    const body = await res.json()
-    const newToken: string = body.data.token
-    localStorage.setItem(TOKEN_KEY, newToken)
-    localStorage.setItem(REFRESH_KEY, body.data.refreshToken)
-    if (body.data.usuario) {
-      localStorage.setItem('viu_user', JSON.stringify(body.data.usuario))
-    }
-    refreshQueue.forEach((cb) => cb(newToken))
+
+    refreshQueue.forEach((cb) => cb(ok))
     refreshQueue = []
-    return newToken
+    return ok
   } catch {
-    refreshQueue.forEach((cb) => cb(null))
+    refreshQueue.forEach((cb) => cb(false))
     refreshQueue = []
-    return null
+    return false
   } finally {
     isRefreshing = false
   }
@@ -114,18 +141,17 @@ async function request<T>(
   retry = true,
   tentativa429 = 0,
 ): Promise<T> {
-  const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init.headers as Record<string, string> | undefined),
   }
-  if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers })
+  // `credentials: 'include'` é o que faz o cookie de sessão viajar: a API está
+  // em outra origem, e sem isso o navegador simplesmente não o envia.
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
 
   if (res.status === 401 && retry) {
-    const newToken = await tryRefresh()
-    if (newToken) {
+    if (await tryRefresh()) {
       return request<T>(path, init, false)
     }
     irParaLogin()
@@ -178,12 +204,34 @@ export const api = {
 }
 
 /**
- * Header de auth para chamadas que não passam por api.* — por exemplo os
- * fetch() diretos nas rotas BFF /api/contacts/*, que repassam o token adiante.
+ * Envio de arquivo (multipart) para o backend.
+ *
+ * Não passa pelo `request` porque o corpo não é JSON: definir
+ * `Content-Type: application/json` aqui quebraria o parse do multipart, e
+ * deixar o navegador montar o boundary é o único jeito que funciona.
+ *
+ * Assim como o resto, a credencial é o cookie — nada de header manual.
  */
-export function authHeaders(): Record<string, string> {
-  const token = getToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+export async function apiUpload<T>(
+  path: string,
+  form: FormData,
+  init: { method?: string } = {},
+): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: init.method ?? 'POST',
+    body: form,
+    credentials: 'include',
+  })
+
+  const body = await lerCorpo(res)
+  if (!res.ok) {
+    if (res.status === 401) {
+      irParaLogin()
+      throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+    }
+    throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
+  }
+  return body as T
 }
 
 /**

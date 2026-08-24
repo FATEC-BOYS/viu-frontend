@@ -7,7 +7,7 @@ import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, authHeaders } from '@/lib/api';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -222,7 +222,6 @@ function FeedbackDetail({
       setLoadingThread(true);
       const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
         cache: 'no-store',
-        headers: authHeaders(),
       });
       if (!res.ok) throw new Error('Falha ao carregar respostas');
       const data = await res.json();
@@ -246,7 +245,7 @@ function FeedbackDetail({
       setSending(true);
       const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({ conteudo: reply.trim() }),
       });

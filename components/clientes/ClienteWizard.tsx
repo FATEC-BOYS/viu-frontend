@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { X } from "lucide-react";
 
@@ -140,13 +140,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
         try {
           const formData = new FormData();
           formData.append("file", avatarFile);
-          const token = typeof window !== "undefined" ? localStorage.getItem("viu_token") : null;
-          const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
-          await fetch(`${BASE_URL}/usuarios/${clienteId}/avatar`, {
-            method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-            body: formData,
-          });
+          await apiUpload(`/usuarios/${clienteId}/avatar`, formData);
         } catch {
           // avatar falhou mas o cliente foi criado — segue
         }

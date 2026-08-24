@@ -114,9 +114,9 @@ beforeEach(() => {
   defaultProps.onAskIdentity.mockReset();
   vi.mocked(toast.success).mockReset();
   vi.mocked(toast.error).mockReset();
-  // Comentar passou a exigir conta (podeComentar() lê o token do localStorage).
-  // Sem isso o envio para logo no guard e nunca chega ao fetch.
-  localStorage.setItem("viu_token", "token-de-teste");
+  // Comentar exige conta. Com a sessão em cookie HttpOnly, o sinal de "tem
+  // sessão" é o perfil em cache — o token não é visível ao JavaScript.
+  localStorage.setItem("viu_user", JSON.stringify({ id: "u1", nome: "Teste" }));
 });
 
 afterEach(() => {

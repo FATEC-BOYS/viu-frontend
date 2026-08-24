@@ -1,11 +1,17 @@
 // lib/viewerApi.ts — sem Supabase Edge Functions; usa /api/feedbacks (proxy Next.js)
-import { authHeaders } from '@/lib/api'
+import { temSessao } from '@/lib/api'
 
 const NEXT_FEEDBACKS_URL = '/api/feedbacks'
 
-/** true quando há sessão — comentar por link exige conta (autor obrigatório). */
+/**
+ * true quando há sessão — comentar por link exige conta (autor obrigatório).
+ *
+ * Com a sessão em cookie HttpOnly não dá para inspecionar a credencial daqui;
+ * o sinal é o perfil em cache. Se ele mentir, quem decide é o backend: a
+ * chamada volta 401 e a interface manda para o login.
+ */
 export function podeComentar(): boolean {
-  return Object.keys(authHeaders()).length > 0
+  return temSessao()
 }
 
 type BasePayload = {
@@ -23,7 +29,7 @@ type BasePayload = {
 export async function postTextFeedback(payload: BasePayload & { content: string }) {
   const res = await fetch(NEXT_FEEDBACKS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       token: payload.token,
       conteudo: payload.content,
@@ -43,7 +49,7 @@ export async function postAudioFeedback(payload: BasePayload & { blob: Blob }) {
   form.set('file', payload.blob, `feedback-${Date.now()}.webm`)
   if (payload.posX != null) form.set('posicao_x', String(payload.posX))
   if (payload.posY != null) form.set('posicao_y', String(payload.posY))
-  const res = await fetch(NEXT_FEEDBACKS_URL, { method: 'POST', headers: authHeaders(), body: form })
+  const res = await fetch(NEXT_FEEDBACKS_URL, { method: 'POST', body: form })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }

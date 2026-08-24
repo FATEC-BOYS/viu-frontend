@@ -1,6 +1,6 @@
 "use client";
 
-import { api, authHeaders } from "@/lib/api";
+import { api } from "@/lib/api";
 import { podeComentar } from "@/lib/viewerApi";
 
 import {
@@ -263,7 +263,7 @@ export default function FeedbackViewer({
       setSending("text");
       const res = await fetch("/api/feedbacks", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
           token,
@@ -323,7 +323,7 @@ export default function FeedbackViewer({
       }
       fd.append("file", blob, `gravacao_${Date.now()}.webm`);
 
-      const res = await fetch("/api/feedbacks", { method: "POST", headers: authHeaders(), body: fd });
+      const res = await fetch("/api/feedbacks", { method: "POST", body: fd });
       if (!res.ok) {
         let msg = "Erro ao enviar áudio.";
         try { const j = await res.json(); msg = j?.error || msg; } catch {}
@@ -417,7 +417,7 @@ export default function FeedbackViewer({
   /* — Thread / replies — */
   async function loadReplies(feedbackId: string) {
     try {
-      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`, { headers: authHeaders() });
+      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`);
       if (!res.ok) return;
       const data = await res.json();
       setReplies((prev) => ({ ...prev, [feedbackId]: Array.isArray(data) ? data : [] }));
@@ -444,7 +444,7 @@ export default function FeedbackViewer({
       setReplyLoading((p) => ({ ...p, [feedbackId]: true }));
       const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conteudo: text }),
       });
       if (!res.ok) { toast.error("Erro ao responder."); return; }

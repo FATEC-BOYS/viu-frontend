@@ -1,5 +1,5 @@
 // app/api/arte/[id]/aprovacoes/route.ts
-import { backendFetch } from "@/lib/serverBackend";
+import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextRequest, NextResponse } from "next/server";
 
 
@@ -37,14 +37,14 @@ export async function GET(
   }
 
   // tenta buscar aprovações com JWT do usuário autenticado
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) {
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) {
     return NextResponse.json({ versao: 1, internos: [], convidados: [] });
   }
 
   try {
     const res = await backendFetch(`/aprovacoes?arteId=${arteId}&limit=50`, {
-      headers: { Authorization: authHeader },
+      headers: { ...auth },
       cache: "no-store",
     });
     if (!res.ok) return NextResponse.json({ versao: 1, internos: [], convidados: [] });
@@ -77,9 +77,9 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id: arteId } = await context.params;
-  const authHeader = req.headers.get("authorization");
+  const auth = credenciaisDaRequisicao(req);
 
-  if (!authHeader) {
+  if (!auth) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
@@ -96,7 +96,7 @@ export async function PATCH(
   try {
     // Encontra a aprovação pelo arteId + aprovadorId
     const listRes = await backendFetch(`/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&limit=1`,
-      { headers: { Authorization: authHeader }, cache: "no-store" }
+      { headers: { ...auth }, cache: "no-store" }
     );
     if (!listRes.ok) throw new Error("Falha ao buscar aprovação.");
 
@@ -108,7 +108,7 @@ export async function PATCH(
 
     const updateRes = await backendFetch(`/aprovacoes/${aprovacao.id}`, {
       method: "PUT",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({ status: decisao, comentario: comentario ?? null }),
     });
     if (!updateRes.ok) {

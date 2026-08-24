@@ -1,5 +1,5 @@
 // app/api/feedbacks/[id]/respostas/route.ts
-import { backendFetch } from "@/lib/serverBackend";
+import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
 /**
@@ -27,12 +27,12 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) return NextResponse.json([], { status: 401 });
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) return NextResponse.json([], { status: 401 });
 
   try {
     const res = await backendFetch(`/feedbacks/${id}`, {
-      headers: { Authorization: authHeader },
+      headers: { ...auth },
     });
     if (!res.ok) return NextResponse.json([]);
     const body = await res.json();
@@ -47,8 +47,8 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) {
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
@@ -61,7 +61,7 @@ export async function POST(
     // arteId sai do próprio pai — a resposta vive na mesma arte, e o backend
     // recusa parentId de outra arte.
     const paiRes = await backendFetch(`/feedbacks/${id}`, {
-      headers: { Authorization: authHeader },
+      headers: { ...auth },
     });
     if (!paiRes.ok) {
       return NextResponse.json({ error: "Feedback não encontrado." }, { status: 404 });
@@ -70,7 +70,7 @@ export async function POST(
 
     const res = await backendFetch("/feedbacks", {
       method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({
         conteudo: String(conteudo).slice(0, 2000),
         tipo: "TEXTO",

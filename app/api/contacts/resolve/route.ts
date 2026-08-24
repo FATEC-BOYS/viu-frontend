@@ -1,4 +1,4 @@
-import { backendFetch } from "@/lib/serverBackend";
+import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextResponse } from "next/server";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
@@ -19,10 +19,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, label: null }, { status: 400 });
   }
 
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) return NextResponse.json({ ok: false, label: null }, { status: 401 });
+  const auth = credenciaisDaRequisicao(req);
+  if (!auth) return NextResponse.json({ ok: false, label: null }, { status: 401 });
 
-  const headers = { Authorization: authHeader };
+  const headers = { ...auth };
   const isEmail = EMAIL_RE.test(id);
   const rotulo = (u: any) => u?.nome || u?.email || id;
 

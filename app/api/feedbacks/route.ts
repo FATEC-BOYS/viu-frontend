@@ -1,4 +1,4 @@
-import { backendFetch } from "@/lib/serverBackend";
+import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextResponse } from 'next/server'
 
 
@@ -13,8 +13,8 @@ import { NextResponse } from 'next/server'
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get('content-type') || ''
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader) {
+    const auth = credenciaisDaRequisicao(req);
+    if (!auth) {
       return NextResponse.json(
         { error: 'Entre na sua conta para comentar nesta arte.' },
         { status: 401 },
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       // o autor sai do token.
       const res = await backendFetch(`/links/${token}/feedbacks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({
           conteudo: conteudo ?? '',
           tipo: tipo ?? 'TEXTO',
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
 
       const res = await backendFetch(`/links/${token}/feedbacks/audio`, {
         method: 'POST',
-        headers: { Authorization: authHeader },
+        headers: { ...auth },
         body: fwd,
       })
       const data = await res.json()

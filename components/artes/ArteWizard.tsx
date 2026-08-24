@@ -3,6 +3,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { api, apiUpload } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -21,12 +22,6 @@ export type ArteWizardProps = {
 };
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (backend enforces per-category)
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333";
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("viu_token");
-}
 
 export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   const { user } = useAuth();
@@ -87,19 +82,7 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
       form.set("projetoId", projetoId);
       if (descricao.trim()) form.set("descricao", descricao.trim());
 
-      const token = getToken();
-      const res = await fetch(`${BASE_URL}/artes/upload`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message ?? `Erro ${res.status}`);
-      }
-
-      const body = await res.json();
+      const body = await apiUpload<{ data?: { id?: string } }>("/artes/upload", form);
       const id = body?.data?.id;
       if (!id) throw new Error("Resposta inesperada do servidor.");
 
@@ -119,20 +102,8 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
     setErr(null);
     try {
       if (gerarLinkPublico) {
-        const token = getToken();
         const expiraEm = new Date(Date.now() + expiraDias * 24 * 60 * 60 * 1000).toISOString();
-        const res = await fetch(`${BASE_URL}/links`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ arteId, expiraEm, somenteLeitura }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.message ?? "Falha ao criar link.");
-        }
+        await api.post("/links", { arteId, expiraEm, somenteLeitura });
       }
 
       onFinished?.(arteId);

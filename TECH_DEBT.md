@@ -10,21 +10,23 @@ para que alguém novo entenda o problema sem ler o histórico de PRs.
 
 ## 🔴 Crítico
 
-### Token de sessão em `localStorage`
-**Risco:** qualquer XSS na aplicação lê o token e passa a agir como o usuário, sem prazo para
-acabar.
-
-O plano de migração para cookie `HttpOnly` está escrito em `contexts/AuthContext.tsx:30`, com
-os cinco passos (cookie no login, CORS com credenciais, remoção das leituras de
-`localStorage`, logout limpando o cookie, `credentials: 'include'` nas chamadas).
-
-É também o que destrava server actions autenticadas: sem cookie, o servidor Next não tem como
-falar com o backend em nome do usuário — foi por isso que as server actions do viewer foram
-removidas em vez de corrigidas.
+Nenhum item aberto.
 
 ---
 
 ## 🟠 Alto
+
+### CSRF depende de `COOKIE_SAMESITE`
+Com a sessão em cookie, o navegador anexa a credencial sozinho — inclusive quando quem dispara
+a requisição é outro site. Com `COOKIE_SAMESITE=lax` (padrão, válido quando app e API
+compartilham o site registrável) o próprio navegador barra isso.
+
+Se o deploy colocar app e API em domínios diferentes, `SameSite` precisa virar `none` e essa
+proteção some. Sobra a guarda de origem do backend (escrita autenticada por cookie exige
+`Origin` conhecido). Antes de ir para produção nesse formato, avaliar um token CSRF de verdade
+(double submit) e confirmar que `ALLOWED_ORIGINS` está fechado.
+
+---
 
 ### Google OAuth: botão pronto, backend ausente
 `components/auth/SocialAuthButtons.tsx` está pronto e há `TODO` nas telas de login e cadastro,
@@ -140,6 +142,11 @@ câmera.
 
 ## ✅ Resolvido
 
+- **Sessão em cookie HttpOnly**: o JWT saiu do `localStorage`. Login, 2FA e refresh gravam
+  `viu_token` e `viu_refresh_token` como HttpOnly, o token não volta mais no corpo da resposta
+  e todas as chamadas vão com `credentials: 'include'`. O que fica no `localStorage` é só o
+  perfil (nome, e-mail, tipo), para a interface não piscar deslogada — apagá-lo não derruba a
+  sessão. As rotas BFF em `app/api/*` repassam só os cookies de sessão ao backend.
 - **Fluxo de convite na interface**: `/convites` lista as pendências (projeto e equipe) e
   `/convites/:token` e `/equipes/convites/:token` são o destino dos e-mails. O painel
   "Pessoas" do projeto envia convites contra a API real.

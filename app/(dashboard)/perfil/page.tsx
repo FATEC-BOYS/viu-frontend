@@ -3,7 +3,7 @@
 import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useRef } from 'react'
 import { LucideIcon } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, apiUpload } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -194,15 +194,10 @@ export default function PerfilPage() {
     try {
       const formPayload = new FormData()
       formPayload.append('file', file)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('viu_token') : null
-      const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
-      const res = await fetch(`${BASE_URL}/usuarios/${usuario.id}/avatar`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formPayload,
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.message ?? `Erro ${res.status}`)
+      const body = await apiUpload<{ data?: { avatar?: string | null } }>(
+        `/usuarios/${usuario.id}/avatar`,
+        formPayload,
+      )
       const newAvatar: string | null = body.data?.avatar ?? null
       setUsuario(prev => prev ? { ...prev, avatar: newAvatar } : prev)
       updateUser({ avatar: newAvatar })
