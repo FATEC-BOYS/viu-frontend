@@ -1,4 +1,4 @@
-// lib/projects.ts — sem Supabase, usa API REST do backend
+// lib/projects.ts — usa a API REST do backend
 import { api, getAll, MAX_PAGE_SIZE } from '@/lib/api'
 
 // Os cinco status do backend (PROJETO_TRANSITIONS em src/utils/stateMachine.ts).

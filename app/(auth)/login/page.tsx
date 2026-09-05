@@ -12,10 +12,6 @@ import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { loginSchema, validarCampos } from '@/lib/schemas';
-// TODO: Google OAuth — importar SocialAuthButtons e adicionar botão abaixo do formulário.
-// Fluxo esperado: clique → window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
-// O backend redireciona para o Google e retorna em /auth/google/callback com um JWT.
-// Ver SocialAuthButtons em components/auth/SocialAuthButtons.tsx.
 
 function LoginContent() {
   const router = useRouter();

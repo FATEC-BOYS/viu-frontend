@@ -1,6 +1,6 @@
 // lib/storage.ts
 // O backend retorna URLs assinadas diretamente nos campos previewUrl / arquivo.
-// Este módulo apenas encaminha URLs absolutas; sem dependência do Supabase.
+// Este módulo apenas encaminha URLs absolutas — quem assina é o backend (R2).
 
 export const BUCKET_ORIGINAIS = 'artes'
 export const BUCKET_PREVIEWS  = 'previews'

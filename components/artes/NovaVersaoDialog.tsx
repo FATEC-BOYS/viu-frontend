@@ -63,7 +63,7 @@ export default function NovaVersaoDialog({
     }
     try {
       setSubmitting(true);
-      setProgress(10); // fake progress (Supabase client não dá callback de progresso)
+      setProgress(10); // progresso simulado — fetch() não expõe callback de upload
       const mime = file.type || undefined;
 
       await createNovaVersao({

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { postTextFeedback, postAudioFeedback, getAudioStreamUrl } from "../viewerApi";
 
 /*
- * Estes testes foram escritos contra as Edge Functions do Supabase
+ * Estes testes foram escritos contra uma API anterior do viewer
  * (submit-feedback, stream-audio, campos posX/posY). O viewer passou a usar o
  * proxy do Next em /api/feedbacks, com os nomes de campo do backend
  * (posicao_x/posicao_y), e as asserções nunca acompanharam.

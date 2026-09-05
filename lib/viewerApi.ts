@@ -1,4 +1,4 @@
-// lib/viewerApi.ts — sem Supabase Edge Functions; usa /api/feedbacks (proxy Next.js)
+// lib/viewerApi.ts — usa /api/feedbacks (proxy Next.js) para o backend
 import { temSessao } from '@/lib/api'
 
 const NEXT_FEEDBACKS_URL = '/api/feedbacks'

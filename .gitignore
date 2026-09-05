@@ -157,9 +157,6 @@ logs
 build/
 dist/
 
-# Supabase (se usando local)
-supabase/.branches
-supabase/.temp
 
 # Editor directories and files
 .vscode/*

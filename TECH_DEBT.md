@@ -28,10 +28,17 @@ proteção some. Sobra a guarda de origem do backend (escrita autenticada por co
 
 ---
 
-### Google OAuth: botão pronto, backend ausente
-`components/auth/SocialAuthButtons.tsx` está pronto e há `TODO` nas telas de login e cadastro,
-mas o backend não tem nenhuma rota OAuth. Enquanto isso não existir do outro lado, o
-componente não deve ser exibido — botão que promete e não entrega é pior que ausência.
+### Google OAuth: removido enquanto não houver backend
+O componente `SocialAuthButtons.tsx` e os `TODO` de login/cadastro foram removidos.
+Nunca chegaram a ser montados em nenhuma tela, então nada mudou para quem usa o app —
+saiu código morto, não uma funcionalidade.
+
+Se o OAuth voltar à pauta, ele é história própria: precisa de credenciais no Google
+Cloud, de uma decisão sobre vincular ou não a conta a um e-mail já cadastrado, e de
+testes próprios. Um ponto que o TODO anterior errava e vale registrar: ele mandava
+devolver o JWT em `/auth/callback?token=` para o front salvar em `localStorage`.
+Isso reintroduziria exatamente o XSS que a sessão em cookie `HttpOnly` fechou — a
+implementação futura tem que abrir sessão pelo mesmo caminho do login por senha.
 
 Ver a entrada equivalente no TECH_DEBT do backend.
 

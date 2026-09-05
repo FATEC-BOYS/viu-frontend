@@ -7,22 +7,24 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 Crie um arquivo `.env.local` na raiz do projeto com as seguintes variáveis:
 
 ```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=sua_url_aqui
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anonima_aqui
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
+# URL do viu-backend
+NEXT_PUBLIC_API_URL=http://localhost:3001
 
-# OpenAI (para TTS e transcrição)
-OPENAI_API_KEY=sk-proj-...
+# URL pública deste app (usada para montar links absolutos)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Debug Access (emails separados por vírgula, opcional em dev)
-ADMIN_EMAILS=seu@email.com,outro@email.com
+# OpenAI — só se este app for processar TTS/transcrição por conta própria.
+# O caminho normal é o backend fazer isso; não exponha a chave em produção.
+OPENAI_API_KEY=
 ```
 
-**Nota sobre ADMIN_EMAILS**:
-- Em desenvolvimento, a página `/debug-sync` é acessível para todos os usuários logados
-- Em produção, apenas emails listados em `ADMIN_EMAILS` podem acessar
-- Deixe vazio para desabilitar acesso em produção
+**Storage:** o frontend não fala com nenhum provedor de arquivos. O backend
+guarda tudo no Cloudflare R2 e devolve URLs já assinadas nos campos
+`previewUrl` / `arquivo_url`; `lib/storage.ts` apenas as repassa.
+
+**Sessão:** o token vive num cookie `HttpOnly` gravado pelo backend. Toda
+requisição sai com `credentials: 'include'` (`lib/api.ts`) — não há token em
+`localStorage` para o JavaScript da página ler.
 
 ### Vercel (Produção)
 

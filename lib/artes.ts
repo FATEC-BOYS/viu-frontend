@@ -1,4 +1,4 @@
-// lib/artes.ts — sem Supabase, usa API REST do backend
+// lib/artes.ts — usa a API REST do backend
 import { api, apiUpload } from '@/lib/api'
 
 // O backend só emite EM_ANALISE | APROVADO | REJEITADO | REVISAO

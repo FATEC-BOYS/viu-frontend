@@ -14,10 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Check, X, Mail, User, Shield } from "lucide-react";
-// TODO: Google OAuth — importar SocialAuthButtons e exibir na tela de seleção de papel (STEPS.ROLE).
-// Fluxo esperado: clique → window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
-// O backend cria/vincula o usuário via Google e retorna JWT no callback.
-// Ver SocialAuthButtons em components/auth/SocialAuthButtons.tsx.
 
 type Tipo = "DESIGNER" | "CLIENTE";
 
