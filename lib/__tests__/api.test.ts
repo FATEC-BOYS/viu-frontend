@@ -164,3 +164,108 @@ describe('apiUpload', () => {
     })
   })
 })
+
+/**
+ * Com onProgress o upload troca fetch() por XMLHttpRequest — é a única API do
+ * navegador que informa quanto do corpo já subiu. O resto do contrato tem que
+ * ser idêntico ao caminho com fetch: cookie junto, sem Content-Type manual,
+ * erro com status, e 401 mandando para o login.
+ */
+describe('apiUpload com onProgress (XHR)', () => {
+  class XHRFake {
+    static ultima: XHRFake
+    upload = { onprogress: null as null | ((e: any) => void) }
+    onload: null | (() => void) = null
+    onerror: null | (() => void) = null
+    onabort: null | (() => void) = null
+    ontimeout: null | (() => void) = null
+    withCredentials = false
+    status = 200
+    responseText = '{}'
+    metodo = ''
+    url = ''
+    enviado: unknown = null
+    cabecalhos: Record<string, string> = {}
+
+    constructor() {
+      XHRFake.ultima = this
+    }
+    open(metodo: string, url: string) {
+      this.metodo = metodo
+      this.url = url
+    }
+    setRequestHeader(k: string, v: string) {
+      this.cabecalhos[k] = v
+    }
+    send(body: unknown) {
+      this.enviado = body
+    }
+    /** Simula o navegador emitindo progresso e concluindo. */
+    concluir(status: number, corpo: unknown) {
+      this.status = status
+      this.responseText = JSON.stringify(corpo)
+      this.onload?.()
+    }
+    progredir(loaded: number, total: number) {
+      this.upload.onprogress?.({ lengthComputable: true, loaded, total })
+    }
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('XMLHttpRequest', XHRFake as unknown as typeof XMLHttpRequest)
+  })
+
+  it('reporta progresso em porcentagem e resolve com o corpo', async () => {
+    const vistos: number[] = []
+    const form = new FormData()
+    const p = apiUpload('/artes/upload', form, { onProgress: (pct) => vistos.push(pct) })
+
+    const xhr = XHRFake.ultima
+    xhr.progredir(25, 100)
+    xhr.progredir(100, 100)
+    xhr.concluir(201, { data: { id: 'arte1' } })
+
+    await expect(p).resolves.toEqual({ data: { id: 'arte1' } })
+    expect(vistos).toEqual([25, 100])
+    expect(xhr.withCredentials).toBe(true)
+    expect(xhr.enviado).toBe(form)
+    // Mesmo motivo do caminho com fetch: o boundary é do navegador.
+    expect(xhr.cabecalhos['Content-Type']).toBeUndefined()
+  })
+
+  it('ignora eventos sem lengthComputable em vez de emitir NaN', async () => {
+    const vistos: number[] = []
+    const p = apiUpload('/artes/upload', new FormData(), { onProgress: (pct) => vistos.push(pct) })
+
+    const xhr = XHRFake.ultima
+    xhr.upload.onprogress?.({ lengthComputable: false, loaded: 10, total: 0 })
+    xhr.concluir(200, {})
+
+    await p
+    expect(vistos).toEqual([])
+  })
+
+  it('propaga erro do backend com status', async () => {
+    const p = apiUpload('/artes/upload', new FormData(), { onProgress: () => {} })
+    XHRFake.ultima.concluir(413, { message: 'Arquivo grande demais' })
+
+    await expect(p).rejects.toMatchObject({ status: 413, message: 'Arquivo grande demais' })
+  })
+
+  it('falha de rede vira erro tratável, não promessa pendurada', async () => {
+    const p = apiUpload('/artes/upload', new FormData(), { onProgress: () => {} })
+    XHRFake.ultima.onerror?.()
+
+    await expect(p).rejects.toMatchObject({ status: 0 })
+  })
+
+  it('corpo não-JSON não quebra o parse', async () => {
+    const p = apiUpload('/artes/upload', new FormData(), { onProgress: () => {} })
+    const xhr = XHRFake.ultima
+    xhr.status = 502
+    xhr.responseText = '<html>Bad Gateway</html>'
+    xhr.onload?.()
+
+    await expect(p).rejects.toMatchObject({ status: 502, message: '<html>Bad Gateway</html>' })
+  })
+})

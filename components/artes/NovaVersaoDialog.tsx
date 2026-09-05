@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Loader2 } from "lucide-react";
+import { validarTamanho } from "@/lib/uploadLimits";
 
 type Props = {
   open: boolean;
@@ -61,9 +62,16 @@ export default function NovaVersaoDialog({
       toast.error("Selecione um arquivo.");
       return;
     }
+    // Este diálogo não checava tamanho nenhum: o arquivo subia inteiro para
+    // descobrir no fim que o servidor recusava.
+    const erroTamanho = await validarTamanho(file);
+    if (erroTamanho) {
+      toast.error(erroTamanho);
+      return;
+    }
     try {
       setSubmitting(true);
-      setProgress(10); // progresso simulado — fetch() não expõe callback de upload
+      setProgress(0);
       const mime = file.type || undefined;
 
       await createNovaVersao({
@@ -71,6 +79,10 @@ export default function NovaVersaoDialog({
         file,
         mime,
         novoNomeOpcional: novoNome?.trim() ? novoNome.trim() : undefined,
+        // 99 e não 100: o arquivo terminou de subir, mas o servidor ainda está
+        // gravando no R2 e respondendo. Cravar 100 aqui mostraria "concluído"
+        // com a requisição em andamento.
+        onProgress: (pct) => setProgress(Math.min(pct, 99)),
       });
 
       setProgress(100);

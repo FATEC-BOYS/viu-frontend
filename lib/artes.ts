@@ -188,6 +188,8 @@ export async function createNovaVersao(params: {
   largura_px?: number | null
   altura_px?: number | null
   novoNomeOpcional?: string
+  /** Recebe 0–100 conforme o arquivo sobe. Sem isto o upload usa fetch(). */
+  onProgress?: (porcentagem: number) => void
 }) {
   const form = new FormData()
   form.set('file', params.file, params.file.name)
@@ -198,6 +200,7 @@ export async function createNovaVersao(params: {
   const data = await apiUpload<{ data?: { versao?: number; arquivo?: string } }>(
     `/artes/${params.arteId}/versoes`,
     form,
+    { onProgress: params.onProgress },
   )
   return { versao: data.data?.versao ?? 1, path: data.data?.arquivo ?? '' }
 }

@@ -215,8 +215,12 @@ export const api = {
 export async function apiUpload<T>(
   path: string,
   form: FormData,
-  init: { method?: string } = {},
+  init: { method?: string; onProgress?: (porcentagem: number) => void } = {},
 ): Promise<T> {
+  if (init.onProgress) {
+    return uploadComProgresso<T>(path, form, init.method ?? 'POST', init.onProgress)
+  }
+
   const res = await fetch(`${BASE_URL}${path}`, {
     method: init.method ?? 'POST',
     body: form,
@@ -232,6 +236,70 @@ export async function apiUpload<T>(
     throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
   }
   return body as T
+}
+
+/** Mesma leitura tolerante de `lerCorpo`, para a resposta que vem do XHR. */
+function lerTexto(texto: string): any {
+  if (!texto) return {}
+  try {
+    return JSON.parse(texto)
+  } catch {
+    return { message: texto }
+  }
+}
+
+/**
+ * Upload com progresso real.
+ *
+ * `fetch()` não informa quanto do corpo já subiu — a barra que existia era um
+ * número fixo esperando o fim da requisição, o que em arquivo grande parece
+ * travamento. `XMLHttpRequest` continua sendo a única API do navegador com
+ * `upload.onprogress`, então este caminho existe só por isso, e o de `fetch`
+ * segue sendo o padrão para quem não pede progresso.
+ *
+ * O contrato precisa ser idêntico ao do outro caminho: cookie junto
+ * (`withCredentials`), sem `Content-Type` manual — o boundary do multipart é o
+ * navegador que monta —, erro com status e 401 levando ao login.
+ */
+function uploadComProgresso<T>(
+  path: string,
+  form: FormData,
+  metodo: string,
+  onProgress: (porcentagem: number) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(metodo, `${BASE_URL}${path}`)
+    xhr.withCredentials = true
+
+    xhr.upload.onprogress = (e) => {
+      // Sem lengthComputable não há total: emitir aqui daria NaN na barra.
+      if (!e.lengthComputable || !e.total) return
+      onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+
+    xhr.onload = () => {
+      const body = lerTexto(xhr.responseText)
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body as T)
+        return
+      }
+      if (xhr.status === 401) {
+        irParaLogin()
+        reject(erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body))
+        return
+      }
+      reject(erroDeApi(body.message ?? `Erro ${xhr.status}`, xhr.status, body))
+    }
+
+    // Sem estes três a promessa ficaria pendurada quando a rede cai, o usuário
+    // cancela ou o servidor não responde — e a UI travaria em "enviando".
+    xhr.onerror = () => reject(erroDeApi('Falha de rede durante o upload', 0, null))
+    xhr.onabort = () => reject(erroDeApi('Upload cancelado', 0, null))
+    xhr.ontimeout = () => reject(erroDeApi('Tempo esgotado durante o upload', 0, null))
+
+    xhr.send(form)
+  })
 }
 
 /**

@@ -4,6 +4,7 @@
 import React, { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, apiUpload } from "@/lib/api";
+import { validarTamanho } from "@/lib/uploadLimits";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -20,8 +21,6 @@ export type ArteWizardProps = {
   projetoId: string;
   onFinished?: (arteId: string) => void;
 };
-
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (backend enforces per-category)
 
 export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   const { user } = useAuth();
@@ -68,8 +67,11 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
       setErr("Tipo/Extensão do arquivo não confere com o formato escolhido.");
       return;
     }
-    if (file.size > MAX_FILE_SIZE) {
-      setErr(`Arquivo excede 100MB (${(file.size / 1024 / 1024).toFixed(1)}MB).`);
+    // O limite vem do backend: o valor que estava escrito aqui (100MB) era a
+    // promessa por categoria, não o que o servidor aceita de fato (25MB).
+    const erroTamanho = await validarTamanho(file);
+    if (erroTamanho) {
+      setErr(erroTamanho);
       return;
     }
 
