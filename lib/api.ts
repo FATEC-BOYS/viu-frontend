@@ -26,6 +26,23 @@ export function temSessao(): boolean {
   }
 }
 
+/**
+ * Perfil em cache, para a interface saber quem está olhando sem uma ida ao
+ * servidor. Nunca é autoridade: quem decide continua sendo o backend — aqui
+ * isso só evita oferecer um botão que ia voltar 403.
+ */
+export function perfilEmCache(): { id: string; nome?: string } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const bruto = localStorage.getItem(USER_KEY)
+    if (!bruto) return null
+    const perfil = JSON.parse(bruto)
+    return typeof perfil?.id === 'string' ? perfil : null
+  } catch {
+    return null
+  }
+}
+
 let isRefreshing = false
 let refreshQueue: Array<(ok: boolean) => void> = []
 

@@ -492,11 +492,6 @@ export interface AprovadorEstado {
 }
 
 export interface AprovacaoPainel {
-  regra: {
-    todosAprovadores: boolean
-    exigirAprovacaoDesigner: boolean
-    prazoDias: number | null
-  }
   estados: AprovadorEstado[]
 }
 
@@ -514,13 +509,29 @@ export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPa
     criado_em: ap.criadoEm ?? ap.criado_em ?? '',
     arte_id: ap.arte?.id ?? ap.arteId,
     arte_nome: ap.arte?.nome ?? null,
-    versao: ap.arte?.versao ?? 1,
+    versao: ap.versaoNumero ?? ap.arte?.versao ?? 1,
   }))
 
-  return {
-    regra: { todosAprovadores: false, exigirAprovacaoDesigner: false, prazoDias: null },
-    estados,
-  }
+  return { estados }
+}
+
+/**
+ * O gatilho que faltava: sem isto nada no produto criava Aprovação, e o painel
+ * do viewer não tinha como ter conteúdo.
+ *
+ * Rota própria em vez de POST /aprovacoes: aquela força aprovadorId = usuário
+ * da sessão e exige APROVAR_ARTE, que o designer não tem. Ali quem registra é
+ * o cliente decidindo; aqui é o designer pedindo.
+ */
+export async function solicitarAprovacao(
+  arteId: string,
+  versaoNumero?: number,
+): Promise<{ id: string }> {
+  const res = await api.post<{ data: { id: string } }>(
+    `/artes/${arteId}/solicitar-aprovacao`,
+    versaoNumero ? { versaoNumero } : {},
+  )
+  return res.data
 }
 
 export async function lembrarAprovadores(aprovacaoId: string): Promise<{ ok: true }> {

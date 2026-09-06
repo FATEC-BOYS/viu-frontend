@@ -47,7 +47,6 @@ type Props = {
   principal?: PrincipalInfo | null;
 
   // opcional: flags de permissão resolvidas no server
-  canFecharParaAprovacao?: boolean; // típico para OWNER/aprovador principal
 };
 
 export default function ViewerShell({
@@ -58,7 +57,6 @@ export default function ViewerShell({
   readOnly,
   token,
   principal = null,
-  canFecharParaAprovacao = false,
 }: Props) {
   const [viewer, setViewer] = useState<{ email: string; nome?: string | null } | null>(null);
   const [showIdentity, setShowIdentity] = useState(false);
@@ -96,31 +94,6 @@ export default function ViewerShell({
     // Só pede identificação de quem pode de fato comentar.
     if (logado) setShowIdentity(true);
   }, []);
-
-  async function handleFecharParaAprovacao() {
-    try {
-      const res = await fetch(`/api/arte/${arte.id}/fechar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({}), // no-op; server resolve tudo
-      });
-      if (!res.ok) {
-        let msg = "Não foi possível fechar para aprovação.";
-        try {
-          const j = await res.json();
-          msg = j?.error || msg;
-        } catch {}
-        toast.error(msg);
-        return;
-      }
-      // Opcional: trocar aba automaticamente para Aprovações
-      setActiveTab("aprovacoes");
-    } catch (e) {
-      console.error("[ViewerShell] erro fechar para aprovação:", e);
-      toast.error("Falha ao fechar para aprovação.");
-    }
-  }
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-8">
@@ -165,12 +138,6 @@ export default function ViewerShell({
               </div>
             </div>
 
-            {/* Ação “Fechar para aprovação” — só para quem pode */}
-            {canFecharParaAprovacao && (
-              <div className="shrink-0 flex items-center gap-2">
-                <Button onClick={handleFecharParaAprovacao}>Fechar para aprovação</Button>
-              </div>
-            )}
           </div>
         </div>
       </header>
