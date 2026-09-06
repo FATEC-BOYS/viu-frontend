@@ -79,6 +79,11 @@ export type SaldoInfo = {
   totalRecebidoFormatado: string
   totalSacado: number
   totalSacadoFormatado: string
+  // Valor travado por disputa em aberto. Já vem descontado de `saldo`; existe
+  // separado para a interface poder explicar a diferença em vez de o número
+  // encolher sem motivo aparente.
+  saldoBloqueado: number
+  saldoBloqueadoFormatado: string
 }
 
 /**
