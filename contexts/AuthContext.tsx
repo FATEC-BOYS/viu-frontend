@@ -72,8 +72,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // toma 401 na primeira ação.
     setUser(lerPerfilEmCache())
 
+    // `redirecionarNo401: false`: esta chamada é uma pergunta, não uma ação.
+    // Um 401 aqui significa "visitante anônimo" e precisa virar `setUser(null)`
+    // — sem isso o cliente HTTP mandava a pessoa para /login em toda página
+    // pública, e como o redirect empilha histórico, o botão Voltar não saía.
     api
-      .get<{ data: UserProfile }>('/auth/me')
+      .get<{ data: UserProfile }>('/auth/me', { redirecionarNo401: false })
       .then((res) => {
         if (!ativo) return
         setUser(res.data)
