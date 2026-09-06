@@ -38,7 +38,7 @@ export default function RecuperarPage() {
   if (sent) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <Card className="w-full max-w-md card">
+        <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-2">
               <MailCheck className="h-10 w-10 text-primary" />
@@ -61,7 +61,7 @@ export default function RecuperarPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
-      <Card className="w-full max-w-md card">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Esqueci minha senha</CardTitle>
           <CardDescription>Informe seu e-mail para receber o link de redefinição.</CardDescription>

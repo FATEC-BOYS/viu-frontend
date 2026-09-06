@@ -59,7 +59,7 @@ function TipoPill({ tipo }: { tipo: string }) {
     ARTE: { label: 'Arte', icon: FileImage, cls: 'bg-blue-100 text-blue-800 border-blue-200' },
     PROJETO: { label: 'Projeto', icon: FolderOpen, cls: 'bg-purple-100 text-purple-800 border-purple-200' },
   } as const;
-  const cfg = (map as any)[tipo] ?? { label: tipo, icon: Share2, cls: 'bg-gray-100 text-gray-800 border-gray-200' };
+  const cfg = (map as any)[tipo] ?? { label: tipo, icon: Share2, cls: 'bg-muted text-muted-foreground border-border' };
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${cfg.cls}`}>
@@ -152,7 +152,7 @@ function LinkRow({
 
   const leftStripe =
     link.tipo === 'ARTE' ? 'before:bg-blue-500' :
-    link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-gray-300';
+    link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-border';
 
   return (
     <div

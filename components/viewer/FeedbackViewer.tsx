@@ -584,7 +584,7 @@ export default function FeedbackViewer({
                           ? "bg-green-100 border-green-400 dark:bg-green-950 dark:border-green-600"
                           : isActive
                           ? "bg-blue-100 border-blue-500 dark:bg-blue-950 dark:border-blue-400"
-                          : "bg-white border-gray-300 dark:bg-gray-800 dark:border-gray-600"
+                          : "bg-popover border-border"
                         }`}
                       >
                         {/* Avatar circle */}
@@ -604,7 +604,7 @@ export default function FeedbackViewer({
                           ? "bg-green-100 border-b-2 border-r-2 border-green-400 dark:bg-green-950 dark:border-green-600"
                           : isActive
                           ? "bg-blue-100 border-b-2 border-r-2 border-blue-500 dark:bg-blue-950 dark:border-blue-400"
-                          : "bg-white border-b-2 border-r-2 border-gray-300 dark:bg-gray-800 dark:border-gray-600"
+                          : "bg-popover border-b-2 border-r-2 border-border"
                         }`}
                       />
                     </button>
