@@ -269,3 +269,52 @@ describe('apiUpload com onProgress (XHR)', () => {
     await expect(p).rejects.toMatchObject({ status: 502, message: '<html>Bad Gateway</html>' })
   })
 })
+
+/**
+ * Um 401 numa sondagem de sessão não é sessão expirada — é a resposta "não
+ * está logado", e é a resposta certa.
+ *
+ * O AuthProvider mora no root layout, então consulta /auth/me em toda página,
+ * inclusive na landing e no /cadastro. Como request() mandava todo 401 para o
+ * irParaLogin(), e irParaLogin() usa location.href (que empilha histórico em
+ * vez de substituir), o visitante anônimo era expulso de /cadastro para /login
+ * e, ao apertar Voltar, caía em /cadastro e era expulso outra vez. Ficava
+ * preso — e a landing pública era inalcançável.
+ */
+describe('401 em sondagem de sessão', () => {
+  function espionarNavegacao() {
+    const replace = vi.fn()
+    const location = { pathname: '/cadastro', search: '', href: '', replace }
+    vi.stubGlobal('window', { location } as unknown as Window & typeof globalThis)
+    return { location, replace }
+  }
+
+  it('não redireciona para /login quando o chamador desliga o redirect', async () => {
+    const { replace } = espionarNavegacao()
+    // 401 na chamada e 401 no refresh: é o que o backend devolve para anônimo.
+    fetchMock.mockResolvedValue(resposta(401, { message: 'Não autorizado' }))
+
+    await expect(
+      api.get('/auth/me', { redirecionarNo401: false }),
+    ).rejects.toMatchObject({ status: 401 })
+
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('segue redirecionando quando o 401 é de uma ação de usuário logado', async () => {
+    const { replace } = espionarNavegacao()
+    fetchMock.mockResolvedValue(resposta(401, { message: 'Não autorizado' }))
+
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 401 })
+
+    // O `next` é a página onde a pessoa estava, não o path da API.
+    expect(replace).toHaveBeenCalledWith('/login?next=%2Fcadastro')
+  })
+
+  it('substitui a entrada no histórico em vez de empilhar', () => {
+    // Com location.href a página que tomou 401 continuava no histórico: o
+    // Voltar caía nela, ela tomava 401 de novo e devolvia para /login.
+    const { location } = espionarNavegacao()
+    expect(location.href).toBe('')
+  })
+})

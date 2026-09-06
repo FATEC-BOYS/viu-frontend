@@ -103,7 +103,10 @@ function irParaLogin() {
   if (typeof window === 'undefined') return
   if (window.location.pathname.startsWith('/login')) return
   const destino = `${window.location.pathname}${window.location.search}`
-  window.location.href = `/login?next=${encodeURIComponent(destino)}`
+  // `replace`, não `href`: a página que acabou de tomar 401 não pode continuar
+  // no histórico. Com `href` ela ficava, o Voltar caía nela de novo, ela tomava
+  // 401 de novo e mandava para /login outra vez — a pessoa ficava presa.
+  window.location.replace(`/login?next=${encodeURIComponent(destino)}`)
 }
 
 /** 204 e afins não têm corpo; `res.json()` direto quebrava nesses casos. */
@@ -135,11 +138,23 @@ function esperaDoRetryAfter(res: Response, tentativa: number): number {
   return Math.min(1000 * 2 ** tentativa, 10_000)
 }
 
+/**
+ * `redirecionarNo401: false` é para sondagem de sessão.
+ *
+ * Um 401 em `/auth/me` não quer dizer "sua sessão expirou": quer dizer "você
+ * não está logado", que é a resposta correta para um visitante anônimo. Quem
+ * pergunta isso precisa da resposta, não de um redirect — o AuthProvider mora
+ * no root layout e consulta /auth/me em toda página, landing e /cadastro
+ * inclusive.
+ */
+export type OpcoesRequest = { redirecionarNo401?: boolean }
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
   retry = true,
   tentativa429 = 0,
+  opcoes: OpcoesRequest = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -152,9 +167,9 @@ async function request<T>(
 
   if (res.status === 401 && retry) {
     if (await tryRefresh()) {
-      return request<T>(path, init, false)
+      return request<T>(path, init, false, 0, opcoes)
     }
-    irParaLogin()
+    if (opcoes.redirecionarNo401 !== false) irParaLogin()
     throw erroDeApi('Sessão expirada. Faça login novamente.', 401, null)
   }
 
@@ -164,7 +179,7 @@ async function request<T>(
   if (res.status === 429 && ehIdempotente(init) && tentativa429 < RETRY_MAX_429) {
     const espera = esperaDoRetryAfter(res, tentativa429)
     await new Promise((resolve) => setTimeout(resolve, espera))
-    return request<T>(path, init, retry, tentativa429 + 1)
+    return request<T>(path, init, retry, tentativa429 + 1, opcoes)
   }
 
   const body = await lerCorpo(res)
@@ -184,7 +199,7 @@ async function request<T>(
       )
     }
     if (res.status === 401) {
-      irParaLogin()
+      if (opcoes.redirecionarNo401 !== false) irParaLogin()
       throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
     }
     throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
@@ -193,7 +208,8 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+  get: <T>(path: string, opcoes?: OpcoesRequest) =>
+    request<T>(path, { method: 'GET' }, true, 0, opcoes),
   post: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data) }),
   put: <T>(path: string, data: unknown) =>
