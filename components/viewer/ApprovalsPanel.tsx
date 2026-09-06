@@ -1,378 +1,208 @@
 // components/viewer/ApprovalsPanel.tsx
-"use client";
+'use client'
 
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback /* AvatarImage */ } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { Check, X, Clock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { perfilEmCache } from '@/lib/api'
 
-type Interno = {
-  id: string;
-  status: "PENDENTE" | "APROVADO" | "REJEITADO";
-  comentario: string | null;
-  criado_em: string;
-  aprovador: { id: string; nome: string | null; email: string | null };
-};
+/**
+ * Decisões desta arte, e — quando for a sua vez — o botão para decidir.
+ *
+ * O que saiu daqui e por quê:
+ *
+ * - "Aprovações via link": a rota nunca teve fonte de convidados, então a seção
+ *   dizia "Nenhum convidado aprovou ainda" para sempre.
+ * - "Fechar para aprovação": o endpoint era um stub que devolvia `{ok:true}`.
+ *   A tela mostrava sucesso sobre um no-op.
+ * - "(v1)" no título: vinha de um `versao: 1` fixo na rota, não da arte.
+ * - Aprovar/Rejeitar em toda linha: o backend recusa decidir pelos outros
+ *   (`aprovadorId !== userId` → 403), então a UI oferecia o que ia falhar e
+ *   entregava o erro num `alert()`.
+ */
 
-type Convidado = {
-  id: string;
-  aprovado: boolean;
-  atualizado_em: string | null;
-  convidado: { id: string | null; nome: string | null; email: string | null };
-};
+type Aprovacao = {
+  id: string
+  status: 'PENDENTE' | 'APROVADO' | 'REJEITADO'
+  comentario: string | null
+  criadoEm: string
+  versaoNumero: number | null
+  aprovador: { id: string; nome: string | null } | null
+}
 
-type DataResp = {
-  versao: number;
-  internos: Interno[];
-  convidados: Convidado[];
-};
+const ROTULO: Record<Aprovacao['status'], string> = {
+  PENDENTE: 'Aguardando decisão',
+  APROVADO: 'Aprovado',
+  REJEITADO: 'Recusado',
+}
 
-type PrincipalInfo = {
-  id: string;
-  nome: string | null;
-  email: string | null;
-  avatarUrl?: string | null;
-};
+const ICONE = { PENDENTE: Clock, APROVADO: Check, REJEITADO: X }
 
-type Props = {
-  arteId: string;
-  token: string;
-  versao?: number;
-  /** Novo: quem é o principal (opcional) */
-  principal?: PrincipalInfo | null;
-  /** Novo: quem pode “fechar para aprovação” (ex.: OWNER/designer) */
-  canFecharParaAprovacao?: boolean;
-};
+const TOM: Record<Aprovacao['status'], string> = {
+  PENDENTE: 'border-border bg-muted text-muted-foreground',
+  APROVADO: 'border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400',
+  REJEITADO: 'border-destructive/25 bg-destructive/10 text-destructive',
+}
 
-export default function ApprovalsPanel({
-  arteId,
-  token,
-  versao,
-  principal = null,
-  canFecharParaAprovacao = false,
-}: Props) {
-  const [data, setData] = useState<DataResp | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [acting, setActing] = useState<string | null>(null); // id em ação
+function iniciais(nome?: string | null) {
+  const base = (nome || 'AP').trim()
+  const partes = base.split(' ')
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase()
+  return base.slice(0, 2).toUpperCase()
+}
 
-  async function load() {
+export default function ApprovalsPanel({ arteId, token }: { arteId: string; token: string }) {
+  const [aprovacoes, setAprovacoes] = useState<Aprovacao[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [decidindo, setDecidindo] = useState<string | null>(null)
+
+  // Quem está olhando. Só o próprio aprovador pode decidir — é a mesma regra
+  // que o backend aplica; aqui ela só deixa de ser uma promessa falsa na tela.
+  const [usuarioId, setUsuarioId] = useState<string | null>(null)
+  useEffect(() => {
+    setUsuarioId(perfilEmCache()?.id ?? null)
+  }, [])
+
+  const carregar = useCallback(async () => {
     try {
-      setLoading(true);
-      const qs = new URLSearchParams({ token });
-      if (versao) qs.set("versao", String(versao));
-      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes?${qs.toString()}`, {
-        cache: "no-store",
-      });
+      const qs = new URLSearchParams({ token })
+      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes?${qs}`, {
+        cache: 'no-store',
+      })
       if (!res.ok) {
-        console.error("[ApprovalsPanel] GET not ok", res.status);
-        setData(null);
-        return;
+        setAprovacoes([])
+        return
       }
-      const j = (await res.json()) as DataResp;
-      setData(j);
-    } catch (e) {
-      console.error("[ApprovalsPanel] load error", e);
-      setData(null);
+      const json = await res.json()
+      setAprovacoes(json.aprovacoes ?? [])
+    } catch {
+      setAprovacoes([])
     } finally {
-      setLoading(false);
+      setCarregando(false)
     }
-  }
+  }, [arteId, token])
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-  }, [arteId, token, versao]);
+    carregar()
+    const t = setInterval(carregar, 30000)
+    return () => clearInterval(t)
+  }, [carregar])
 
-  const resumo = useMemo(() => {
-    if (!data) return null;
-    const total = data.internos.length;
-    const aprovados = data.internos.filter((i) => i.status === "APROVADO").length;
-    const rejeitados = data.internos.filter((i) => i.status === "REJEITADO").length;
-    return { total, aprovados, rejeitados, pendentes: total - aprovados - rejeitados };
-  }, [data]);
-
-  async function decidir(aprovadorId: string, decisao: "APROVADO" | "REJEITADO") {
+  async function decidir(ap: Aprovacao, decisao: 'APROVADO' | 'REJEITADO') {
+    setDecidindo(ap.id)
     try {
-      setActing(aprovadorId);
       const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ aprovadorId, decisao }),
-      });
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ aprovadorId: ap.aprovador?.id, decisao }),
+      })
       if (!res.ok) {
-        let msg = "Erro ao aplicar decisão.";
-        try {
-          const j = await res.json();
-          msg = j?.error || msg;
-        } catch {}
-        alert(msg);
-        return;
+        const j = await res.json().catch(() => ({}))
+        toast.error(j?.error ?? 'Não foi possível registrar a decisão.')
+        return
       }
-      await load();
-    } catch (e) {
-      console.error("[ApprovalsPanel] decidir error", e);
-      alert("Falha ao aplicar decisão.");
+      toast.success(decisao === 'APROVADO' ? 'Arte aprovada' : 'Arte recusada')
+      await carregar()
+    } catch {
+      toast.error('Falha ao registrar a decisão.')
     } finally {
-      setActing(null);
+      setDecidindo(null)
     }
   }
 
-  async function cobrar(aprovacaoId: string, enviadoPara: string) {
-    // “Em breve”: mantemos desabilitado no botão, mas deixo a função pronta
-    try {
-      setActing(aprovacaoId);
-      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes/lembrete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ aprovacaoId, enviadoPara }),
-      });
-      if (!res.ok) {
-        let msg = "Erro ao enviar lembrete.";
-        try {
-          const j = await res.json();
-          msg = j?.error || msg;
-        } catch {}
-        alert(msg);
-        return;
-      }
-    } catch (e) {
-      console.error("[ApprovalsPanel] cobrar error", e);
-      alert("Falha ao enviar lembrete.");
-    } finally {
-      setActing(null);
-    }
-  }
-
-  async function fecharParaAprovacao() {
-    try {
-      setActing("fechar");
-      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/fechar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) {
-        let msg = "Não foi possível fechar para aprovação.";
-        try {
-          const j = await res.json();
-          msg = j?.error || msg;
-        } catch {}
-        alert(msg);
-        return;
-      }
-      await load();
-    } catch (e) {
-      console.error("[ApprovalsPanel] fechar error", e);
-      alert("Falha ao fechar para aprovação.");
-    } finally {
-      setActing(null);
-    }
-  }
-
-  // helper UI
-  function initials(n?: string | null, e?: string | null) {
-    const base = (n || e || "AP").trim();
-    const parts = base.split(" ");
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return base.slice(0, 2).toUpperCase();
-  }
+  const pendentes = aprovacoes.filter((a) => a.status === 'PENDENTE').length
 
   return (
-    <Card className="h-full flex flex-col border-0 shadow-none">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">
-          Aprovações {data ? `(v${data.versao})` : ""}
-        </CardTitle>
-        <div className="text-xs text-muted-foreground">
-          {resumo ? (
-            <span suppressHydrationWarning>
-              {resumo.aprovados}/{resumo.total} aprovados
-              {resumo.rejeitados > 0 ? ` — ${resumo.rejeitados} rejeitado(s)` : ""}
-            </span>
-          ) : (
-            <span>{loading ? "Carregando..." : "Sem dados."}</span>
-          )}
-        </div>
-      </CardHeader>
+    <div className="flex h-full flex-col">
+      <div className="border-b px-4 py-3">
+        <h2 className="text-base font-semibold tracking-[-0.01em]">Aprovações</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {carregando
+            ? 'Carregando…'
+            : aprovacoes.length === 0
+              ? 'Nada foi enviado para aprovação ainda.'
+              : pendentes > 0
+                ? `${pendentes} aguardando decisão`
+                : 'Tudo decidido'}
+        </p>
+      </div>
 
-      <CardContent className="flex-1 overflow-hidden">
-        <ScrollArea className="h-[calc(100vh-18rem)] pr-3">
-          {/* === HERO DO APROVADOR PRINCIPAL === */}
-          {principal && (
-            <div className="mb-5 rounded-xl border p-3 bg-muted/30">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    {/* Se tiver URL real, use AvatarImage */}
-                    {/* <AvatarImage src={principal.avatarUrl ?? undefined} /> */}
-                    <AvatarFallback>
-                      {initials(principal.nome, principal.email)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="text-sm font-medium">
-                      {principal.nome || principal.email || "Aprovador principal"}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Responsável por fechar a aprovação desta versão.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {canFecharParaAprovacao && (
-                    <Button
-                      onClick={fecharParaAprovacao}
-                      disabled={acting === "fechar"}
-                      size="sm"
-                    >
-                      {acting === "fechar" ? "Processando..." : "Fechar para aprovação"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
+      <ScrollArea className="flex-1">
+        <div className="space-y-2 p-4">
+          {!carregando && aprovacoes.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Quando o designer solicitar a aprovação desta arte, ela aparece aqui.
+            </p>
           )}
 
-          {/* Internos */}
-          <div className="mb-6">
-            <h4 className="text-sm font-medium mb-2">Aprovadores internos</h4>
-            {data?.internos?.length ? (
-              <div className="space-y-2">
-                {data.internos.map((i) => (
-                  <div key={i.id} className="rounded-md border p-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback>
-                            {initials(i.aprovador.nome, i.aprovador.email)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="text-sm font-medium">
-                            {i.aprovador.nome || i.aprovador.email || "Usuário"}
-                          </div>
-                          <div
-                            suppressHydrationWarning
-                            className="text-[11px] text-muted-foreground"
-                          >
-                            {i.criado_em ? new Date(i.criado_em).toLocaleString() : ""}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge
-                        variant={
-                          i.status === "APROVADO"
-                            ? "default"
-                            : i.status === "REJEITADO"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                      >
-                        {i.status}
-                      </Badge>
-                    </div>
+          {aprovacoes.map((ap) => {
+            const Icone = ICONE[ap.status]
+            // A decisão é de quem foi escolhido para decidir, e só enquanto
+            // estiver pendente — APROVADO e REJEITADO são terminais no backend.
+            const minhaVez = ap.status === 'PENDENTE' && !!usuarioId && ap.aprovador?.id === usuarioId
 
-                    {i.comentario && (
-                      <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">
-                        {i.comentario}
+            return (
+              <div key={ap.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback className="text-[10px]">
+                        {iniciais(ap.aprovador?.nome)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {ap.aprovador?.nome ?? 'Aprovador'}
                       </p>
-                    )}
-
-                    <div className="mt-2 flex gap-2">
-                      {/* Ações do próprio aprovador (você pode condicionar pelo usuário logado) */}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={acting === i.aprovador.id}
-                        onClick={() => decidir(i.aprovador.id, "APROVADO")}
-                      >
-                        {acting === i.aprovador.id ? "Enviando..." : "Aprovar"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={acting === i.aprovador.id}
-                        onClick={() => decidir(i.aprovador.id, "REJEITADO")}
-                      >
-                        {acting === i.aprovador.id ? "Enviando..." : "Rejeitar"}
-                      </Button>
-
-                      {/* “Cobrar” — Em breve (desabilitado, com tooltip) */}
-                      {i.status === "PENDENTE" && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled
-                                onClick={() => cobrar(i.id, i.aprovador.id)}
-                              >
-                                Cobrar aprovação
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Em breve</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
+                      <p suppressHydrationWarning className="text-[11px] text-muted-foreground">
+                        {ap.versaoNumero ? `v${ap.versaoNumero} · ` : ''}
+                        {ap.criadoEm ? new Date(ap.criadoEm).toLocaleDateString('pt-BR') : ''}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Nenhum aprovador interno.</p>
-            )}
-          </div>
 
-          {/* Convidados (via link) */}
-          <div className="mb-5">
-            <h4 className="text-sm font-medium mb-2">Aprovações via link</h4>
-            {data?.convidados?.length ? (
-              <div className="space-y-2">
-                {data.convidados.map((g) => (
-                  <div key={g.id} className="rounded-md border p-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback>
-                            {initials(g.convidado.nome, g.convidado.email)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="text-sm font-medium">
-                            {g.convidado.nome || g.convidado.email || "Convidado"}
-                          </div>
-                          <div
-                            suppressHydrationWarning
-                            className="text-[11px] text-muted-foreground"
-                          >
-                            {g.atualizado_em ? new Date(g.atualizado_em).toLocaleString() : ""}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge variant={g.aprovado ? "default" : "secondary"}>
-                        {g.aprovado ? "Aprovado" : "Pendente"}
-                      </Badge>
-                    </div>
+                  <span
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${TOM[ap.status]}`}
+                  >
+                    <Icone className="h-3 w-3" />
+                    {ROTULO[ap.status]}
+                  </span>
+                </div>
+
+                {ap.comentario && (
+                  <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                    {ap.comentario}
+                  </p>
+                )}
+
+                {minhaVez && (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={decidindo === ap.id}
+                      onClick={() => decidir(ap, 'APROVADO')}
+                    >
+                      {decidindo === ap.id ? 'Enviando…' : 'Aprovar'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={decidindo === ap.id}
+                      onClick={() => decidir(ap, 'REJEITADO')}
+                    >
+                      Recusar
+                    </Button>
                   </div>
-                ))}
+                )}
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Nenhum convidado aprovou ainda.</p>
-            )}
-          </div>
-        </ScrollArea>
-      </CardContent>
-    </Card>
-  );
+            )
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  )
 }

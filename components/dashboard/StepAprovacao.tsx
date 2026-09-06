@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils'
 
 export default function StepAprovacao() {
   const { user } = useAuth()
+  // O CTA precisa de um destino real: /aprovacoes nunca existiu como página.
+  const [projetoId, setProjetoId] = useState<string | null>(null)
   const [state, setState] = useState<'locked' | 'active' | 'done'>('locked')
   const [loading, setLoading] = useState(true)
 
@@ -24,6 +26,7 @@ export default function StepAprovacao() {
         if (!live) return
         const projetoId = projetosRes.data?.[0]?.id
         if (!projetoId) { setState('locked'); setLoading(false); return }
+        setProjetoId(projetoId)
 
         const artesRes = await api.get<{ pagination: { total: number } }>(`/artes?projetoId=${projetoId}&limit=1`)
         if (!live) return
@@ -69,8 +72,8 @@ export default function StepAprovacao() {
                 : 'Escolha quem aprova e fique em paz. A gente lembra se atrasar 😉'}
             </CardDescription>
             {!isDone && (
-              <Button asChild disabled={isLocked}>
-                <Link href="/aprovacoes">Solicitar aprovação</Link>
+              <Button asChild disabled={isLocked || !projetoId}>
+                <Link href={`/projetos/${projetoId}?tab=approval`}>Solicitar aprovação</Link>
               </Button>
             )}
           </>

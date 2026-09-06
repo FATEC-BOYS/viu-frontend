@@ -9,7 +9,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Check, X, Clock, BellRing } from "lucide-react";
-import RegraAprovacaoBadge, { type RegraAprovacao } from "./RegraAprovacaoBadge";
 import { cn } from "@/lib/utils";
 
 export type AprovadorChip = {
@@ -33,23 +32,24 @@ export type AprovacaoArteRow = {
 };
 
 export type AprovacaoPainel = {
-  regra: RegraAprovacao;
   items: AprovacaoArteRow[];
 };
 
 export default function AprovacaoPanel({
   painel,
   onLembrar,
+  acoes,
 }: {
   painel: AprovacaoPainel;
   onLembrar: (aprovacaoId: string) => void;
+  /** Gatilho do designer. Sem ele o painel só consegue mostrar o que já existe. */
+  acoes?: React.ReactNode;
 }) {
   const items = painel.items ?? [];
 
   return (
     <div className="space-y-4">
-      {/* Regra ativa */}
-      <RegraAprovacaoBadge regra={painel.regra} />
+      {acoes && <div className="flex justify-end">{acoes}</div>}
 
       {/* Lista de artes em aprovação */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -86,10 +86,10 @@ export default function AprovacaoPanel({
                       className={cn(
                         "rounded-full",
                         aprovado
-                          ? "bg-green-600 text-white hover:bg-green-600"
+                          ? "bg-emerald-600 text-white hover:bg-emerald-600"
                           : rejeitados > 0
-                          ? "bg-red-600 text-white hover:bg-red-600"
-                          : "bg-yellow-500 text-white hover:bg-yellow-500"
+                          ? "bg-destructive text-white hover:bg-destructive"
+                          : "bg-muted text-muted-foreground hover:bg-muted"
                       )}
                     >
                       {aprovado ? "Aprovada" : rejeitados > 0 ? "Rejeitada" : "Pendente"}
@@ -119,9 +119,12 @@ export default function AprovacaoPanel({
                                 <div
                                   className={cn(
                                     "ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
-                                    ap.status === "APROVADO" && "bg-emerald-100 text-emerald-700 border border-emerald-200",
-                                    ap.status === "REJEITADO" && "bg-rose-100 text-rose-700 border border-rose-200",
-                                    ap.status === "PENDENTE" && "bg-amber-100 text-amber-800 border border-amber-200"
+                                    ap.status === "APROVADO" &&
+                                      "border border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
+                                    ap.status === "REJEITADO" &&
+                                      "border border-destructive/25 bg-destructive/10 text-destructive",
+                                    ap.status === "PENDENTE" &&
+                                      "border border-border bg-muted text-muted-foreground"
                                   )}
                                 >
                                   {ap.status === "APROVADO" && <Check className="h-3 w-3" />}
@@ -181,8 +184,11 @@ export default function AprovacaoPanel({
       </div>
 
       {!items.length && (
-        <div className="text-sm text-muted-foreground border rounded-xl p-6 text-center">
-          Nenhuma arte em aprovação no momento.
+        <div className="rounded-xl border p-6 text-center">
+          <p className="text-sm text-muted-foreground">Nenhuma arte em aprovação no momento.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Solicite a aprovação de uma arte para o cliente decidir.
+          </p>
         </div>
       )}
     </div>

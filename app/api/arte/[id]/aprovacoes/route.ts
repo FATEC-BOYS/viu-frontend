@@ -17,8 +17,12 @@ async function validateToken(arteId: string, token: string): Promise<boolean> {
 
 /**
  * GET /api/arte/[id]/aprovacoes?token=...
- * Valida o token e busca aprovações do backend (requer JWT no header Authorization).
- * Sem JWT, retorna lista vazia (convidados não têm acesso a aprovações internas).
+ * Valida o token e busca aprovações do backend (requer sessão).
+ * Sem sessão, retorna lista vazia — convidados não veem aprovações.
+ *
+ * Não existe mais `versao: 1` fixo nem `convidados: []`: o primeiro fazia o
+ * painel anunciar "(v1)" para sempre, e o segundo alimentava uma seção
+ * "Aprovações via link" que nunca teve fonte de dados.
  */
 export async function GET(
   req: NextRequest,
@@ -39,7 +43,7 @@ export async function GET(
   // tenta buscar aprovações com JWT do usuário autenticado
   const auth = credenciaisDaRequisicao(req);
   if (!auth) {
-    return NextResponse.json({ versao: 1, internos: [], convidados: [] });
+    return NextResponse.json({ aprovacoes: [] });
   }
 
   try {
@@ -47,23 +51,26 @@ export async function GET(
       headers: { ...auth },
       cache: "no-store",
     });
-    if (!res.ok) return NextResponse.json({ versao: 1, internos: [], convidados: [] });
+    if (!res.ok) return NextResponse.json({ aprovacoes: [] });
 
     const body = await res.json();
-    const internos = (body.data ?? []).map((a: any) => ({
+    const aprovacoes = (body.data ?? []).map((a: any) => ({
       id: a.id,
       status: a.status,
       comentario: a.comentario ?? null,
-      criado_em: a.criadoEm ?? '',
+      criadoEm: a.criadoEm ?? '',
+      // O backend passou a registrar qual entrega foi julgada. Sem isso a tela
+      // não consegue dizer "você aprovou a v2, a v3 continua pendente".
+      versaoNumero: a.versaoNumero ?? null,
       aprovador: a.aprovador
-        ? { id: a.aprovador.id, nome: a.aprovador.nome, email: a.aprovador.email ?? null }
+        ? { id: a.aprovador.id, nome: a.aprovador.nome ?? null }
         : null,
     }));
 
-    return NextResponse.json({ versao: 1, internos, convidados: [] });
+    return NextResponse.json({ aprovacoes });
   } catch (e) {
     console.error("[GET /api/arte/[id]/aprovacoes] erro:", e);
-    return NextResponse.json({ versao: 1, internos: [], convidados: [] });
+    return NextResponse.json({ aprovacoes: [] });
   }
 }
 

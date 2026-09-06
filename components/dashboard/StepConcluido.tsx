@@ -82,7 +82,7 @@ export default function StepConcluido() {
             ) : (
               !isLocked && (
                 <Button asChild>
-                  <Link href="/aprovacoes">Solicitar aprovação</Link>
+                  <Link href={`/projetos/${latestProjectId}?tab=approval`}>Solicitar aprovação</Link>
                 </Button>
               )
             )}

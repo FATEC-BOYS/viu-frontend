@@ -45,6 +45,7 @@ import type {
 import type { ArteListItem as UIArteListItem } from "@/components/projetos/artes/ArtesDenseList";
 
 import AprovacaoPanel from "@/components/projetos/aprovacao/AprovacaoPanel";
+import SolicitarAprovacaoDialog from "@/components/projetos/aprovacao/SolicitarAprovacaoDialog";
 import AprovacaoSkeleton from "@/components/projetos/aprovacao/AprovacaoSkeleton";
 import type {
   AprovacaoPainel as UIPainel,
@@ -277,14 +278,7 @@ export default function ProjetoPage() {
       } as AprovacaoArteRow;
     });
 
-    return {
-      regra: {
-        modo: raw.regra?.todosAprovadores ? "TODOS" : "QUALQUER_UM",
-        exigirDesigner: raw.regra?.exigirAprovacaoDesigner ?? false,
-        slaDias: raw.regra?.prazoDias ?? null,
-      },
-      items,
-    };
+    return { items };
   }
 
   async function loadApproval() {
@@ -329,7 +323,10 @@ export default function ProjetoPage() {
 
   useEffect(() => {
     if (tab === "overview" && !resumo) loadOverview();
-    if (tab === "artes" && artRows.length === 0) loadArtes(false);
+    // A aba de aprovação também depende das artes: é delas que sai a lista do
+    // dialog de solicitar. Sem isso o botão nasce desabilitado para quem entra
+    // direto nela.
+    if ((tab === "artes" || tab === "approval") && artRows.length === 0) loadArtes(false);
     if (tab === "approval" && !painel) loadApproval();
     if (tab === "activity" && actRows.length === 0) loadActivity(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -473,6 +470,16 @@ export default function ProjetoPage() {
             <AprovacaoPanel
               painel={painel}
               onLembrar={lembrarAprovadores}
+              acoes={
+                <SolicitarAprovacaoDialog
+                  artes={artRows.map((a) => ({
+                    id: a.id,
+                    nome: a.nome,
+                    versaoAtual: a.versao,
+                  }))}
+                  onSolicitado={loadApproval}
+                />
+              }
             />
           )
         )}
