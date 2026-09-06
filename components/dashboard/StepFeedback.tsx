@@ -72,7 +72,8 @@ export default function StepFeedback() {
             </CardDescription>
             {!isDone && (
               <Button asChild disabled={isLocked}>
-                <Link href="/links">Gerar link de review</Link>
+                {/* O link é gerado no envio da arte, não na listagem. */}
+                <Link href="/artes">Gerar link de review</Link>
               </Button>
             )}
           </>

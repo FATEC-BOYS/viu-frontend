@@ -3,6 +3,8 @@
 import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -270,6 +272,7 @@ function LinkRow({
 /* ===================== Página ===================== */
 
 export default function LinksPage() {
+  const router = useRouter();
   const [links, setLinks] = useState<LinkCompartilhado[]>([]);
   const [filtered, setFiltered] = useState<LinkCompartilhado[]>([]);
   const [loading, setLoading] = useState(true);
@@ -448,9 +451,13 @@ export default function LinksPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Links Compartilhados ✦ </h1>
           <p className="text-sm text-muted-foreground">Gerencie os links públicos de Artes e Projetos</p>
         </div>
-        {/* Escondido por enquanto */}
-        <Button className="hidden">
-          <Plus className="h-4 w-4 mr-2" /> Criar Link
+        {/* O link nasce no envio da arte (passo 3 do wizard), não aqui. Esta
+            página lista e gerencia; o botão leva para onde a criação existe,
+            em vez de ficar escondido prometendo uma tela que não há. */}
+        <Button asChild>
+          <Link href="/artes">
+            <Plus className="h-4 w-4 mr-2" /> Gerar link em uma arte
+          </Link>
         </Button>
       </div>
 
@@ -503,7 +510,17 @@ export default function LinksPage() {
           description={
             searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
               ? 'Tente ajustar os filtros de busca.'
-              : 'Quando você gerar links de compartilhamento, eles aparecem aqui.'
+              : 'Links de review são gerados ao enviar uma arte. Assim que criar o primeiro, ele aparece aqui.'
+          }
+          actionLabel={
+            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
+              ? undefined
+              : 'Ir para Artes'
+          }
+          onAction={
+            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
+              ? undefined
+              : () => router.push('/artes')
           }
         />
       ) : (
