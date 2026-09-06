@@ -37,11 +37,11 @@ interface LinkCompartilhado {
   criado_em: string;
   arte: {
     nome: string;
-    projeto: { nome: string; cliente: { nome: string } };
+    projeto: { nome: string; cliente: { nome: string; telefone: string | null } };
   } | null;
   projeto: {
     nome: string;
-    cliente: { nome: string };
+    cliente: { nome: string; telefone: string | null };
   } | null;
 }
 type SortKey = 'criado_em' | 'expira_em' | 'tipo';
@@ -167,6 +167,15 @@ function LinkRow({
       ? link.projeto.cliente.nome
       : null;
 
+  // Vem do cadastro feito no ClienteWizard. Quando existe, o dialog abre com o
+  // campo preenchido; quando não, ele pede o número.
+  const telefoneCliente =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.cliente.telefone
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.cliente.telefone
+      : null;
+
   const leftStripe =
     link.tipo === 'ARTE' ? 'before:bg-blue-500' :
     link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-border';
@@ -242,11 +251,6 @@ function LinkRow({
           {/*
             Copiar o link ainda exige o designer sair daqui para colar em algum
             lugar. Este dialog fecha o caminho sem trocar de aba.
-
-            `clientPhone` fica de fora de propósito: Usuario.telefone existe,
-            mas GET /links seleciona só `cliente: { nome }`. Passar undefined é
-            honesto — o dialog pede o número. Um select a mais no backend
-            resolveria.
           */}
           {!expired && (
             <EnviarLinkDialog
@@ -254,6 +258,7 @@ function LinkRow({
               reviewUrl={url}
               projectName={nomeProjeto}
               clientName={nomeCliente}
+              clientPhone={telefoneCliente}
             />
           )}
         </div>
@@ -347,7 +352,10 @@ export default function LinksPage() {
             nome: String(r.arte.nome ?? ''),
             projeto: {
               nome: String(r.arte.projeto?.nome ?? ''),
-              cliente: { nome: String(r.arte.projeto?.cliente?.nome ?? '') },
+              cliente: {
+                nome: String(r.arte.projeto?.cliente?.nome ?? ''),
+                telefone: r.arte.projeto?.cliente?.telefone ?? null,
+              },
             },
           } : null,
           projeto: null,
