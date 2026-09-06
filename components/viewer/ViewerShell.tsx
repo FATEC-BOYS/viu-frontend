@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import IdentityGate from "@/components/viewer/IdentityGate";
+import { temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import FeedbackPanel from "@/components/viewer/FeedbackPanel";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
@@ -60,21 +61,40 @@ export default function ViewerShell({
   canFecharParaAprovacao = false,
 }: Props) {
   const [viewer, setViewer] = useState<{ email: string; nome?: string | null } | null>(null);
-  const [showIdentity, setShowIdentity] = useState(true);
-  const [activeTab, setActiveTab] = useState<"aprovacoes" | "feedbacks">("aprovacoes");
+  const [showIdentity, setShowIdentity] = useState(false);
+  /**
+   * Sessão decide o que a interface pode prometer.
+   *
+   * Ler pelo link é público, mas comentar exige conta (Feedback.autorId é
+   * obrigatório com FK) e aprovar exige ainda ser o cliente do projeto. Sem
+   * sessão, o visitante levava um modal pedindo e-mail — que o backend nunca
+   * lê — e uma aba de Aprovações que só sabia responder 401.
+   *
+   * Começa `false` e só sobe no efeito: no servidor não há localStorage, e
+   * decidir na primeira renderização daria divergência de hidratação.
+   */
+  const [temConta, setTemConta] = useState(false);
+  const [activeTab, setActiveTab] = useState<"aprovacoes" | "feedbacks">("feedbacks");
   const statusLabel = useMemo(() => arte.status || "EM_ANALISE", [arte.status]);
 
   useEffect(() => {
+    const logado = temSessao();
+    setTemConta(logado);
+    if (logado) setActiveTab("aprovacoes");
+
     try {
       const raw = localStorage.getItem("viu.viewer");
       if (raw) {
         const v = JSON.parse(raw);
         if (v?.email) {
           setViewer({ email: v.email, nome: v.nome ?? null });
-          setShowIdentity(false);
+          return;
         }
       }
     } catch {}
+
+    // Só pede identificação de quem pode de fato comentar.
+    if (logado) setShowIdentity(true);
   }, []);
 
   async function handleFecharParaAprovacao() {
@@ -128,6 +148,8 @@ export default function ViewerShell({
                 <p className="text-xs text-muted-foreground">
                   {readOnly
                     ? "Modo leitura"
+                    : !temConta
+                    ? "Somente leitura — entre na sua conta para comentar."
                     : viewer?.email
                     ? `Comentando como ${viewer.email}`
                     : "Identifique-se para comentar ou aprovar."}
@@ -169,14 +191,18 @@ export default function ViewerShell({
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
             <div className="flex items-center justify-between p-3 border-b bg-background">
               <TabsList>
-                <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>
+                {/* Aprovar exige sessão e ser o cliente do projeto. Sem conta a
+                    aba inteira sai, em vez de existir para devolver 401. */}
+                {temConta && <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>}
                 <TabsTrigger value="feedbacks">Feedbacks</TabsTrigger>
               </TabsList>
             </div>
 
-            <TabsContent value="aprovacoes" className="m-0">
-              <ApprovalsPanel arteId={arte.id} token={token} />
-            </TabsContent>
+            {temConta && (
+              <TabsContent value="aprovacoes" className="m-0">
+                <ApprovalsPanel arteId={arte.id} token={token} />
+              </TabsContent>
+            )}
 
             <TabsContent value="feedbacks" className="m-0">
               <FeedbackPanel

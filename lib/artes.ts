@@ -197,34 +197,46 @@ export async function createNovaVersao(params: {
   if (params.largura_px != null) form.set('largura_px', String(params.largura_px))
   if (params.altura_px != null) form.set('altura_px', String(params.altura_px))
 
+  // `/versoes/upload`, não `/versoes`: o backend registra apenas GET no path
+  // sem sufixo, e Fastify devolve 404 para método não registrado. Enquanto o
+  // path esteve errado, criar nova versão nunca chegou ao servidor.
   const data = await apiUpload<{ data?: { versao?: number; arquivo?: string } }>(
-    `/artes/${params.arteId}/versoes`,
+    `/artes/${params.arteId}/versoes/upload`,
     form,
     { onProgress: params.onProgress },
   )
   return { versao: data.data?.versao ?? 1, path: data.data?.arquivo ?? '' }
 }
 
+/**
+ * Histórico de versões da arte.
+ *
+ * Antes isto derivava de `GET /artes/:id` e devolvia sempre um único grupo — a
+ * versão corrente —, então a tela dizia "sem histórico" mesmo com várias
+ * versões gravadas. O backend expõe `GET /artes/:id/versoes` com a lista real,
+ * já ordenada da mais recente para a mais antiga.
+ *
+ * `arquivoUrl` é a URL assinada; `arquivo` é a chave crua do bucket, que não
+ * abre nada sozinha. É a assinada que vai para a UI.
+ */
 export async function listVersoes(arteId: string): Promise<VersaoGroup[]> {
-  const res = await api.get<{ data: any }>(`/artes/${arteId}`).catch(() => null)
+  const res = await api.get<{ data: any[] }>(`/artes/${arteId}/versoes`).catch(() => null)
   if (!res) return []
-  const a = res.data
-  return [
-    {
-      versao: a.versao ?? 1,
-      arquivos: [
-        {
-          id: a.id,
-          kind: 'FONTE' as const,
-          arquivo: a.previewUrl ?? a.arquivo ?? '',
-          mime: a.tipo ?? null,
-          tamanho: a.tamanho ?? null,
-          criado_em: a.criadoEm ?? a.criado_em ?? null,
-        },
-      ],
-      criado_em: a.criadoEm ?? a.criado_em ?? null,
-    },
-  ]
+
+  return (res.data ?? []).map((v: any) => ({
+    versao: v.numero ?? 1,
+    arquivos: [
+      {
+        id: v.id,
+        kind: 'FONTE' as const,
+        arquivo: v.arquivoUrl ?? v.arquivo ?? '',
+        mime: v.tipo ?? null,
+        tamanho: typeof v.tamanho === 'number' ? v.tamanho : Number(v.tamanho ?? 0) || null,
+        criado_em: v.criadoEm ?? v.criado_em ?? null,
+      },
+    ],
+    criado_em: v.criadoEm ?? v.criado_em ?? null,
+  }))
 }
 
 /** Rótulo legível do status da arte. O enum cru vazava para a UI em vários lugares. */

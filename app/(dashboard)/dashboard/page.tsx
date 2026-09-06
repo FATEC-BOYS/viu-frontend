@@ -415,7 +415,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm"><Link href="/projetos/novo">Novo projeto</Link></Button>
                 <Button asChild size="sm" variant="outline"><Link href="/artes/nova">Enviar arte</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/links">Gerar link</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/artes">Gerar link</Link></Button>
                 <Button asChild size="sm" variant="ghost"><Link href="/feedbacks">Ver feedbacks</Link></Button>
               </div>
               <div className="mt-4 rounded-md border p-3 text-xs text-muted-foreground">
