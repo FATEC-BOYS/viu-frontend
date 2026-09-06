@@ -89,7 +89,7 @@ export function SheetContent({
         tabIndex={-1}
         data-state={open ? "open" : "closed"}
         className={clsx(
-          "absolute top-0 h-full w-[90%] max-w-[560px] bg-white shadow-xl outline-none",
+          "absolute top-0 h-full w-[90%] max-w-[560px] bg-background shadow-xl outline-none",
           "transition-transform duration-300 ease-out",
           sideClass,
           className
@@ -114,7 +114,7 @@ export function SheetHeader({
   children: React.ReactNode;
 } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={clsx("px-4 py-3 border-b bg-white", className)} {...props}>
+    <div className={clsx("px-4 py-3 border-b bg-background", className)} {...props}>
       {children}
     </div>
   );

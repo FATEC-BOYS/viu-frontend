@@ -105,7 +105,7 @@ function Feature({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card rounded-xl border border-border p-6 bg-card">
+    <div className="rounded-xl border border-border p-6 bg-card">
       <div className="flex items-center gap-3 font-semibold mb-3">
         <span className="grid place-items-center size-10 rounded-lg bg-primary/10 text-primary">
           {icon}
@@ -199,7 +199,7 @@ export default function HomePage() {
                   <div className="mt-8 flex flex-col sm:flex-row gap-3">
                     <Button
                       size="lg"
-                      className="w-full sm:w-auto bg-orange-500 text-white hover:bg-orange-600"
+                      className="w-full sm:w-auto"
                       asChild
                     >
                       <Link href={isAuthed ? "/dashboard" : "/cadastro"}>
@@ -229,7 +229,7 @@ export default function HomePage() {
           <section className="relative">
             <div className="text-center mb-12">
               <SectionFade>
-                <h2 className="section-title text-3xl font-bold mb-3">Como funciona</h2>
+                <h2 className="text-3xl font-bold mb-3">Como funciona</h2>
                 <p className="text-lg text-muted-foreground">
                   Um fluxo simples — do upload à aprovação final
                 </p>
@@ -274,7 +274,7 @@ export default function HomePage() {
                           i % 2 === 0 ? "md:col-start-1" : "md:col-start-2 md:order-2 md:pl-10"
                         }`}
                       >
-                        <div className="card rounded-xl border border-border p-5 bg-card">
+                        <div className="rounded-xl border border-border p-5 bg-card">
                           <div className="flex items-center gap-3 font-semibold mb-2">
                             <span className="grid place-items-center size-8 rounded-lg bg-primary/10 text-primary">
                               {step.icon}
@@ -317,7 +317,7 @@ export default function HomePage() {
           <section>
             <div className="text-center mb-12">
               <SectionFade>
-                <h2 className="section-title text-3xl font-bold mb-4">Funcionalidades Principais</h2>
+                <h2 className="text-3xl font-bold mb-4">Funcionalidades Principais</h2>
                 <p className="text-lg text-muted-foreground">
                   Tudo que você precisa para gerenciar projetos de design com eficiência
                 </p>
@@ -343,11 +343,11 @@ export default function HomePage() {
           </section>
 
           {/* CTA final */}
-          <section className="card rounded-2xl border border-border p-8 md:p-12 bg-[oklch(var(--card))]">
+          <section className="rounded-2xl border border-border p-8 md:p-12 bg-card">
             <div className="grid md:grid-cols-2 gap-8 items-center">
               <SectionFade>
                 <div className="space-y-4">
-                  <h2 className="section-title text-3xl font-bold">Para Designers e Clientes</h2>
+                  <h2 className="text-3xl font-bold">Para Designers e Clientes</h2>
                   <p className="text-muted-foreground text-lg">
                     Designers visualizam solicitações em um painel unificado; clientes dão feedback de forma clara,
                     evitando ruídos na comunicação.
@@ -355,7 +355,7 @@ export default function HomePage() {
                   <div className="pt-2">
                     <Button
                       size="lg"
-                      className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                      className="gap-2"
                       onClick={goToDashboardOrLogin}
                     >
                       <LayoutDashboard className="size-4" /> Abrir Dashboard

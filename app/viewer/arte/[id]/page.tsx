@@ -69,8 +69,8 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
     return (
       <main className="mx-auto max-w-7xl p-4 md:p-8">
         <header className="rounded-2xl overflow-hidden border mb-4">
-          <div className="bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500 h-20" />
-          <div className="p-4 bg-white">
+          <div className="bg-gradient-to-r from-primary/70 to-primary/25 h-20" />
+          <div className="p-4 bg-card">
             <h1 className="text-2xl font-semibold tracking-tight">
               {arte.nome}{' '}
               <span className="text-muted-foreground">— v{arte.versao}</span>
