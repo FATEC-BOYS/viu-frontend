@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import EnviarLinkDialog from '@/components/compartilhar/EnviarLinkDialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -150,6 +151,22 @@ function LinkRow({
       ? link.projeto.cliente.nome
       : '';
 
+  // O nome que vai na mensagem do WhatsApp é o do PROJETO, não o do link:
+  // "a arte Capa está pronta" diz menos ao cliente do que o nome do trabalho.
+  const nomeProjeto =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.nome
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.nome
+      : title;
+
+  const nomeCliente =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.cliente.nome
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.cliente.nome
+      : null;
+
   const leftStripe =
     link.tipo === 'ARTE' ? 'before:bg-blue-500' :
     link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-border';
@@ -222,6 +239,23 @@ function LinkRow({
           <Button size="sm" variant="outline" onClick={() => onCopy(url)} disabled={expired}>
             <Copy className="h-3 w-3" />
           </Button>
+          {/*
+            Copiar o link ainda exige o designer sair daqui para colar em algum
+            lugar. Este dialog fecha o caminho sem trocar de aba.
+
+            `clientPhone` fica de fora de propósito: Usuario.telefone existe,
+            mas GET /links seleciona só `cliente: { nome }`. Passar undefined é
+            honesto — o dialog pede o número. Um select a mais no backend
+            resolveria.
+          */}
+          {!expired && (
+            <EnviarLinkDialog
+              token={link.token}
+              reviewUrl={url}
+              projectName={nomeProjeto}
+              clientName={nomeCliente}
+            />
+          )}
         </div>
       </div>
 
