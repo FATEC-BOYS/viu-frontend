@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import EnviarLinkDialog from '@/components/compartilhar/EnviarLinkDialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -36,11 +37,11 @@ interface LinkCompartilhado {
   criado_em: string;
   arte: {
     nome: string;
-    projeto: { nome: string; cliente: { nome: string } };
+    projeto: { nome: string; cliente: { nome: string; telefone: string | null } };
   } | null;
   projeto: {
     nome: string;
-    cliente: { nome: string };
+    cliente: { nome: string; telefone: string | null };
   } | null;
 }
 type SortKey = 'criado_em' | 'expira_em' | 'tipo';
@@ -150,6 +151,31 @@ function LinkRow({
       ? link.projeto.cliente.nome
       : '';
 
+  // O nome que vai na mensagem do WhatsApp é o do PROJETO, não o do link:
+  // "a arte Capa está pronta" diz menos ao cliente do que o nome do trabalho.
+  const nomeProjeto =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.nome
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.nome
+      : title;
+
+  const nomeCliente =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.cliente.nome
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.cliente.nome
+      : null;
+
+  // Vem do cadastro feito no ClienteWizard. Quando existe, o dialog abre com o
+  // campo preenchido; quando não, ele pede o número.
+  const telefoneCliente =
+    link.tipo === 'ARTE' && link.arte
+      ? link.arte.projeto.cliente.telefone
+      : link.tipo === 'PROJETO' && link.projeto
+      ? link.projeto.cliente.telefone
+      : null;
+
   const leftStripe =
     link.tipo === 'ARTE' ? 'before:bg-blue-500' :
     link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-border';
@@ -222,6 +248,19 @@ function LinkRow({
           <Button size="sm" variant="outline" onClick={() => onCopy(url)} disabled={expired}>
             <Copy className="h-3 w-3" />
           </Button>
+          {/*
+            Copiar o link ainda exige o designer sair daqui para colar em algum
+            lugar. Este dialog fecha o caminho sem trocar de aba.
+          */}
+          {!expired && (
+            <EnviarLinkDialog
+              token={link.token}
+              reviewUrl={url}
+              projectName={nomeProjeto}
+              clientName={nomeCliente}
+              clientPhone={telefoneCliente}
+            />
+          )}
         </div>
       </div>
 
@@ -313,7 +352,10 @@ export default function LinksPage() {
             nome: String(r.arte.nome ?? ''),
             projeto: {
               nome: String(r.arte.projeto?.nome ?? ''),
-              cliente: { nome: String(r.arte.projeto?.cliente?.nome ?? '') },
+              cliente: {
+                nome: String(r.arte.projeto?.cliente?.nome ?? ''),
+                telefone: r.arte.projeto?.cliente?.telefone ?? null,
+              },
             },
           } : null,
           projeto: null,
