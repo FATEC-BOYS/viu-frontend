@@ -105,6 +105,7 @@ export function Sidebar() {
   const fetchingRef = useRef(false);
   const { user } = useAuth();
   const ehAdmin = user?.tipo === 'ADMIN';
+  const ehCliente = user?.tipo === 'CLIENTE';
 
   const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
 
@@ -127,23 +128,36 @@ export function Sidebar() {
     return pathname.startsWith(href);
   };
 
+  /**
+   * Busca só o contador que o papel realmente mostra.
+   *
+   * Eram 7 chamadas no mount para todo mundo. O cliente só tem badge em
+   * Notificações: as outras 6 eram desperdício e algumas voltam 403, porque
+   * tarefas, convites e projetos do designer não são dele.
+   */
   useEffect(() => {
+    if (!user) return;
     let alive = true;
 
     async function fetchContadores() {
       if (fetchingRef.current) return;
       fetchingRef.current = true;
       try {
-        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe] = await Promise.allSettled([
-          api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
-          api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
-          api.get<{ pagination: { total: number } }>('/feedbacks?limit=1'),
-          api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
-          api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
-          // Convites não são paginados: o backend devolve só os pendentes.
-          convitesApi.listarPendentes(),
-          convitesEquipeApi.listarPendentes(),
-        ]);
+        const zero = Promise.resolve({ pagination: { total: 0 } });
+        const vazio = Promise.resolve([] as unknown[]);
+
+        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe] =
+          await Promise.allSettled([
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?limit=1'),
+            // O único que todo papel exibe.
+            api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
+            // Convites não são paginados: o backend devolve só os pendentes.
+            ehCliente ? vazio : convitesApi.listarPendentes(),
+            ehCliente ? vazio : convitesEquipeApi.listarPendentes(),
+          ]);
 
         if (!alive) return;
 
@@ -174,70 +188,112 @@ export function Sidebar() {
       alive = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [user, ehCliente]);
 
-  const navigationSections: NavSection[] = useMemo(() => ([
-    {
-      title: 'Principal',
-      items: [
-        { title: 'Dashboard', href: '/dashboard', icon: Home },
-        { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo },
-        { title: 'Artes', href: '/artes', icon: FileImage },
-        { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes }
-      ]
-    },
-    {
-      title: 'Gestão',
-      items: [
-        { title: 'Clientes', href: '/clientes', icon: Users },
-        { title: 'Equipes', href: '/equipes', icon: Users2 },
-        { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
-        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
-        { title: 'Convites', href: '/convites', icon: MailOpen, badge: contadores.convitesPendentes }
-      ]
-    },
-    {
-      title: 'Financeiro',
-      collapsible: true,
-      items: [
-        { title: 'Planos', href: '/planos', icon: CreditCard },
-        { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
-        { title: 'Faturas', href: '/faturas', icon: Receipt },
-        { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
-        { title: 'Extrato', href: '/extrato', icon: Receipt },
-        { title: 'Disputas', href: '/disputas', icon: Scale },
-      ]
-    },
-    {
-      title: 'Relatórios',
-      collapsible: true,
-      items: [
-        { title: 'Status do sistema', href: '/status', icon: BarChart3 },
-        { title: 'Prazos', href: '/prazos', icon: Clock }
-      ]
-    },
-    {
-      title: 'Configurações',
-      collapsible: true,
-      items: [
-        { title: 'Perfil', href: '/perfil', icon: User },
-        { title: 'Sessões', href: '/sessoes', icon: Monitor },
-        { title: 'Links Compartilhados', href: '/links', icon: LinkIcon },
-        { title: 'Configurações', href: '/configuracoes', icon: Settings }
-      ]
-    },
-    // Esconder o menu é só para não poluir a navegação de quem não usa: o
-    // backend continua devolvendo 403 nessas rotas para quem não é ADMIN.
-    ...(ehAdmin ? [{
-      title: 'Administração',
-      collapsible: true,
-      items: [
-        { title: 'Saques', href: '/admin/saques', icon: ArrowDownToLine },
-        { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
-      ]
-    }] : [])
-  ]), [
+  /**
+   * O menu segue o papel de quem está olhando.
+   *
+   * Antes DESIGNER, CLIENTE e ADMIN viam quase a mesma lista, e só a seção
+   * Administração era filtrada. O cliente enxergava Equipes, Tarefas, Saques,
+   * Extrato e Disputas — telas que o backend recusa (403) ou que não dizem
+   * nada para ele.
+   *
+   * ADMIN não ganha shell próprio: é o menu do designer mais uma seção
+   * Administração no fim. Rótulos de admin são explícitos ("Saques
+   * (moderação)") para não confundir com o financeiro do próprio designer.
+   */
+  const navigationSections: NavSection[] = useMemo(() => {
+    if (ehCliente) {
+      return [
+        {
+          title: 'Principal',
+          items: [
+            { title: 'Dashboard', href: '/dashboard', icon: Home },
+            { title: 'Projetos', href: '/projetos', icon: FolderOpen },
+            { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
+            // Escopada por clienteId no backend, e a página já abre em
+            // `tipo: 'cliente'` — não é a tela do designer reaproveitada.
+            { title: 'Faturas', href: '/faturas', icon: Receipt },
+          ],
+        },
+        {
+          title: 'Conta',
+          collapsible: true,
+          items: [
+            { title: 'Perfil', href: '/perfil', icon: User },
+            { title: 'Sessões', href: '/sessoes', icon: Monitor },
+            { title: 'Configurações', href: '/configuracoes', icon: Settings },
+          ],
+        },
+      ];
+    }
+
+    return [
+      {
+        title: 'Trabalho',
+        items: [
+          { title: 'Dashboard', href: '/dashboard', icon: Home },
+          { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo },
+          { title: 'Artes', href: '/artes', icon: FileImage },
+          { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes },
+          { title: 'Prazos', href: '/prazos', icon: Clock },
+        ],
+      },
+      {
+        // Links compartilhados sai de Configurações: mandar o link ao cliente
+        // é fluxo de revisão, não ajuste de conta.
+        title: 'Colaboração',
+        items: [
+          { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
+          { title: 'Links compartilhados', href: '/links', icon: LinkIcon },
+          { title: 'Convites', href: '/convites', icon: MailOpen, badge: contadores.convitesPendentes },
+          { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
+        ],
+      },
+      {
+        title: 'Pessoas',
+        collapsible: true,
+        items: [
+          { title: 'Clientes', href: '/clientes', icon: Users },
+          { title: 'Equipes', href: '/equipes', icon: Users2 },
+        ],
+      },
+      {
+        title: 'Financeiro',
+        collapsible: true,
+        items: [
+          { title: 'Faturas', href: '/faturas', icon: Receipt },
+          { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
+          { title: 'Extrato', href: '/extrato', icon: Receipt },
+          { title: 'Disputas', href: '/disputas', icon: Scale },
+          { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
+          { title: 'Planos', href: '/planos', icon: CreditCard },
+        ],
+      },
+      {
+        title: 'Conta',
+        collapsible: true,
+        items: [
+          { title: 'Perfil', href: '/perfil', icon: User },
+          { title: 'Sessões', href: '/sessoes', icon: Monitor },
+          { title: 'Configurações', href: '/configuracoes', icon: Settings },
+        ],
+      },
+      ...(ehAdmin
+        ? [{
+            title: 'Administração',
+            collapsible: true,
+            items: [
+              { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
+              { title: 'Saques (moderação)', href: '/admin/saques', icon: ArrowDownToLine },
+              { title: 'Status do sistema', href: '/status', icon: BarChart3 },
+            ],
+          }]
+        : []),
+    ];
+  }, [
     ehAdmin,
+    ehCliente,
     contadores.tarefasPendentes,
     contadores.feedbacksPendentes,
     contadores.notificacoesNaoLidas,
@@ -266,7 +322,7 @@ export function Sidebar() {
             </div>
             <div>
               <h2 className="text-sm font-semibold leading-none">VIU</h2>
-              <p className="text-xs text-muted-foreground">Gestão de Projetos</p>
+              <p className="text-xs text-muted-foreground">Revisão de design</p>
             </div>
           </div>
 
