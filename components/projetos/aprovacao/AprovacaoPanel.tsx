@@ -88,7 +88,9 @@ export default function AprovacaoPanel({
                         aprovado
                           ? "bg-emerald-600 text-white hover:bg-emerald-600"
                           : rejeitados > 0
-                          ? "bg-destructive text-white hover:bg-destructive"
+                          // `dark:` junto: sem ele o branco fica em 3,4:1 sobre o
+                          // vermelho sólido do tema escuro.
+                          ? "bg-destructive text-white hover:bg-destructive dark:bg-destructive/60"
                           : "bg-muted text-muted-foreground hover:bg-muted"
                       )}
                     >

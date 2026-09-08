@@ -81,10 +81,7 @@ export default function ViewerShell({
    * (linkController.ts). Servia so para esta etiqueta — um bloqueio de tela
    * para preencher o que o app ja sabia.
    */
-  const viewer = useMemo(() => {
-    const perfil = perfilEmCache();
-    return perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null;
-  }, [temConta]);
+  const [viewer, setViewer] = useState<{ email: string; nome: string | null } | null>(null);
   const [activeTab, setActiveTab] = useState<"aprovacoes" | "feedbacks">("feedbacks");
   // O cliente lia "EM_ANALISE" em caixa alta. O enum e do banco, nao da tela.
   const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
@@ -96,6 +93,13 @@ export default function ViewerShell({
     const logado = temSessao();
     setTemConta(logado);
     if (logado) setActiveTab("aprovacoes");
+
+    // Também só depois de montar: `perfilEmCache` lê localStorage, que no
+    // servidor não existe. Derivar isto na primeira renderização fazia o
+    // servidor escrever "Entre na sua conta" e o cliente "Comentando como" —
+    // exatamente a divergência que o comentário acima previa.
+    const perfil = perfilEmCache();
+    setViewer(perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null);
   }, []);
 
   return (
