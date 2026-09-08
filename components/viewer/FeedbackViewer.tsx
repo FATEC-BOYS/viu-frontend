@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloFeedback } from "@/lib/rotulos";
 import { api } from "@/lib/api";
 import { podeComentar } from "@/lib/viewerApi";
 
@@ -84,7 +85,6 @@ type Props = {
   arte: ArteMin;
   initialFeedbacks: FeedbackItem[];
   token: string;
-  onAskIdentity: () => void;
   viewer?: Viewer | null;
   readOnly?: boolean;
   commentMode?: boolean;
@@ -123,7 +123,6 @@ export default function FeedbackViewer({
   arte,
   initialFeedbacks,
   token,
-  onAskIdentity,
   viewer,
   readOnly,
   commentMode: externalCommentMode,
@@ -255,7 +254,6 @@ export default function FeedbackViewer({
       toast.error("Entre na sua conta para comentar nesta arte.");
       return;
     }
-    if (!viewer?.email) { onAskIdentity(); return; }
     const payload = comment.trim();
     if (!payload) return;
 
@@ -270,7 +268,6 @@ export default function FeedbackViewer({
           arteId: arte.id,
           tipo: "TEXTO",
           conteudo: payload,
-          viewer: { email: viewer.email, nome: viewer.nome ?? null },
           posicao_x: pin?.x ?? null,
           posicao_y: pin?.y ?? null,
         }),
@@ -283,7 +280,11 @@ export default function FeedbackViewer({
         return;
       }
 
-      const created = (await res.json()) as FeedbackItem;
+      // O backend responde no envelope { message, data, success } — sem
+      // desembrulhar, o envelope inteiro entrava na lista como se fosse o
+      // feedback, e a tela morria lendo campo de um objeto que não existia.
+      const corpo = await res.json();
+      const created = (corpo?.data ?? corpo) as FeedbackItem;
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setComment("");
@@ -299,7 +300,6 @@ export default function FeedbackViewer({
 
   /* — Audio — */
   async function handleStartRecording() {
-    if (!viewer?.email) { onAskIdentity(); return; }
     await recorder.start();
   }
 
@@ -331,7 +331,11 @@ export default function FeedbackViewer({
         return;
       }
 
-      const created = (await res.json()) as FeedbackItem;
+      // O backend responde no envelope { message, data, success } — sem
+      // desembrulhar, o envelope inteiro entrava na lista como se fosse o
+      // feedback, e a tela morria lendo campo de um objeto que não existia.
+      const corpo = await res.json();
+      const created = (corpo?.data ?? corpo) as FeedbackItem;
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setPin(null);
@@ -663,9 +667,9 @@ export default function FeedbackViewer({
                 Comentando como {viewer.email}
               </span>
             ) : (
-              <Button size="sm" variant="secondary" onClick={onAskIdentity}>
-                Identificar para comentar
-              </Button>
+              <span className="text-xs text-muted-foreground">
+                Entre na sua conta para comentar
+              </span>
             )}
           </div>
 
@@ -820,10 +824,10 @@ export default function FeedbackViewer({
                   {/* Footer: badge + thread toggle */}
                   <div className="mt-2 flex items-center justify-between">
                     <Badge
-                      variant={fb.status === "RESOLVIDO" ? "default" : "destructive"}
+                      variant={fb.status === "RESOLVIDO" ? "default" : "secondary"}
                       className="text-[10px] uppercase"
                     >
-                      {fb.status}
+                      {rotuloFeedback(fb.status)}
                     </Badge>
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleThread(fb.id); }}

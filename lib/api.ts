@@ -31,7 +31,7 @@ export function temSessao(): boolean {
  * servidor. Nunca é autoridade: quem decide continua sendo o backend — aqui
  * isso só evita oferecer um botão que ia voltar 403.
  */
-export function perfilEmCache(): { id: string; nome?: string } | null {
+export function perfilEmCache(): { id: string; nome?: string; email?: string } | null {
   if (typeof window === 'undefined') return null
   try {
     const bruto = localStorage.getItem(USER_KEY)

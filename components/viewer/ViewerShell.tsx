@@ -2,12 +2,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import IdentityGate from "@/components/viewer/IdentityGate";
-import { temSessao } from "@/lib/api";
+import { perfilEmCache, temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import FeedbackPanel from "@/components/viewer/FeedbackPanel";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
 import { toast } from "sonner";
+import { rotuloArte } from "@/lib/rotulos";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -58,8 +58,6 @@ export default function ViewerShell({
   token,
   principal = null,
 }: Props) {
-  const [viewer, setViewer] = useState<{ email: string; nome?: string | null } | null>(null);
-  const [showIdentity, setShowIdentity] = useState(false);
   /**
    * Sessão decide o que a interface pode prometer.
    *
@@ -72,33 +70,38 @@ export default function ViewerShell({
    * decidir na primeira renderização daria divergência de hidratação.
    */
   const [temConta, setTemConta] = useState(false);
+
+  /**
+   * Quem esta comentando e quem esta logado — ponto.
+   *
+   * Havia um modal (IdentityGate) que pedia e-mail e nome a quem JA tinha
+   * sessao, dizendo que usaria isso "para associar seus feedbacks e
+   * aprovacoes". O dado ate seguia no corpo do POST, mas a rota BFF
+   * (app/api/feedbacks) o descartava, e o backend grava `autorId` da sessao
+   * (linkController.ts). Servia so para esta etiqueta — um bloqueio de tela
+   * para preencher o que o app ja sabia.
+   */
+  const viewer = useMemo(() => {
+    const perfil = perfilEmCache();
+    return perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null;
+  }, [temConta]);
   const [activeTab, setActiveTab] = useState<"aprovacoes" | "feedbacks">("feedbacks");
-  const statusLabel = useMemo(() => arte.status || "EM_ANALISE", [arte.status]);
+  // O cliente lia "EM_ANALISE" em caixa alta. O enum e do banco, nao da tela.
+  const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
 
   useEffect(() => {
+    // `temSessao` e nao `perfilEmCache`: ter sessao nao pode depender de o
+    // perfil em cache trazer id. Quem decide o acesso e o cookie; o perfil so
+    // alimenta a etiqueta de quem esta comentando.
     const logado = temSessao();
     setTemConta(logado);
     if (logado) setActiveTab("aprovacoes");
-
-    try {
-      const raw = localStorage.getItem("viu.viewer");
-      if (raw) {
-        const v = JSON.parse(raw);
-        if (v?.email) {
-          setViewer({ email: v.email, nome: v.nome ?? null });
-          return;
-        }
-      }
-    } catch {}
-
-    // Só pede identificação de quem pode de fato comentar.
-    if (logado) setShowIdentity(true);
   }, []);
 
   return (
     <main className="mx-auto max-w-7xl p-4 md:p-8">
       <header className="rounded-2xl overflow-hidden border mb-4">
-        <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 h-20" />
+        <div className="bg-gradient-to-r from-primary/70 to-primary/25 h-20" />
         <div className="p-4 bg-background">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -125,7 +128,7 @@ export default function ViewerShell({
                     ? "Somente leitura — entre na sua conta para comentar."
                     : viewer?.email
                     ? `Comentando como ${viewer.email}`
-                    : "Identifique-se para comentar ou aprovar."}
+                    : "Comentando com sua conta"}
                 </p>
                 {principal && (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -150,7 +153,6 @@ export default function ViewerShell({
             viewer={viewer}
             readOnly={readOnly}
             token={token}
-            onAskIdentity={() => setShowIdentity(true)}
           />
         </section>
 
@@ -186,16 +188,6 @@ export default function ViewerShell({
         </aside>
       </div>
 
-      {showIdentity && (
-        <IdentityGate
-          token={token}
-          arteId={arte.id}
-          onIdentified={(v) => {
-            setViewer(v);
-            setShowIdentity(false);
-          }}
-        />
-      )}
     </main>
   );
 }
