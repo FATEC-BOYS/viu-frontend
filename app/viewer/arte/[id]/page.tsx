@@ -1,12 +1,11 @@
 // app/viewer/arte/[id]/page.tsx
 import { notFound } from 'next/navigation'
 import ViewerShell from '@/components/viewer/ViewerShell'
+import { backendFetch } from '@/lib/serverBackend'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'
 
 type Props = {
   params: Promise<{ id: string }>
@@ -21,7 +20,9 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
 
   let raw: any
   try {
-    const res = await fetch(`${BACKEND_URL}/preview/${token}`, { cache: 'no-store' })
+    // Mesmo motivo do resolvedor de link: sem header Origin o backend recusa,
+    // e a arte compartilhada virava 404.
+    const res = await backendFetch(`/preview/${token}`)
     if (!res.ok) return notFound()
     raw = await res.json()
   } catch {
@@ -51,7 +52,12 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
     autor_email: f.autor?.email ?? f.guestEmail ?? null,
   }))
 
-  const readOnly = Boolean(d.somenteLeitura || !d.canComment)
+  // `canComment` nunca existiu: GET /preview/:token devolve
+  // { somenteLeitura, acessos, arte, feedbacks }. Como `!undefined` é sempre
+  // true, TODO link ficava em modo leitura — o cliente nunca conseguiu
+  // comentar por link, que é a promessa central do produto. Quem decide é o
+  // somenteLeitura do link, e o backend ja recusa feedback nele (403).
+  const readOnly = Boolean(d.somenteLeitura)
 
   const arteForClient = {
     id: arte.id,
