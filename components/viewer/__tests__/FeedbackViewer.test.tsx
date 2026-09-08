@@ -102,7 +102,6 @@ const defaultProps = {
   arte: mockArte,
   initialFeedbacks: [] as FeedbackItem[],
   token: "tok_123",
-  onAskIdentity: vi.fn(),
   viewer: { email: "viewer@test.com", nome: "Viewer" },
   readOnly: false,
 };
@@ -111,7 +110,6 @@ beforeEach(() => {
   mockFetch.mockReset();
   mockStart.mockReset();
   mockStop.mockReset();
-  defaultProps.onAskIdentity.mockReset();
   vi.mocked(toast.success).mockReset();
   vi.mocked(toast.error).mockReset();
   // Comentar exige conta. Com a sessão em cookie HttpOnly, o sinal de "tem
@@ -205,15 +203,16 @@ describe("FeedbackViewer", () => {
     expect(screen.getByText("Comentando como viewer@test.com")).toBeInTheDocument();
   });
 
-  it("shows identify button when no viewer", () => {
+  /**
+   * Sem sessao nao ha o que "identificar": o botao abria um modal que pedia
+   * e-mail e nome de quem ja estava logado, e o dado era descartado na rota
+   * BFF antes de chegar ao backend, que grava `autorId` da sessao. Agora a
+   * tela diz o que resolve — entrar na conta.
+   */
+  it("manda entrar na conta quando nao ha sessao, em vez de pedir e-mail", () => {
     render(<FeedbackViewer {...defaultProps} viewer={null} />);
-    expect(screen.getByText("Identificar para comentar")).toBeInTheDocument();
-  });
-
-  it("calls onAskIdentity when clicking identify button", async () => {
-    render(<FeedbackViewer {...defaultProps} viewer={null} />);
-    await userEvent.click(screen.getByText("Identificar para comentar"));
-    expect(defaultProps.onAskIdentity).toHaveBeenCalledOnce();
+    expect(screen.getByText("Entre na sua conta para comentar")).toBeInTheDocument();
+    expect(screen.queryByText(/identificar/i)).not.toBeInTheDocument();
   });
 
   it("disables send button when comment is empty", () => {

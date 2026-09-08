@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloArte } from "@/lib/rotulos";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -186,7 +187,7 @@ export default function FeedbackPanel({
                         : "secondary"
                     }
                   >
-                    {v.status ?? "EM ANÁLISE"}
+                    {rotuloArte(v.status)}
                   </Badge>
                 </div>
 
@@ -281,7 +282,7 @@ export default function FeedbackPanel({
 
                       <div className="mt-1 flex justify-end">
                         <Badge
-                          variant={f.status === "RESOLVIDO" ? "default" : "destructive"}
+                          variant={f.status === "RESOLVIDO" ? "default" : "secondary"}
                           className="text-[10px] uppercase"
                         >
                           {f.status}

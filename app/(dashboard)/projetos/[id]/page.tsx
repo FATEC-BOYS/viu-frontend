@@ -2,13 +2,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
 import {
   getProjeto,
-  getProjetoAlertas,
   getProjetoResumo,
   getProximosPassos,
   getTarefasKanban,
@@ -25,7 +24,6 @@ import {
 
 import ProjetoHeader from "@/components/projetos/ProjetoHeader";
 import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
-import ProjetoAlertBanner from "@/components/projetos/ProjetoAlertBanner";
 import GerenciarAcessosDrawer from "@/components/projetos/pessoas/GerenciarAcessosDrawer";
 
 import ResumoCards from "@/components/projetos/overview/ResumoCards";
@@ -83,27 +81,39 @@ type ArteFilters = UIArteFilters;
 type ArteListItem = UIArteListItem;
 type AprovacaoPainel = UIPainel;
 
+/** Só estas abas existem; qualquer outro valor de ?tab= cai na Visão Geral. */
+const ABAS_VALIDAS: ProjetoTabKey[] = [
+  "overview",
+  "artes",
+  "tasks",
+  "approval",
+  "activity",
+  "billing",
+];
+
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
-  const [alertas, setAlertas] = useState<{
-    prazosSemana: number; aprovacaoTravada: number; semAprovador: boolean;
-  } | null>(null);
-
-  const [tab, setTab] = useState<ProjetoTabKey>("overview");
+  // `?tab=` decide a aba inicial: os CTAs "Solicitar aprovação" do dashboard
+  // apontam para ?tab=approval, e sem ler isto eles caíam na Visão Geral —
+  // mandavam para a página certa, na aba errada.
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<ProjetoTabKey>(() => {
+    const pedida = searchParams.get("tab") as ProjetoTabKey | null;
+    return pedida && ABAS_VALIDAS.includes(pedida) ? pedida : "overview";
+  });
   const [acessosAberto, setAcessosAberto] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [p, a] = await Promise.all([getProjeto(id), getProjetoAlertas(id)]);
+        const p = await getProjeto(id);
         if (!mounted) return;
         setProjeto(p);
-        setAlertas(a);
       } catch (e) {
         console.error(e);
       } finally {
@@ -368,14 +378,6 @@ export default function ProjetoPage() {
         onArquivar={() => console.log("arquivar", projeto.id)}
       />
 
-      {alertas && (
-        <ProjetoAlertBanner
-          prazosSemana={alertas.prazosSemana}
-          aprovacaoTravada={alertas.aprovacaoTravada}
-          semAprovador={alertas.semAprovador}
-          onResolver={() => setTab("approval")}
-        />
-      )}
 
       <ProjetoTabs current={tab} onChange={setTab} />
 

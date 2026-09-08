@@ -63,10 +63,12 @@ describe("FeedbackPanel", () => {
     expect(screen.getByText("Nenhum feedback nesta versão.")).toBeInTheDocument();
   });
 
-  it("renders status badges", () => {
+  /** O cliente lia o enum do banco em caixa alta. Rotulo vem de lib/rotulos. */
+  it("traduz o status da versao em vez de mostrar o enum", () => {
     render(<FeedbackPanel {...baseProps} />);
-    expect(screen.getByText("EM_ANALISE")).toBeInTheDocument();
-    expect(screen.getByText("APROVADO")).toBeInTheDocument();
+    expect(screen.getByText("Em análise")).toBeInTheDocument();
+    expect(screen.getByText("Aprovada")).toBeInTheDocument();
+    expect(screen.queryByText("EM_ANALISE")).not.toBeInTheDocument();
   });
 
   it("renders aprovações for version", () => {
