@@ -638,13 +638,3 @@ export async function getNarrativaContagens(projetoId: string) {
   }
 }
 
-export async function getProjetoAlertas(projetoId: string) {
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=200`)
-    .catch(() => ({ data: [] as any[] }))
-  const artes = artesRes.data ?? []
-  const semAprovador = artes.some((a: any) =>
-    ['EM_ANALISE', 'PENDENTE'].includes(a.status)
-  )
-  return { prazosSemana: 0, aprovacaoTravada: 0, semAprovador }
-}
