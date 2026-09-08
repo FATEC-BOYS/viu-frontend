@@ -9,3 +9,16 @@ import { afterEach } from "vitest";
 afterEach(() => {
   cleanup();
 });
+
+/**
+ * jsdom não implementa a API de Pointer Capture nem `scrollIntoView`, e o
+ * Radix chama as duas ao abrir um Select ou um menu. Sem estes stubs o teste
+ * morre em "target.hasPointerCapture is not a function" — falha do ambiente,
+ * não do componente.
+ */
+if (typeof Element !== "undefined") {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.setPointerCapture ??= () => {};
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+}

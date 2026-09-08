@@ -78,7 +78,7 @@ export default function StatusPage() {
         {
           label: 'Backend API',
           status: apiOk ? 'ok' : 'error',
-          detail: apiOk ? `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'}` : 'Sem resposta',
+          detail: apiOk ? `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}` : 'Sem resposta',
         },
         {
           label: 'Banco de dados',
@@ -228,7 +228,7 @@ export default function StatusPage() {
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <InfoRow label="Runtime">Next.js (client) • Browser</InfoRow>
           <InfoRow label="Backend URL">
-            {process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333'}
+            {process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}
           </InfoRow>
           <InfoRow label="User Agent">
             {typeof navigator !== 'undefined' ? navigator.userAgent : '—'}
