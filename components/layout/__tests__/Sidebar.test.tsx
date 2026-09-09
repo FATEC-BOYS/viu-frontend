@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { Sidebar } from '../Sidebar'
 
@@ -138,5 +139,112 @@ describe('cabeçalho', () => {
     renderComo('DESIGNER')
     expect(screen.getByText('Revisão de design')).toBeInTheDocument()
     expect(screen.queryByText('Gestão de Projetos')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Conta zerada: quem acabou de chegar clicava em Artes, Feedbacks, Links,
+ * Extrato — e encontrava uma sequência de telas vazias, sem saber se o
+ * produto estava quebrado ou se era ela que não sabia usar.
+ *
+ * O bloqueio precisa ser real. `<Link>` com `pointer-events-none` engana só o
+ * mouse: teclado e leitor de tela continuam entrando.
+ */
+describe('itens que dependem de conteúdo', () => {
+  /** Responde por rota: o menu pergunta o que a conta já tem. */
+  function contaCom({ projetos, artes }: { projetos: number; artes: number }) {
+    vi.mocked(api.get).mockImplementation(((rota: string) => {
+      if (rota.startsWith('/projetos?limit')) return Promise.resolve({ pagination: { total: projetos } })
+      if (rota.startsWith('/artes?limit')) return Promise.resolve({ pagination: { total: artes } })
+      return Promise.resolve({ pagination: { total: 0 } })
+    }) as never)
+  }
+
+  const bloqueado = (nome: RegExp) =>
+    screen.queryByRole('link', { name: nome }) === null &&
+    screen.getByText(nome).closest('[aria-disabled="true"]') !== null
+
+  it('tranca o que não faz sentido sem projeto', async () => {
+    contaCom({ projetos: 0, artes: 0 })
+    renderComo('DESIGNER')
+
+    await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
+    for (const item of [/^tarefas$/i, /^prazos$/i, /^equipes$/i, /^faturas$/i, /^extrato$/i]) {
+      expect(bloqueado(item)).toBe(true)
+    }
+  })
+
+  /** É por onde se começa — trancar seria trancar a saída. */
+  it('deixa livres Dashboard, Projetos, Clientes e Notificações', async () => {
+    contaCom({ projetos: 0, artes: 0 })
+    renderComo('DESIGNER')
+
+    await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
+    for (const item of [/^dashboard$/i, /^projetos$/i, /^clientes$/i, /^notificações$/i]) {
+      expect(link(item)).toBeInTheDocument()
+    }
+  })
+
+  /** Assinatura é onde o designer paga o VIU: trancar é trancar a receita. */
+  it('nunca tranca Assinatura nem Planos', async () => {
+    contaCom({ projetos: 0, artes: 0 })
+    renderComo('DESIGNER')
+
+    await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
+    expect(link(/^assinatura$/i)).toBeInTheDocument()
+    expect(link(/^planos$/i)).toBeInTheDocument()
+  })
+
+  it('com projeto e sem arte, libera Artes e segura Feedbacks e Links', async () => {
+    contaCom({ projetos: 1, artes: 0 })
+    renderComo('DESIGNER')
+
+    await waitFor(() => expect(link(/^artes$/i)).toBeInTheDocument())
+    expect(bloqueado(/^feedbacks$/i)).toBe(true)
+    expect(bloqueado(/links compartilhados/i)).toBe(true)
+  })
+
+  it('com projeto e arte, nada fica trancado', async () => {
+    contaCom({ projetos: 2, artes: 3 })
+    renderComo('DESIGNER')
+
+    await waitFor(() => expect(link(/^artes$/i)).toBeInTheDocument())
+    for (const item of [/^feedbacks$/i, /links compartilhados/i, /^tarefas$/i, /^faturas$/i]) {
+      expect(link(item)).toBeInTheDocument()
+    }
+  })
+
+  /**
+   * Não saber ainda não é motivo para trancar: o contrário faria todo usuário
+   * existente ver a barra inteira travada por um instante a cada página.
+   */
+  it('não tranca nada enquanto a resposta não chega', () => {
+    vi.mocked(api.get).mockImplementation((() => new Promise(() => {})) as never)
+    renderComo('DESIGNER')
+
+    expect(link(/^artes$/i)).toBeInTheDocument()
+    expect(link(/^feedbacks$/i)).toBeInTheDocument()
+  })
+
+  /**
+   * Este é o teste que faltava quando os cadeados passaram no vitest e não
+   * apareceram no navegador.
+   *
+   * O StrictMode monta, desmonta e remonta o efeito antes que a primeira
+   * resposta chegue. Com a trava de "busca em voo" num ref do componente, a
+   * primeira execução era descartada pelo cleanup e a segunda desistia porque
+   * o ref continuava marcado: nenhum contador, nenhum cadeado. As requisições
+   * saíam — o que despistava — mas o resultado nunca virava estado.
+   */
+  it('tranca também quando o efeito é remontado em série (StrictMode)', async () => {
+    contaCom({ projetos: 0, artes: 0 })
+    mockUser.atual = { tipo: 'DESIGNER' }
+    render(
+      <StrictMode>
+        <Sidebar />
+      </StrictMode>,
+    )
+
+    await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
   })
 })
