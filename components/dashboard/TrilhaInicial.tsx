@@ -146,7 +146,7 @@ export default function TrilhaInicial({
   if (indiceAtual === -1) return <Espera clienteNome={clienteNome} />
 
   return (
-    <section aria-label="Primeiros passos" className="space-y-4">
+    <section aria-label="Primeiros passos" className="max-w-4xl space-y-4">
       <div className="flex items-center gap-3">
         <p className="text-sm font-medium">
           Passo {totalFeitos + 1} de {passos.length}
@@ -159,7 +159,10 @@ export default function TrilhaInicial({
         </div>
       </div>
 
-      <ol className="relative space-y-1">
+      {/* Vertical no celular, horizontal no desktop — mesma marcação, só a
+          direção muda. Duas versões alternadas por CSS deixariam as duas no
+          DOM, e o leitor de tela anunciaria a trilha inteira duas vezes. */}
+      <ol className="relative flex flex-col gap-1 md:flex-row md:gap-4">
         {passos.map((passo, i) => {
           const estado: Estado = concluidos[i] ? 'feito' : i === indiceAtual ? 'agora' : 'depois'
           return (
@@ -184,13 +187,15 @@ function ItemDaTrilha({
   const agora = estado === 'agora'
 
   return (
-    <li className="relative flex gap-3 sm:gap-4">
-      {/* A linha é o que amarra os passos visualmente; sem ela são cartões soltos. */}
+    <li className="relative flex gap-3 sm:gap-4 md:flex-1 md:flex-col md:gap-2">
+      {/* O traço é o que amarra os passos: vertical à esquerda no celular,
+          horizontal entre os círculos no desktop. */}
       {!ultimo && (
         <span
           aria-hidden
           className={cn(
             'absolute left-4 top-9 -bottom-1 w-px sm:left-5',
+            'md:inset-x-auto md:bottom-auto md:left-12 md:right-0 md:top-5 md:h-px md:w-auto',
             estado === 'feito' ? 'bg-primary/40' : 'bg-border',
           )}
         />
@@ -198,7 +203,7 @@ function ItemDaTrilha({
 
       <div
         className={cn(
-          'relative z-10 mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full border sm:h-10 sm:w-10',
+          'relative z-10 mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full border sm:h-10 sm:w-10 md:mt-0',
           estado === 'feito' && 'border-primary/30 bg-primary/10 text-primary',
           agora && 'border-primary bg-primary text-primary-foreground',
           estado === 'depois' && 'border-border bg-muted text-muted-foreground',
@@ -215,14 +220,17 @@ function ItemDaTrilha({
 
       <div
         className={cn(
-          'min-w-0 flex-1 rounded-xl pb-4 sm:pb-5',
-          agora && 'mb-1 border bg-card p-4 shadow-sm sm:p-5',
+          'min-w-0 flex-1 rounded-xl pb-4 sm:pb-5 md:pb-0',
+          // O cartão existe para destacar o passo da vez numa pilha vertical.
+          // Lado a lado, o destaque já vem do círculo aceso e do botão — a
+          // borda só deixaria uma coluna de quatro com moldura, sem motivo.
+          agora && 'mb-1 border bg-card p-4 shadow-sm sm:p-5 md:mb-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none',
         )}
       >
         <h3
           className={cn(
             'font-medium leading-tight',
-            agora ? 'text-base' : 'text-sm',
+            agora ? 'text-base md:text-sm' : 'text-sm',
             estado === 'depois' && 'text-muted-foreground',
           )}
         >
@@ -231,18 +239,18 @@ function ItemDaTrilha({
         </h3>
 
         {estado === 'feito' ? (
-          <p className="mt-0.5 text-sm text-muted-foreground">{passo.feitoTexto}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground md:text-xs">{passo.feitoTexto}</p>
         ) : agora ? (
           <>
-            <p className="mt-1 text-sm text-muted-foreground">{passo.convite}</p>
-            <Button asChild className="mt-3 w-full sm:w-auto">
+            <p className="mt-1 text-sm text-muted-foreground md:text-xs">{passo.convite}</p>
+            <Button asChild className="mt-3 w-full sm:w-auto md:mt-2">
               <Link href={passo.href}>{passo.rotulo}</Link>
             </Button>
           </>
         ) : (
           // Passo travado não ganha link nenhum — nem desabilitado. Botão com
           // cara de morto que abre a página mesmo assim foi o defeito anterior.
-          <p className="mt-0.5 text-sm text-muted-foreground">{passo.precisa}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground md:text-xs">{passo.precisa}</p>
         )}
       </div>
     </li>
