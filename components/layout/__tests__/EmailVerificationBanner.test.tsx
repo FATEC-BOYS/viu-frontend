@@ -66,6 +66,18 @@ describe('já verifiquei', () => {
   })
 })
 
+/**
+ * O e-mail longo esticava a faixa e empurrava os botões para uma segunda e
+ * terceira linha no celular, comendo a altura da tela inicial.
+ */
+it('mantém a mensagem numa linha só, com o texto inteiro disponível', () => {
+  render(<EmailVerificationBanner />)
+
+  const texto = screen.getByText(/confirme seu e-mail/i)
+  expect(texto).toHaveClass('truncate')
+  expect(texto).toHaveAttribute('title', expect.stringContaining('ana@estudio.com'))
+})
+
 describe('reenviar', () => {
   it('pede novo link para o e-mail da sessão', async () => {
     const user = userEvent.setup()

@@ -49,48 +49,45 @@ export function EmailVerificationBanner() {
     setConferindo(false)
   }
 
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-900 dark:border-yellow-900/60 dark:bg-yellow-950/40 dark:text-yellow-100">
-      <div className="flex items-center gap-2">
-        <MailWarning className="h-4 w-4 shrink-0" />
-        <span>
-          {enviado
-            ? `Link reenviado para ${user.email}. Verifique a caixa de entrada e o spam.`
-            : aindaNaoConfirmado
-              ? 'Ainda não confirmamos seu e-mail. Abra o link que enviamos e tente de novo.'
-              : `Confirme seu e-mail: enviamos um link para ${user.email}.`}
-        </span>
-      </div>
+  const mensagem = enviado
+    ? `Link reenviado para ${user.email}. Verifique a caixa de entrada e o spam.`
+    : aindaNaoConfirmado
+      ? 'Ainda não confirmamos seu e-mail. Abra o link que enviamos e tente de novo.'
+      : `Confirme seu e-mail: enviamos um link para ${user.email}.`
 
-      <div className="flex shrink-0 items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 border-yellow-400 bg-transparent text-yellow-900 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-100 dark:hover:bg-yellow-900/50"
-          onClick={conferir}
-          disabled={conferindo}
-        >
-          {conferindo ? 'Conferindo…' : 'Já verifiquei'}
+  const botao =
+    'h-7 shrink-0 border-yellow-400 bg-transparent px-2 text-xs text-yellow-900 hover:bg-yellow-100 sm:px-3 dark:border-yellow-700 dark:text-yellow-100 dark:hover:bg-yellow-900/50'
+
+  return (
+    <div className="flex items-center gap-2 border-b border-yellow-200 bg-yellow-50 px-3 py-2 text-yellow-900 sm:gap-3 sm:px-4 dark:border-yellow-900/60 dark:bg-yellow-950/40 dark:text-yellow-100">
+      <MailWarning className="h-4 w-4 shrink-0" />
+
+      {/* Uma linha, cortada com reticências no celular. Duas versões do texto
+          (curta e longa) alternadas por CSS resolveriam o espaço e fariam o
+          leitor de tela anunciar a mesma coisa duas vezes; o `title` entrega o
+          resto para quem precisar. O começo da frase é o que importa: é onde
+          está o que fazer. */}
+      <p className="min-w-0 flex-1 truncate text-xs sm:text-sm" title={mensagem}>
+        {mensagem}
+      </p>
+
+      <Button variant="outline" size="sm" className={botao} onClick={conferir} disabled={conferindo}>
+        {conferindo ? 'Conferindo…' : 'Já verifiquei'}
+      </Button>
+
+      {!enviado && (
+        <Button variant="outline" size="sm" className={botao} onClick={reenviar} disabled={enviando}>
+          {enviando ? 'Enviando…' : 'Reenviar'}
         </Button>
-        {!enviado && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 border-yellow-400 bg-transparent text-yellow-900 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-100 dark:hover:bg-yellow-900/50"
-            onClick={reenviar}
-            disabled={enviando}
-          >
-            {enviando ? 'Enviando…' : 'Reenviar e-mail'}
-          </Button>
-        )}
-        <button
-          onClick={() => setDismissed(true)}
-          className="text-yellow-700 hover:text-yellow-900 dark:text-yellow-300 dark:hover:text-yellow-100"
-          aria-label="Fechar"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      )}
+
+      <button
+        onClick={() => setDismissed(true)}
+        className="shrink-0 text-yellow-700 hover:text-yellow-900 dark:text-yellow-300 dark:hover:text-yellow-100"
+        aria-label="Fechar"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   )
 }
