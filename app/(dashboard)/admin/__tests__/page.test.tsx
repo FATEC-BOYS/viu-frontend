@@ -30,7 +30,7 @@ const RESUMO = {
   },
   hoje: {
     contasNovas: 4, projetosCriados: 2, artesEnviadas: 7, linksGerados: 5,
-    feedbacksCriados: 12, aprovacoesSolicitadas: 3, aprovacoesDecididas: null,
+    feedbacksCriados: 12, aprovacoesSolicitadas: 3, aprovacoesDecididas: 1,
   },
   funil: { janelaDias: 7, criados: 18, abertos: 11, comFeedback: 6, comDecisao: 3 },
   precisaDeVoce: { saquesPendentes: 2, disputasAbertas: 1, linksTravados: 4 },
@@ -62,11 +62,25 @@ describe('carregada', () => {
     expect(valorDe(screen.getByText('links criados'))).toHaveTextContent('18')
   })
 
-  it('mostra "—" no que não temos como medir, e diz por quê', async () => {
+  it('mostra as decisões do dia', async () => {
     render(<AdminHomePage />)
-    expect(await screen.findByText('aprovações decididas')).toBeInTheDocument()
-    expect(screen.getByText('—')).toBeInTheDocument()
-    expect(screen.getByText(/não guarda quando foi decidida/i)).toBeInTheDocument()
+    expect(valorDe(await screen.findByText('aprovações decididas'))).toHaveTextContent('1')
+  })
+
+  /**
+   * A regra vale para qualquer métrica: `null` é ausência de medição e vira
+   * "—"; zero é uma medição e vira 0. Trocar um pelo outro é mentir com
+   * aparência de dado.
+   */
+  it('mostra "—" quando a métrica não veio, e 0 quando veio zerada', async () => {
+    vi.mocked(adminApi.resumo).mockResolvedValue({
+      data: { ...RESUMO, hoje: { ...RESUMO.hoje, aprovacoesDecididas: null, contasNovas: 0 } },
+      success: true,
+    } as never)
+
+    render(<AdminHomePage />)
+    expect(valorDe(await screen.findByText('aprovações decididas'))).toHaveTextContent('—')
+    expect(valorDe(screen.getByText('contas novas'))).toHaveTextContent('0')
   })
 
   it('leva a fila para a tela de quem resolve', async () => {

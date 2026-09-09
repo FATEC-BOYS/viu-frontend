@@ -154,7 +154,7 @@ export default function AdminHomePage() {
               <Metrica
                 rotulo="aprovações decididas"
                 valor={hoje.aprovacoesDecididas}
-                nota="a aprovação não guarda quando foi decidida"
+                nota="decisões antes do carimbo existir não entram na conta"
               />
             </div>
           </CardContent>
