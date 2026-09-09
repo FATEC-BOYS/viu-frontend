@@ -63,7 +63,48 @@ export type StatsUsuarios = {
   percentualAtivos: number
 }
 
+/**
+ * Resumo da home do admin. Uma requisição para toda a tela: seis contagens, o
+ * funil e duas listas.
+ *
+ * `aprovacoesDecididas` é `null` de propósito, não por lacuna: `Aprovacao` não
+ * guarda quando a decisão aconteceu, então a tela mostra "—" em vez de um
+ * número que pareceria medido.
+ */
+export type ResumoAdmin = {
+  periodo: { fuso: string; inicioDoDia: string; funilDesde: string; geradoEm: string }
+  hoje: {
+    contasNovas: number
+    projetosCriados: number
+    artesEnviadas: number
+    linksGerados: number
+    feedbacksCriados: number
+    aprovacoesSolicitadas: number
+    aprovacoesDecididas: number | null
+  }
+  funil: { janelaDias: number; criados: number; abertos: number; comFeedback: number; comDecisao: number }
+  precisaDeVoce: { saquesPendentes: number; disputasAbertas: number; linksTravados: number }
+  fila: Array<{
+    tipo: 'SAQUE' | 'DISPUTA'
+    id: string
+    titulo: string
+    status: string
+    criadoEm: string
+    href: string
+  }>
+  usuariosRecentes: Array<{
+    id: string
+    nome: string
+    email: string
+    tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN'
+    emailVerificado: boolean
+    criadoEm: string
+  }>
+}
+
 export const adminApi = {
+  resumo: () => api.get<{ data: ResumoAdmin; success: boolean }>('/admin/resumo'),
+
   listarSaques: (filtros?: { status?: SaqueStatus; designerId?: string }) => {
     const qs = new URLSearchParams()
     if (filtros?.status) qs.set('status', filtros.status)

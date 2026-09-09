@@ -2,7 +2,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { ehEmailNaoVerificado, rotaDeVerificacao } from "@/lib/erros";
 import { useAuth } from "@/contexts/AuthContext";
 import ProjetoModal from "./ProjetoModal";
 import { toast } from "sonner";
@@ -10,6 +12,7 @@ import type { ProjetoInput } from "@/lib/projects";
 
 export default function ProjetosGrid({ initial }: { initial: any[] }) {
   const { user } = useAuth();
+  const router = useRouter();
   const [projetos, setProjetos] = useState(initial);
   const [open, setOpen] = useState(false);
 
@@ -32,6 +35,18 @@ export default function ProjetosGrid({ initial }: { initial: any[] }) {
       toast.success("Projeto criado com sucesso!");
       setOpen(false);
     } catch (e: any) {
+      // 403 por e-mail não confirmado tem próximo passo; "acesso negado" não.
+      // Tratar os dois como o mesmo erro deixaria a pessoa sem saber o que fazer.
+      if (ehEmailNaoVerificado(e)) {
+        toast.error("Confirme seu e-mail para criar projetos", {
+          description: "Enviamos um link no seu cadastro. Abra ele e volte aqui.",
+          action: {
+            label: "Ver como",
+            onClick: () => router.push(rotaDeVerificacao(user?.email)),
+          },
+        });
+        throw e;
+      }
       toast.error(`Erro ao criar projeto: ${e?.message ?? "desconhecido"}`);
       throw e;
     }

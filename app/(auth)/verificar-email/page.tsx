@@ -17,12 +17,16 @@ type Status = 'idle' | 'verifying' | 'success' | 'error'
 function VerificarEmailContent() {
   const search = useSearchParams()
   const token = search.get('token')
+  // O cadastro manda o endereço na URL. Sem ele a tela só sabia falar em "o
+  // e-mail cadastrado", e quem digitou errado ficava esperando um e-mail que
+  // nunca ia chegar, sem nada na tela que ajudasse a perceber.
+  const emailDoCadastro = search.get('email') ?? ''
 
   const [status, setStatus] = useState<Status>(token ? 'verifying' : 'idle')
   const [errorMsg, setErrorMsg] = useState('')
 
   // Resend form
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(emailDoCadastro)
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
 
@@ -148,8 +152,18 @@ function VerificarEmailContent() {
           </div>
           <CardTitle className="text-2xl">Verifique seu e-mail</CardTitle>
           <CardDescription>
-            Enviamos um link de confirmação para o e-mail cadastrado. Clique nele para
-            ativar sua conta. Verifique também a pasta de spam.
+            {emailDoCadastro ? (
+              <>
+                Enviamos um link de confirmação para{' '}
+                <strong className="text-foreground">{emailDoCadastro}</strong>. Clique nele
+                para ativar sua conta. Verifique também a pasta de spam.
+              </>
+            ) : (
+              <>
+                Enviamos um link de confirmação para o e-mail cadastrado. Clique nele para
+                ativar sua conta. Verifique também a pasta de spam.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>

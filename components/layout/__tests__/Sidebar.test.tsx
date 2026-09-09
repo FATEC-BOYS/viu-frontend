@@ -119,6 +119,12 @@ describe('ADMIN', () => {
     expect(link(/status do sistema/i)).toBeInTheDocument()
   })
 
+  /** A home da área existia sem link nenhum: só se chegava nela digitando a URL. */
+  it('leva à visão geral do admin', () => {
+    renderComo('ADMIN')
+    expect(link(/visão geral/i)).toHaveAttribute('href', '/admin')
+  })
+
   /** Sem o rótulo explícito, "Saques" apareceria duas vezes sem distinção. */
   it('distingue a moderação do financeiro do próprio designer', () => {
     renderComo('ADMIN')
