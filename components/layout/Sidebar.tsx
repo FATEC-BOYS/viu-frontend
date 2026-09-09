@@ -13,7 +13,7 @@ import {
   Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { convitesApi, convitesEquipeApi } from '@/lib/convites';
@@ -284,6 +284,9 @@ export function Sidebar() {
             title: 'Administração',
             collapsible: true,
             items: [
+              // Primeiro item: é a home da área, e sem link no menu não havia
+              // como chegar nela clicando.
+              { title: 'Visão geral', href: '/admin', icon: Gauge },
               { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
               { title: 'Saques (moderação)', href: '/admin/saques', icon: ArrowDownToLine },
               { title: 'Status do sistema', href: '/status', icon: BarChart3 },
