@@ -128,7 +128,7 @@ export default function TrilhaInicial({
 
   if (carregando) {
     return (
-      <div className="space-y-3" aria-busy="true">
+      <div className="flex flex-col gap-3" aria-busy="true">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-24" />
         <Skeleton className="h-16" />
@@ -146,7 +146,7 @@ export default function TrilhaInicial({
   if (indiceAtual === -1) return <Espera clienteNome={clienteNome} />
 
   return (
-    <section aria-label="Primeiros passos" className="max-w-4xl space-y-4">
+    <section aria-label="Primeiros passos" className="flex max-w-4xl flex-col gap-4">
       <div className="flex items-center gap-3">
         <p className="text-sm font-medium">
           Passo {totalFeitos + 1} de {passos.length}
@@ -264,7 +264,7 @@ function ItemDaTrilha({
  */
 function Espera({ clienteNome }: { clienteNome?: string | null }) {
   return (
-    <section className="rounded-xl border bg-card p-5">
+    <section className="rounded-xl border bg-card p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
           <Clock className="h-5 w-5" />

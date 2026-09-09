@@ -64,7 +64,7 @@ function FinanceiroCard({
     !assinatura || assinatura.status === 'CANCELADA' || assinatura.status === 'EXPIRADA'
 
   return (
-    <Card className="h-full flex flex-col min-h-[360px]">
+    <Card className="flex h-full min-h-0 flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center text-base gap-2">
           <Wallet className="h-5 w-5" />
@@ -131,7 +131,7 @@ function FinanceiroCard({
             {faturasPendentes.length === 0 ? (
               <p className="text-sm font-medium text-muted-foreground mt-1">Nenhuma pendente 🎉</p>
             ) : (
-              <div className="mt-2 space-y-1.5">
+              <div className="mt-2 flex flex-col gap-1.5">
                 {faturasPendentes.slice(0, 3).map(f => (
                   <Link key={f.id} href={`/faturas/${f.id}`}>
                     <div className="flex items-center justify-between rounded-md hover:bg-muted/40 transition px-1 py-1">
@@ -307,7 +307,7 @@ export default function DashboardPage() {
     .slice(0, 6)
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-4 sm:p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
@@ -338,13 +338,13 @@ export default function DashboardPage() {
 
       {!mostrarOnboarding && (
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Hoje</CardTitle>
               <CardDescription>Como você está indo</CardDescription>
             </CardHeader>
             <CardContent className="flex-1">
-              <div className="grid grid-cols-2 gap-3 h-full">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-md border p-3">
                   <p className="text-xs text-muted-foreground">Projetos ativos</p>
                   <p className="text-2xl font-semibold">{metricas.projetosAtivos}</p>
@@ -370,13 +370,13 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Atividade recente</CardTitle>
               <CardDescription>Feedbacks e comentários</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 h-full overflow-y-auto overflow-x-hidden pr-1">
+              <div className="flex max-h-72 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1 sm:max-h-80">
                 {feedbacks.slice(0, 10).map(fb => (
                   <div key={fb.id} className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition">
                     <div className="w-8 h-8 bg-primary/10 rounded-full grid place-items-center">
@@ -397,7 +397,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Ações rápidas</CardTitle>
               <CardDescription>Atalhos que você realmente usa</CardDescription>
@@ -416,7 +416,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
                 <FolderOpen className="h-5 w-5 mr-2" />
@@ -425,10 +425,10 @@ export default function DashboardPage() {
               <CardDescription>Progresso e prazos</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="grid grid-cols-1 gap-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
+              <div className="flex max-h-72 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1 sm:max-h-80">
                 {projetosEmAndamento.slice(0, 8).map(projeto => (
                   <div key={projeto.id} className="rounded-lg border p-3 card-interativo">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <h4 className="font-medium truncate">{projeto.nome}</h4>
                         <p className="text-xs text-muted-foreground truncate">Cliente: {projeto.cliente?.nome || '—'}</p>
@@ -456,7 +456,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
                 <Clock className="h-5 w-5 mr-2" />
@@ -465,9 +465,9 @@ export default function DashboardPage() {
               <CardDescription>Prazos mais próximos</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
+              <div className="flex max-h-72 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1 sm:max-h-80">
                 {tarefas.slice(0, 10).map(tarefa => (
-                  <div key={tarefa.id} className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition">
+                  <div key={tarefa.id} className="flex flex-col gap-2 rounded-md border p-2 transition hover:bg-muted/40">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
@@ -490,7 +490,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-base">
                 <CalendarDays className="h-5 w-5 mr-2" />
@@ -499,11 +499,11 @@ export default function DashboardPage() {
               <CardDescription>O que vence primeiro</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
+              <div className="flex max-h-72 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1 sm:max-h-80">
                 {proximosPrazos.length > 0 ? (
                   proximosPrazos.map(p => (
                     <div key={p.id} className="rounded-md border p-3 hover:bg-muted/40 transition">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-medium truncate">{p.nome}</p>
                           <p className="text-xs text-muted-foreground truncate">Cliente: {p.cliente?.nome || '—'}</p>

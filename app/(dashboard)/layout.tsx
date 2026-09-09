@@ -16,9 +16,9 @@ export default function DashboardLayout({
         <Sidebar />
       </div>
       <main className="flex-1 overflow-auto">
-        <div className="flex items-center gap-2 border-b p-3 sm:p-4">
+        <div className="flex min-h-14 items-center gap-2 border-b px-3 py-3 sm:px-4">
           <MobileNav />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 items-center gap-2">
             <BuscaGlobal />
             <SignOutButton />
           </div>
