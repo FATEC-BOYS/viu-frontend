@@ -5,6 +5,17 @@ import { api, apiUpload, temSessao } from '../api'
  * Comportamento do cliente HTTP diante das respostas que o backend realmente
  * devolve: 403 do RBAC, 429 do rate limit por rota e corpos vazios (204).
  */
+/** Resposta cujo corpo não é JSON — página de erro de CDN, proxy ou da Vercel. */
+function respostaCrua(status: number, texto: string) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    text: async () => texto,
+    json: async () => { throw new Error('não é JSON') },
+  } as unknown as Response
+}
+
 function resposta(status: number, body?: unknown, headers: Record<string, string> = {}) {
   return {
     ok: status >= 200 && status < 300,
@@ -316,5 +327,66 @@ describe('401 em sondagem de sessão', () => {
     // Voltar caía nela, ela tomava 401 de novo e devolvia para /login.
     const { location } = espionarNavegacao()
     expect(location.href).toBe('')
+  })
+})
+
+/**
+ * O que apareceu em produção: a variável da API estava errada, a requisição
+ * voltou para a própria Vercel, e o 404 em HTML foi parar na tela por cima do
+ * formulário de cadastro — documento inteiro, tags e tudo.
+ */
+describe('respostas que não são JSON', () => {
+  const PAGINA_404 = '<!DOCTYPE html><html><head><title>404: This page could not be found.</title></head><body>…</body></html>'
+
+  it('não despeja o HTML na mensagem que o usuário lê', async () => {
+    fetchMock.mockResolvedValueOnce(respostaCrua(404, PAGINA_404))
+
+    const erro: any = await api.post('/auth/register', {}).catch((e) => e)
+
+    expect(erro.message).not.toContain('<')
+    expect(erro.message).toMatch(/não encontramos o servidor/i)
+  })
+
+  /** O texto bruto continua disponível para quem está depurando. */
+  it('preserva o corpo original no erro', async () => {
+    fetchMock.mockResolvedValueOnce(respostaCrua(404, PAGINA_404))
+
+    const erro: any = await api.post('/auth/register', {}).catch((e) => e)
+
+    expect(erro.status).toBe(404)
+    expect(erro.body.corpoBruto).toBe(PAGINA_404)
+  })
+
+  it('fala de instabilidade quando o servidor devolve 5xx sem JSON', async () => {
+    fetchMock.mockResolvedValueOnce(respostaCrua(502, '<html>Bad Gateway</html>'))
+
+    const erro: any = await api.post('/projetos', {}).catch((e) => e)
+
+    expect(erro.message).toMatch(/tente de novo/i)
+  })
+})
+
+/**
+ * CORS recusado e rede caída chegam iguais no navegador: o fetch rejeita com
+ * "Failed to fetch". São três palavras em inglês para quem só queria criar uma
+ * conta — e a causa mais comum em produção é a origem fora da lista do
+ * servidor, coisa que a tela não tem como adivinhar.
+ */
+describe('falha de rede', () => {
+  it('traduz "Failed to fetch" para algo acionável', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+    const erro: any = await api.post('/auth/login', {}).catch((e) => e)
+
+    expect(erro.message).toMatch(/não foi possível falar com o servidor/i)
+    expect(erro.status).toBe(0)
+  })
+
+  it('vale também para upload', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+    const erro: any = await apiUpload('/artes/upload', new FormData()).catch((e) => e)
+
+    expect(erro.message).toMatch(/não foi possível falar com o servidor/i)
   })
 })

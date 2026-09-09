@@ -126,6 +126,25 @@ function irParaLogin() {
   window.location.replace(`/login?next=${encodeURIComponent(destino)}`)
 }
 
+/**
+ * Resposta que não é JSON não veio do backend do VIU — veio de algo no caminho
+ * (CDN, proxy, ou a própria Vercel quando a URL da API está errada e a
+ * requisição volta para o próprio site). O corpo disso é um documento HTML
+ * inteiro.
+ *
+ * Devolvê-lo como `message` fazia a tela exibir a página de erro completa em
+ * cima do formulário: ilegível, assustador, e sem dizer o que fazer. O texto
+ * bruto continua acessível em `err.body` e vai para o console, que é onde ele
+ * serve para alguma coisa.
+ */
+function mensagemDeRespostaEstranha(status: number): string {
+  if (status === 404) {
+    return 'Não encontramos o servidor do VIU neste endereço. Se o problema continuar, avise a gente.'
+  }
+  if (status >= 500) return 'O servidor está com problemas. Tente de novo em instantes.'
+  return 'Recebemos uma resposta inesperada do servidor. Tente de novo em instantes.'
+}
+
 /** 204 e afins não têm corpo; `res.json()` direto quebrava nesses casos. */
 async function lerCorpo(res: Response): Promise<any> {
   const texto = await res.text()
@@ -133,7 +152,28 @@ async function lerCorpo(res: Response): Promise<any> {
   try {
     return JSON.parse(texto)
   } catch {
-    return { message: texto }
+    console.error('[api] resposta não-JSON', { status: res.status, corpo: texto.slice(0, 500) })
+    return { message: mensagemDeRespostaEstranha(res.status), corpoBruto: texto }
+  }
+}
+
+/**
+ * O `fetch` só rejeita quando a requisição nem chega a ter resposta: rede
+ * caída, DNS, ou CORS recusado. O navegador entrega isso como "Failed to
+ * fetch" — três palavras em inglês que não dizem nada a quem está tentando
+ * criar uma conta, e escondem a causa mais comum em produção, que é origem
+ * fora da lista permitida no servidor.
+ */
+async function buscar(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (erro) {
+    console.error('[api] falha de rede', { url, erro })
+    throw erroDeApi(
+      'Não foi possível falar com o servidor. Verifique sua conexão e tente de novo.',
+      0,
+      null,
+    )
   }
 }
 
@@ -180,7 +220,7 @@ async function request<T>(
 
   // `credentials: 'include'` é o que faz o cookie de sessão viajar: a API está
   // em outra origem, e sem isso o navegador simplesmente não o envia.
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
+  const res = await buscar(`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
 
   if (res.status === 401 && retry) {
     if (await tryRefresh()) {
@@ -254,7 +294,7 @@ export async function apiUpload<T>(
     return uploadComProgresso<T>(path, form, init.method ?? 'POST', init.onProgress)
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await buscar(`${BASE_URL}${path}`, {
     method: init.method ?? 'POST',
     body: form,
     credentials: 'include',
