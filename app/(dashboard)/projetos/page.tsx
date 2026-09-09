@@ -53,6 +53,17 @@ function ProjetosPageContent() {
   // ui
   const [mode, setMode] = useState<Mode>(parseMode(searchParams.get("view")));
   const [openModal, setOpenModal] = useState(false);
+
+  /**
+   * `?novo=1` abre o modal de criação direto. Mesma história de /clientes:
+   * `/projetos/novo` caía na rota `[id]` e virava erro de projeto inexistente.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('novo') === '1') {
+      setEditing(null);
+      setOpenModal(true);
+    }
+  }, []);
   const [editing, setEditing] = useState<Projeto | null>(null);
 
   // filtros — o estado inicial vem da URL para que voltar do detalhe de um

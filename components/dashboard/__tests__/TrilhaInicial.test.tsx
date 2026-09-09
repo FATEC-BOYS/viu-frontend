@@ -54,6 +54,33 @@ describe('passo travado', () => {
   })
 })
 
+/**
+ * Os destinos vinham copiados dos cartões antigos e apontavam para rotas que
+ * não existem: `/clientes/novo` e `/projetos/novo` casavam com a rota
+ * dinâmica `[id]`, e o app respondia "Cliente não encontrado na sua carteira".
+ * Clicar no primeiro passo da trilha dava erro.
+ */
+describe('destinos', () => {
+  it('manda para as rotas que existem, abrindo o cadastro direto', async () => {
+    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+
+    expect(await screen.findByRole('link', { name: /cadastrar cliente/i })).toHaveAttribute(
+      'href',
+      '/clientes?novo=1',
+    )
+  })
+
+  it('vale também para o projeto', async () => {
+    respondeCom({ clientes: 1, links: 0 })
+    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+
+    expect(await screen.findByRole('link', { name: /criar projeto/i })).toHaveAttribute(
+      'href',
+      '/projetos?novo=1',
+    )
+  })
+})
+
 describe('progresso', () => {
   it('destaca só o próximo passo pendente', async () => {
     respondeCom({ clientes: 1, links: 0 })

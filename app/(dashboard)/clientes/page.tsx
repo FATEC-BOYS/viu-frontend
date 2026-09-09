@@ -184,6 +184,24 @@ export default function ClientesPage() {
   const [mode, setMode] = useState<Mode>("cards");
   const [openClienteWizard, setOpenClienteWizard] = useState(false);
 
+  /**
+   * `?novo=1` abre o cadastro direto.
+   *
+   * Não existe rota `/clientes/novo` — quem tentava ir para lá caía na rota
+   * dinâmica `[id]`, o app procurava um cliente chamado "novo" e devolvia
+   * "Cliente não encontrado na sua carteira". Era para onde a trilha da tela
+   * inicial mandava.
+   *
+   * Lido depois da montagem, e não no primeiro render: decidir isso durante o
+   * SSR daria divergência de hidratação, porque o servidor não vê a URL do
+   * navegador.
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('novo') === '1') {
+      setOpenClienteWizard(true);
+    }
+  }, []);
+
   // filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFiltro>("todos");
