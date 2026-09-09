@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { api, apiUpload } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { X } from "lucide-react";
 
@@ -54,9 +54,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [ativo, setAtivo] = useState(true);
 
   // Step 1 — Projeto (opcional)
@@ -87,13 +84,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, step, isFirst, isLast, submitting]);
-
-  useEffect(() => {
-    if (!avatarFile) { setAvatarPreview(""); return; }
-    const url = URL.createObjectURL(avatarFile);
-    setAvatarPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [avatarFile]);
 
   function validateStep(s = step) {
     if (s === 0) {
@@ -135,18 +125,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
       const clienteId = clienteRes.data?.id;
       if (!clienteId) throw new Error("Não retornou id do cliente.");
 
-      // 2) Upload de avatar (se arquivo selecionado)
-      if (avatarFile) {
-        try {
-          const formData = new FormData();
-          formData.append("file", avatarFile);
-          await apiUpload(`/usuarios/${clienteId}/avatar`, formData);
-        } catch {
-          // avatar falhou mas o cliente foi criado — segue
-        }
-      }
-
-      // 3) Projeto opcional
+      // 2) Projeto opcional
       if (criarProjeto && proj.nome.trim()) {
         const orcCents = centsFromBRLString(proj.orcamento);
         const prazoISO = proj.prazo ? new Date(proj.prazo).toISOString() : null;
@@ -160,7 +139,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
         });
       }
 
-      // 4) Contatos opcionais — sem endpoint dedicado no backend ainda
+      // 3) Contatos opcionais — sem endpoint dedicado no backend ainda
       // TODO: implementar endpoint POST /contatos quando disponível no backend
 
       toast.success("Cliente criado com sucesso!");
@@ -177,7 +156,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   function resetAll() {
     setStep(0); setSubmitting(false);
     setNome(""); setEmail(""); setTelefone("");
-    setAvatarUrl(""); setAvatarFile(null); setAvatarPreview("");
     setAtivo(true); setCriarProjeto(false);
     setProj({ nome: "", prazo: formatTodayISO(), orcamento: "" });
     setAddContatos(false); setContatos([]);
@@ -214,40 +192,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
           {/* 0 - Cliente */}
           {step === 0 && (
             <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label>Avatar</Label>
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 rounded-full bg-muted overflow-hidden flex items-center justify-center">
-                    {avatarPreview ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarPreview} alt="preview" className="w-16 h-16 object-cover" />
-                    ) : avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarUrl} alt="avatar" className="w-16 h-16 object-cover" />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">sem foto</span>
-                    )}
-                  </div>
-                  <div className="flex-1 grid gap-2">
-                    <Input
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
-                      onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
-                      disabled={submitting}
-                    />
-                    <div className="grid gap-1">
-                      <Label htmlFor="avatar-url" className="text-xs">ou URL direta</Label>
-                      <Input
-                        id="avatar-url"
-                        placeholder="https://…"
-                        value={avatarUrl}
-                        onChange={(e) => { setAvatarUrl(e.target.value); setAvatarFile(null); }}
-                        disabled={submitting}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               <div className="grid gap-2">
                 <Label htmlFor="nome">Nome *</Label>
@@ -342,7 +286,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
                   <dt className="text-muted-foreground">Nome</dt><dd>{nome || "—"}</dd>
                   <dt className="text-muted-foreground">E-mail</dt><dd>{email || "—"}</dd>
                   <dt className="text-muted-foreground">Telefone</dt><dd>{telefone || "—"}</dd>
-                  <dt className="text-muted-foreground">Avatar</dt><dd>{avatarFile ? `${avatarFile.name} (arquivo)` : (avatarUrl || "—")}</dd>
                   <dt className="text-muted-foreground">Ativo</dt><dd>{ativo ? "Sim" : "Não"}</dd>
                 </dl>
               </div>
