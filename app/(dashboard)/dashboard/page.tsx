@@ -17,13 +17,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
 import { pagamentosApi, SaldoInfo, Assinatura, Fatura, formatReais } from '@/lib/pagamentos'
 
-import StepCliente from '@/components/dashboard/StepCliente'
-import StepProjeto from '@/components/dashboard/StepProjeto'
-import StepTime from '@/components/dashboard/StepTime'
-import StepArte from '@/components/dashboard/StepArte'
-import StepFeedback from '@/components/dashboard/StepFeedback'
-import StepAprovacao from '@/components/dashboard/StepAprovacao'
-import StepConcluido from '@/components/dashboard/StepConcluido'
+import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
 import { prioridadeLabel, statusLabel } from '@/lib/tarefas'
 import type { ProjetoStatus } from '@/lib/projects'
 import StatusBadge from '@/components/projetos/StatusBadge'
@@ -313,10 +307,10 @@ export default function DashboardPage() {
     .slice(0, 6)
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <FadeIn className="mx-auto w-full max-w-7xl p-4 sm:p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
             {mostrarOnboarding ? 'Vamos começar ✶' : 'Dashboard ✶'}
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -334,15 +328,12 @@ export default function DashboardPage() {
       </div>
 
       {mostrarOnboarding && (
-        <section className="space-y-4">
-          <StepCliente />
-          <StepProjeto />
-          <StepTime />
-          <StepArte />
-          <StepFeedback />
-          <StepAprovacao />
-          <StepConcluido />
-        </section>
+        <TrilhaInicial
+          temProjeto={temProjeto}
+          temArte={metricas.totalArtes > 0}
+          projetoId={projetos[0]?.id}
+          clienteNome={projetos[0]?.cliente?.nome}
+        />
       )}
 
       {!mostrarOnboarding && (
