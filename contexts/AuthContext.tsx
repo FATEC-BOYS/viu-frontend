@@ -21,6 +21,8 @@ type AuthContextType = {
   completeTwoFactorLogin: (userId: string, code: string) => Promise<void>
   signOut: () => void
   updateUser: (patch: Partial<UserProfile>) => void
+  /** Refaz /auth/me. Devolve o perfil atualizado, ou null se a sessão caiu. */
+  recarregar: () => Promise<UserProfile | null>
   loading: boolean
 }
 
@@ -124,6 +126,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     guardarPerfil(res.data.usuario)
   }, [])
 
+  /**
+   * Busca o perfil no servidor de novo.
+   *
+   * `updateUser` só mexe no estado local, o que serve para refletir algo que
+   * esta aba acabou de mudar. Não serve para "Já verifiquei": a confirmação do
+   * e-mail acontece em outra aba (a do link), e só o servidor sabe que ela
+   * ocorreu.
+   */
+  const recarregar = useCallback(async (): Promise<UserProfile | null> => {
+    try {
+      const res = await api.get<{ data: UserProfile }>('/auth/me', { redirecionarNo401: false })
+      setUser(res.data)
+      guardarPerfil(res.data)
+      return res.data
+    } catch {
+      setUser(null)
+      guardarPerfil(null)
+      return null
+    }
+  }, [])
+
   const updateUser = useCallback((patch: Partial<UserProfile>) => {
     setUser((prev) => {
       if (!prev) return prev
@@ -148,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router])
 
   return (
-    <AuthContext.Provider value={{ user, signIn, completeTwoFactorLogin, signOut, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, signIn, completeTwoFactorLogin, signOut, updateUser, recarregar, loading }}>
       {children}
     </AuthContext.Provider>
   )

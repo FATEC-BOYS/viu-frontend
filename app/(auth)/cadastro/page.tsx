@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Check, X, Mail, User, Shield } from "lucide-react";
+import { CaptchaTurnstile, captchaAtivo } from "@/components/auth/CaptchaTurnstile";
 
 type Tipo = "DESIGNER" | "CLIENTE";
 
@@ -371,6 +372,11 @@ export default function CadastroPage() {
 
   const isLast = step === STEPS.PASSWORD;
 
+  // `null` enquanto o desafio não foi resolvido. Com o captcha ligado, enviar
+  // sem token só renderia um 400 do servidor — melhor não deixar chegar lá.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const faltaCaptcha = captchaAtivo && !captchaToken;
+
   const handleBack = () => setStep((s) => Math.max(0, s - 1));
   const handleNext = () => setStep((s) => Math.min(STEPS.PASSWORD, s + 1));
 
@@ -389,9 +395,14 @@ export default function CadastroPage() {
         email,
         senha: password,
         tipo: tipo ?? 'DESIGNER',
+        // Ignorado pelo servidor quando o captcha está desligado.
+        ...(captchaToken ? { captchaToken } : {}),
       });
 
-      router.replace('/verificar-email');
+      // O e-mail viaja para a próxima tela poder dizer para onde o link foi.
+      // Sem isso ela só conseguia falar em "seu e-mail", e quem digitou errado
+      // não tinha como perceber.
+      router.replace(`/verificar-email?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
       setMsg(err?.message ?? 'Erro inesperado ao cadastrar.');
     } finally {
@@ -445,6 +456,14 @@ export default function CadastroPage() {
               />
             )}
 
+            {isLast && captchaAtivo && (
+              <div className="flex justify-center">
+                {/* `setCaptchaToken` direto: a referência precisa ser estável,
+                    senão o widget seria remontado a cada render. */}
+                <CaptchaTurnstile onToken={setCaptchaToken} />
+              </div>
+            )}
+
             {msg && (
               <p className="text-sm text-center text-destructive" aria-live="polite">
                 {msg}
@@ -461,7 +480,7 @@ export default function CadastroPage() {
 
             <Stepper
               canBack={step > STEPS.ROLE}
-              canNext={canNext}
+              canNext={canNext && !(isLast && faltaCaptcha)}
               onBack={handleBack}
               onNext={handleNext}
               isLastStep={isLast}

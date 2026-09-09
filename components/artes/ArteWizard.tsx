@@ -16,6 +16,7 @@ import {
   sanitizeFilename,
   mimeMatchesSelection,
 } from "./wizard/helpers";
+import { ehEmailNaoVerificado } from "@/lib/erros";
 
 export type ArteWizardProps = {
   projetoId: string;
@@ -91,7 +92,14 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
       setArteId(id);
       next(3);
     } catch (e: any) {
-      setErr(e?.message || "Falha ao enviar arquivo.");
+      // Sem esta distinção, o 403 de e-mail não confirmado aparecia como
+      // "falha ao enviar arquivo" — e a pessoa tentava de novo, com o mesmo
+      // resultado, sem nunca descobrir o que faltava.
+      setErr(
+        ehEmailNaoVerificado(e)
+          ? "Confirme seu e-mail para subir artes. Enviamos um link no seu cadastro."
+          : e?.message || "Falha ao enviar arquivo.",
+      );
     } finally {
       setBusy(false);
     }
