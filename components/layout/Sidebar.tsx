@@ -88,11 +88,15 @@ function renderBadge(value: MaybeNumber) {
 
 // --- componente ------------------------------------------------------------
 
-export function Sidebar() {
+export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   const pathname = usePathname();
   const mounted = useMounted();
 
-  const [collapsed, setCollapsed] = useLocalStorageBoolean('viu.sidebar.collapsed', false);
+  const [collapsadaSalva, setCollapsed] = useLocalStorageBoolean('viu.sidebar.collapsed', false);
+  // Dentro da gaveta do mobile não existe "recolher": a barra ocupa a gaveta
+  // inteira e some ao navegar. Manter o estado salvo aqui abriria o menu com
+  // ícones sem rótulo, que no celular não se lê.
+  const collapsed = semColapso ? false : collapsadaSalva;
   const [contadores, setContadores] = useState<Contadores>({
     tarefasPendentes: undefined,
     feedbacksPendentes: undefined,
@@ -107,7 +111,7 @@ export function Sidebar() {
   const ehAdmin = user?.tipo === 'ADMIN';
   const ehCliente = user?.tipo === 'CLIENTE';
 
-  const toggleCollapsed = useCallback(() => setCollapsed(!collapsed), [collapsed, setCollapsed]);
+  const toggleCollapsed = useCallback(() => setCollapsed(!collapsadaSalva), [collapsadaSalva, setCollapsed]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -313,7 +317,7 @@ export function Sidebar() {
       <div
         className={cn(
           "group/sidebar flex h-full flex-col border-r bg-background transition-[width] duration-300 ease-out",
-          collapsed ? "w-16" : "w-64"
+          semColapso ? "w-full border-r-0" : collapsed ? "w-16" : "w-64"
         )}
         aria-label="Barra lateral de navegação"
       >
@@ -329,23 +333,25 @@ export function Sidebar() {
             </div>
           </div>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={toggleCollapsed}
-                aria-label={collapsed ? "Expandir navegação (Ctrl/Cmd+B)" : "Recolher navegação (Ctrl/Cmd+B)"}
-                aria-pressed={collapsed}
-              >
-                {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <span>{collapsed ? 'Expandir' : 'Recolher'} (Ctrl/Cmd + B)</span>
-            </TooltipContent>
-          </Tooltip>
+          {!semColapso && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={toggleCollapsed}
+                  aria-label={collapsed ? "Expandir navegação (Ctrl/Cmd+B)" : "Recolher navegação (Ctrl/Cmd+B)"}
+                  aria-pressed={collapsed}
+                >
+                  {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <span>{collapsed ? 'Expandir' : 'Recolher'} (Ctrl/Cmd + B)</span>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         <Separator className="my-2" />
