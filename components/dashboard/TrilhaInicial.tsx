@@ -61,7 +61,7 @@ function montarPassos(projetoId?: string): Passo[] {
       feitoTexto: 'Cliente cadastrado.',
       precisa: '',
       icone: UserPlus,
-      href: '/clientes/novo',
+      href: '/clientes?novo=1',
       rotulo: 'Cadastrar cliente',
     },
     {
@@ -71,7 +71,7 @@ function montarPassos(projetoId?: string): Passo[] {
       feitoTexto: 'Projeto criado.',
       precisa: 'Cadastre um cliente primeiro.',
       icone: FolderPlus,
-      href: '/projetos/novo',
+      href: '/projetos?novo=1',
       rotulo: 'Criar projeto',
     },
     {

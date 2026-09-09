@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -13,7 +13,7 @@ import {
   Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { convitesApi, convitesEquipeApi } from '@/lib/convites';
@@ -70,6 +70,14 @@ interface NavItem {
   icon: LucideIcon;
   badge?: MaybeNumber;
   disabled?: boolean;
+  /**
+   * O que a conta precisa ter para esta tela fazer sentido.
+   *
+   * Sem isso, quem acabou de chegar clica em Artes, Feedbacks, Links, Extrato
+   * — e encontra uma sequência de telas vazias, sem saber se o produto está
+   * quebrado ou se é ela que não sabe usar.
+   */
+  precisa?: 'projeto' | 'arte';
 }
 interface NavSection {
   title: string;
@@ -97,6 +105,13 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   // inteira e some ao navegar. Manter o estado salvo aqui abriria o menu com
   // ícones sem rótulo, que no celular não se lê.
   const collapsed = semColapso ? false : collapsadaSalva;
+  /**
+   * `null` enquanto não sabemos: o menu nasce liberado e só ganha cadeado
+   * depois da resposta. O contrário faria todo usuário existente ver a barra
+   * inteira travada por um instante a cada carga de página.
+   */
+  const [conteudo, setConteudo] = useState<{ temProjeto: boolean; temArte: boolean } | null>(null);
+
   const [contadores, setContadores] = useState<Contadores>({
     tarefasPendentes: undefined,
     feedbacksPendentes: undefined,
@@ -106,7 +121,6 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   });
 
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({});
-  const fetchingRef = useRef(false);
   const { user } = useAuth();
   const ehAdmin = user?.tipo === 'ADMIN';
   const ehCliente = user?.tipo === 'CLIENTE';
@@ -142,15 +156,26 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   useEffect(() => {
     if (!user) return;
     let alive = true;
+    /**
+     * A trava de "já tem uma busca em voo" vive dentro do efeito, não em um
+     * ref do componente. Com um ref compartilhado, o remount em série do
+     * StrictMode travava tudo: a primeira execução marcava o ref e era
+     * descartada pelo cleanup (`alive = false`), e a segunda desistia porque
+     * o ref continuava marcado — resultado, nenhum contador e nenhum cadeado
+     * em desenvolvimento. Por instância, a execução nova sempre busca de novo;
+     * a trava segue valendo para o tique de 5 minutos, que é o caso real de
+     * sobreposição.
+     */
+    let emVoo = false;
 
     async function fetchContadores() {
-      if (fetchingRef.current) return;
-      fetchingRef.current = true;
+      if (emVoo) return;
+      emVoo = true;
       try {
         const zero = Promise.resolve({ pagination: { total: 0 } });
         const vazio = Promise.resolve([] as unknown[]);
 
-        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe] =
+        const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe, resTemProjeto, resTemArte] =
           await Promise.allSettled([
             ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
             ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
@@ -161,6 +186,10 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
             // Convites não são paginados: o backend devolve só os pendentes.
             ehCliente ? vazio : convitesApi.listarPendentes(),
             ehCliente ? vazio : convitesEquipeApi.listarPendentes(),
+            // Qualquer status, não só EM_ANDAMENTO: quem tem só projeto
+            // concluído já conhece o produto e não precisa de cadeado.
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/projetos?limit=1'),
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/artes?limit=1'),
           ]);
 
         if (!alive) return;
@@ -178,10 +207,14 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           projetsVencendo: total(resProjetos),
           convitesPendentes: quantidade(resConvites) + quantidade(resConvitesEquipe),
         });
+
+        if (!ehCliente) {
+          setConteudo({ temProjeto: total(resTemProjeto) > 0, temArte: total(resTemArte) > 0 });
+        }
       } catch (err) {
         console.error('Erro ao buscar contadores:', err);
       } finally {
-        fetchingRef.current = false;
+        emVoo = false;
       }
     }
 
@@ -238,9 +271,9 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
         items: [
           { title: 'Dashboard', href: '/dashboard', icon: Home },
           { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo },
-          { title: 'Artes', href: '/artes', icon: FileImage },
-          { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes },
-          { title: 'Prazos', href: '/prazos', icon: Clock },
+          { title: 'Artes', href: '/artes', icon: FileImage, precisa: 'projeto' },
+          { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes, precisa: 'projeto' },
+          { title: 'Prazos', href: '/prazos', icon: Clock, precisa: 'projeto' },
         ],
       },
       {
@@ -248,9 +281,9 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
         // é fluxo de revisão, não ajuste de conta.
         title: 'Colaboração',
         items: [
-          { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes },
-          { title: 'Links compartilhados', href: '/links', icon: LinkIcon },
-          { title: 'Convites', href: '/convites', icon: MailOpen, badge: contadores.convitesPendentes },
+          { title: 'Feedbacks', href: '/feedbacks', icon: MessageSquare, badge: contadores.feedbacksPendentes, precisa: 'arte' },
+          { title: 'Links compartilhados', href: '/links', icon: LinkIcon, precisa: 'arte' },
+          { title: 'Convites', href: '/convites', icon: MailOpen, badge: contadores.convitesPendentes, precisa: 'projeto' },
           { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
         ],
       },
@@ -259,17 +292,20 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
         collapsible: true,
         items: [
           { title: 'Clientes', href: '/clientes', icon: Users },
-          { title: 'Equipes', href: '/equipes', icon: Users2 },
+          { title: 'Equipes', href: '/equipes', icon: Users2, precisa: 'projeto' },
         ],
       },
       {
         title: 'Financeiro',
         collapsible: true,
         items: [
-          { title: 'Faturas', href: '/faturas', icon: Receipt },
-          { title: 'Saques', href: '/saques', icon: ArrowDownToLine },
-          { title: 'Extrato', href: '/extrato', icon: Receipt },
-          { title: 'Disputas', href: '/disputas', icon: Scale },
+          // Financeiro só existe depois de haver trabalho para faturar.
+          // Assinatura e Planos ficam de fora: é onde o designer paga o VIU,
+          // e trancar isso seria trancar a própria receita.
+          { title: 'Faturas', href: '/faturas', icon: Receipt, precisa: 'projeto' },
+          { title: 'Saques', href: '/saques', icon: ArrowDownToLine, precisa: 'projeto' },
+          { title: 'Extrato', href: '/extrato', icon: Receipt, precisa: 'projeto' },
+          { title: 'Disputas', href: '/disputas', icon: Scale, precisa: 'projeto' },
           { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
           { title: 'Planos', href: '/planos', icon: CreditCard },
         ],
@@ -402,6 +438,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
                           item={item}
                           active={isActive(item.href)}
                           collapsed={collapsed}
+                          bloqueio={motivoDoBloqueio(item, conteudo)}
                         />
                       ))}
                     </div>
@@ -419,26 +456,91 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   );
 }
 
+/**
+ * Por que a tela ainda não faz sentido — ou `null` quando faz.
+ *
+ * Enquanto `conteudo` é `null` ninguém é bloqueado: não saber ainda não é
+ * motivo para trancar.
+ */
+function motivoDoBloqueio(
+  item: NavItem,
+  conteudo: { temProjeto: boolean; temArte: boolean } | null,
+): string | null {
+  if (!item.precisa || !conteudo) return null;
+  if (item.precisa === 'projeto' && !conteudo.temProjeto) {
+    return 'Disponível depois do seu primeiro projeto';
+  }
+  if (item.precisa === 'arte' && !conteudo.temArte) {
+    return 'Disponível depois da primeira arte enviada';
+  }
+  return null;
+}
+
 function NavItemRow({
   item,
   active,
   collapsed,
+  bloqueio,
 }: {
   item: NavItem;
   active: boolean;
   collapsed: boolean;
+  bloqueio?: string | null;
 }) {
   const Icon = item.icon;
+
+  const classe = cn(
+    "group/item relative flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors outline-none",
+    bloqueio
+      ? "cursor-not-allowed text-muted-foreground/60"
+      : "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
+    active && !bloqueio ? "bg-accent text-accent-foreground" : !bloqueio && "text-muted-foreground",
+    item.disabled && "pointer-events-none opacity-50",
+  );
+
+  /**
+   * Bloqueado não é `<Link>` com `pointer-events-none`: isso só engana o
+   * mouse — teclado e leitor de tela continuam entrando. Aqui vira um `span`,
+   * fora da ordem de tabulação, com `aria-disabled` para quem ouve a tela.
+   */
+  if (bloqueio) {
+    const conteudoBloqueado = (
+      <span className={classe} aria-disabled="true">
+        {/*
+          * Recolhida, a barra mostra só ícones: sem o cadeado sobreposto, a
+          * única pista de "trancado" seria o cinza mais claro, que não se lê.
+          * O cadeado fica pequeno e no canto para não apagar o ícone da tela,
+          * que é o que identifica o item.
+          */}
+        <span className={cn("relative", collapsed ? "mx-auto" : "mr-3")}>
+          <Icon className="h-4 w-4" />
+          {collapsed && (
+            <Lock className="absolute -bottom-1 -right-1 h-2.5 w-2.5 rounded-full bg-background" aria-hidden />
+          )}
+        </span>
+        {!collapsed && (
+          <div className="ml-1 flex w-full items-center justify-between gap-2">
+            <span>{item.title}</span>
+            <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+          </div>
+        )}
+      </span>
+    );
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{conteudoBloqueado}</TooltipTrigger>
+        <TooltipContent side="right">
+          <span>{bloqueio}</span>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   const content = (
     <Link
       href={item.href}
-      className={cn(
-        "group/item relative flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors outline-none",
-        "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
-        item.disabled && "pointer-events-none opacity-50"
-      )}
+      className={classe}
       aria-current={active ? 'page' : undefined}
     >
       <span
