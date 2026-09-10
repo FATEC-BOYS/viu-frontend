@@ -16,6 +16,7 @@ import {
   listArtes,
   listAtividade,
   updateProjeto,
+  createProjeto,
   type Projeto,
   type ProximoPasso as LibProximoPasso,
   type TarefasKanban,
@@ -344,6 +345,56 @@ export default function ProjetoPage() {
     };
   }
 
+  /**
+   * Os três itens do menu "⋮" eram `console.log`. Duplicar e as transições de
+   * status existem na API; "Exportar" não tem formato nem endpoint definidos
+   * e saiu do menu.
+   */
+  async function mudarStatus(status: Projeto["status"], recado: string) {
+    if (!projeto) return;
+    try {
+      const atualizado = await updateProjeto(projeto.id, { status });
+      setProjeto(atualizado);
+      toast.success(recado);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não foi possível mudar o status do projeto.");
+    }
+  }
+
+  async function duplicarProjeto() {
+    if (!projeto) return;
+    if (!projeto.cliente?.id) {
+      toast.error("Este projeto não tem cliente, e um projeto novo precisa de um.");
+      return;
+    }
+    try {
+      /**
+       * Nasce em andamento, como qualquer projeto criado pelo formulário.
+       * RASCUNHO existe no banco, mas é o estado de quem está esperando o
+       * cliente aceitar o convite — não é um rascunho que a designer escolhe,
+       * e `validateProjetoInput` recusa esse valor de propósito.
+       *
+       * A cópia não leva o prazo: data de entrega é do trabalho anterior, e
+       * herdá-la calada faria a tela nascer com um compromisso que ninguém
+       * assumiu.
+       */
+      const copia = await createProjeto({
+        nome: `${projeto.nome} (cópia)`,
+        descricao: projeto.descricao ?? null,
+        status: "EM_ANDAMENTO",
+        orcamento: projeto.orcamento ?? 0,
+        prazo: null,
+        cliente_id: projeto.cliente.id,
+        equipe_id: projeto.equipe?.id ?? null,
+        skipBriefingEval: true,
+      });
+      toast.success("Projeto duplicado.");
+      router.push(`/projetos/${copia.id}`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não foi possível duplicar o projeto.");
+    }
+  }
+
   async function concluirProjeto() {
     if (!projeto) return;
     if (!confirm(`Concluir "${projeto.nome}"? Ele sai da lista de projetos em andamento.`)) return;
@@ -434,9 +485,13 @@ export default function ProjetoPage() {
         statusPill={statusPill ?? undefined}
         onEditar={() => setEditando(true)}
         onPessoas={() => setAcessosAberto(true)}
-        onDuplicar={() => console.log("duplicar", projeto.id)}
-        onExportar={() => console.log("exportar", projeto.id)}
-        onArquivar={() => console.log("arquivar", projeto.id)}
+        onDuplicar={duplicarProjeto}
+        onPausar={() => mudarStatus("PAUSADO", "Projeto pausado.")}
+        onRetomar={() => mudarStatus("EM_ANDAMENTO", "Projeto retomado.")}
+        onCancelar={() => {
+          if (!confirm(`Cancelar "${projeto.nome}"? Cancelado é definitivo — não dá para retomar depois.`)) return;
+          mudarStatus("CANCELADO", "Projeto cancelado.");
+        }}
       />
 
 
