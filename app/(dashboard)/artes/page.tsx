@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -238,6 +239,14 @@ function ArtesPageInner() {
   const { user } = useAuth();
   const router = useRouter();
 
+  /**
+   * Muda quando algo fora dos filtros altera a lista — criar uma arte, por
+   * exemplo. `router.refresh()` sozinho não servia: a lista é buscada por um
+   * efeito que só depende dos filtros, então quem acabava de criar uma arte
+   * ficava olhando a lista antiga sem entender se tinha dado certo.
+   */
+  const [recarregar, setRecarregar] = useState(0);
+
   // Quick Look
   const [openQL, setOpenQL] = useState(false);
   const [arteQL, setArteQL] = useState<string | null>(null);
@@ -290,7 +299,7 @@ function ArtesPageInner() {
       })
       .catch(() => setError("Não foi possível carregar as artes."))
       .finally(() => setLoading(false));
-  }, [searchTerm, statusFilter, tipoFilter, projetoFilter, clienteFilter, autorFilter, sortBy, page, pageSize]);
+  }, [searchTerm, statusFilter, tipoFilter, projetoFilter, clienteFilter, autorFilter, sortBy, page, pageSize, recarregar]);
 
   // Facetas dinâmicas (baseadas no resultado atual)
   const projetos = useMemo(
@@ -625,7 +634,8 @@ function ArtesPageInner() {
               onFinished={() => {
                 setOpenWizard(false);
                 setWizardProjectId(null);
-                router.refresh();
+                setRecarregar((n) => n + 1);
+                toast.success("Arte criada.");
               }}
             />
           ) : (

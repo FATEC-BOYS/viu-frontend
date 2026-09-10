@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { api, apiUpload } from "@/lib/api";
 import { validarTamanho } from "@/lib/uploadLimits";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import StepDetails from "./wizard/StepDetails";
@@ -46,7 +47,9 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   const [gerarLinkPublico, setGerarLinkPublico] = useState(false);
   const [somenteLeitura, setSomenteLeitura] = useState(true);
   const [expiraDias, setExpiraDias] = useState<number>(7);
-  const [preToken, setPreToken] = useState<string | null>(null);
+  /** URL real do link público, devolvida pelo backend depois de criado. */
+  const [linkCriado, setLinkCriado] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   const canStep1 = useMemo(() => !!projetoId && nome.trim().length > 0, [projetoId, nome]);
   const canStep2 = useMemo(() => !!file, [file]);
@@ -113,7 +116,20 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
     try {
       if (gerarLinkPublico) {
         const expiraEm = new Date(Date.now() + expiraDias * 24 * 60 * 60 * 1000).toISOString();
-        await api.post("/links", { arteId, expiraEm, somenteLeitura });
+        const resposta = await api.post<{ data?: { url?: string } }>("/links", {
+          arteId, expiraEm, somenteLeitura,
+        });
+        /**
+         * Quem pede um link público quer o endereço na mão. Fechar o modal
+         * aqui fazia o link — a única coisa que a pessoa foi buscar — sumir
+         * sem nunca ter sido mostrado.
+         */
+        const url = resposta?.data?.url;
+        // A lista da página é atualizada quando o modal fecha, em "Concluir".
+        if (url) {
+          setLinkCriado(url);
+          return;
+        }
       }
 
       onFinished?.(arteId);
@@ -158,7 +174,28 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
             setFile={setFile} setErr={setErr} onPreview={setPreviewLocal}
           />
         )}
-        {step === 3 && (
+        {step === 3 && linkCriado && (
+          <div className="space-y-3">
+            <div className="text-sm font-medium">Arte criada. O link público está pronto:</div>
+            <div className="flex items-center gap-2">
+              <Input readOnly value={linkCriado} className="flex-1" onFocus={(e) => e.currentTarget.select()} />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigator.clipboard?.writeText(linkCriado).then(() => setCopiado(true)).catch(() => {})}
+              >
+                {copiado ? "Copiado" : "Copiar"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => window.open(linkCriado, "_blank")}>
+                Abrir
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ele também fica em “Links compartilhados”, no menu — não precisa guardar agora.
+            </p>
+          </div>
+        )}
+        {step === 3 && !linkCriado && (
           <>
             <StepOptions
               notificarAoEnviar={notificarAoEnviar}
@@ -169,8 +206,6 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
               setSomenteLeitura={setSomenteLeitura}
               expiraDias={expiraDias}
               setExpiraDias={setExpiraDias}
-              preToken={preToken}
-              setPreToken={setPreToken}
             />
             <Separator className="my-4" />
             {previewLocal && (
@@ -203,11 +238,14 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
             Continuar
           </Button>
         )}
-        {step === 3 && (
+        {step === 3 && !linkCriado && (
           <Button onClick={finalizeCreate} disabled={busy}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar
           </Button>
+        )}
+        {step === 3 && linkCriado && (
+          <Button onClick={() => onFinished?.(arteId!)}>Concluir</Button>
         )}
       </div>
     </div>
