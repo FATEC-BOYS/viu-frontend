@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Thumb from "@/components/layout/Thumb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,13 +63,9 @@ export default function AprovacaoPanel({
               <div className="grid grid-cols-[96px_1fr] gap-0">
                 {/* Thumb */}
                 <div className="relative h-full min-h-[96px] bg-muted">
-                  {it.previewUrl ? (
-                    <Image src={it.previewUrl} alt={it.arteNome} fill className="object-cover" />
-                  ) : (
-                    <div className="h-full w-full grid place-items-center text-[10px] text-muted-foreground">
-                      sem preview
-                    </div>
-                  )}
+                  {/* Ver ArtesDenseList: `<Image>` cru derruba a página em host não
+                      declarado; `Thumb` transforma a falha em ícone. */}
+                  <Thumb src={it.previewUrl} alt={it.arteNome} sizes="96px" iconClassName="h-4 w-4" />
                 </div>
 
                 <CardContent className="p-3 space-y-2">

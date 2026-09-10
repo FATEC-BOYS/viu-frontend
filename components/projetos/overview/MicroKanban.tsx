@@ -23,10 +23,15 @@ function Col({
   return (
     <Card className="h-full">
       <CardContent className="p-3 space-y-2">
-        <div className="flex items-center justify-between">
+        {/*
+          * Altura fixa no cabeçalho: só a primeira coluna tinha o botão
+          * "+ Nova", e a altura dele empurrava o título dessa coluna para
+          * baixo — as três ficavam desalinhadas entre si.
+          */}
+        <div className="flex h-8 items-center justify-between">
           <div className="text-xs font-medium">{title}</div>
           {onNovo && (
-            <Button size="sm" variant="ghost" onClick={onNovo}>
+            <Button size="sm" variant="ghost" className="h-7" onClick={onNovo}>
               + Nova
             </Button>
           )}
@@ -66,9 +71,37 @@ export default function MicroKanban({
   onAbrir,
 }: {
   kanban: TarefasKanban;
-  onNovo: () => void;
+  /**
+   * Opcional de propósito: enquanto não existe uma tela de criar tarefa, o
+   * botão não aparece. Um botão que só avisa que não funciona continua sendo
+   * uma promessa quebrada, e ocupa o lugar de uma que funcione.
+   */
+  onNovo?: () => void;
   onAbrir: (id: string) => void;
 }) {
+  /**
+   * Três cartões repetindo "Sem tarefas" ocupavam metade da Visão Geral para
+   * dizer uma coisa só. Projeto sem tarefa nenhuma merece uma linha, não um
+   * quadro vazio em triplicado.
+   */
+  const vazio =
+    kanban.pendente.total === 0 &&
+    kanban.em_andamento.total === 0 &&
+    kanban.concluida.total === 0;
+
+  if (vazio) {
+    return (
+      <Card className="h-full">
+        <CardContent className="flex h-full flex-col justify-center gap-1 p-4">
+          <p className="text-sm font-medium">Nenhuma tarefa neste projeto</p>
+          <p className="text-xs text-muted-foreground">
+            Tarefas ajudam a lembrar o que falta antes de mandar para o cliente.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <Col

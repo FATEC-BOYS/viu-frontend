@@ -37,7 +37,7 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
       // dedup by id
       const seen = new Set<string>()
       const unique = all.filter(f => { if (seen.has(f.id)) return false; seen.add(f.id); return true })
-      setFaturas(unique.filter(f => f.projeto.id === projetoId))
+      setFaturas(unique.filter(f => f.projeto?.id === projetoId))
     }).catch(console.error)
       .finally(() => setLoading(false))
   }, [projetoId])
@@ -59,10 +59,16 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
       setFaturas(all.filter(f => {
         if (seen.has(f.id)) return false
         seen.add(f.id)
-        return f.projeto.id === projetoId
+        return f.projeto?.id === projetoId
       }))
-    } catch {
-      toast.error('Erro ao gerar fatura.')
+    } catch (e: any) {
+      /**
+       * O servidor já diz o que faltou — "Projeto não possui orçamento
+       * definido", "Já existe uma fatura ativa". Trocar isso por "Erro ao
+       * gerar fatura" deixava a pessoa sem a única informação que resolveria
+       * o problema dela.
+       */
+      toast.error(e?.message || 'Erro ao gerar fatura.')
     } finally {
       setGenerating(false)
     }
@@ -105,7 +111,12 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
           </motion.div>
         ) : (
           faturas.map((fatura, i) => {
-            const { label, icon: Icon, cls } = STATUS_CFG[fatura.status]
+            // A coluna `status` é texto livre no banco, não enum: um valor
+            // fora deste mapa derrubava a aba inteira em vez de mostrar uma
+            // fatura com rótulo desconhecido.
+            const { label, icon: Icon, cls } = STATUS_CFG[fatura.status] ?? {
+              label: fatura.status, icon: AlertCircle, cls: 'text-muted-foreground bg-muted',
+            }
             return (
               <motion.div
                 key={fatura.id}

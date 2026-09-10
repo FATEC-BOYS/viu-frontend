@@ -15,9 +15,9 @@ import {
   lembrarAprovadores as lembrarAprovadoresApi,
   listArtes,
   listAtividade,
+  updateProjeto,
   type Projeto,
   type ProximoPasso as LibProximoPasso,
-  type ProximoPassoKind,
   type TarefasKanban,
   type AprovacaoPainel as LibAprovacaoPainel,
 } from "@/lib/projects";
@@ -26,7 +26,8 @@ import ProjetoHeader from "@/components/projetos/ProjetoHeader";
 import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
 import GerenciarAcessosDrawer from "@/components/projetos/pessoas/GerenciarAcessosDrawer";
 
-import ResumoCards from "@/components/projetos/overview/ResumoCards";
+import EstadoDoProjeto from "@/components/projetos/overview/EstadoDoProjeto";
+import NumerosDoProjeto from "@/components/projetos/overview/NumerosDoProjeto";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
 import MicroKanban from "@/components/projetos/overview/MicroKanban";
 import CTAContextual from "@/components/projetos/overview/CTAContextual";
@@ -55,6 +56,8 @@ import type { AtividadeItem as UIAtividadeItem } from "@/components/projetos/act
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
+import ProjetoModal, { type ProjetoInitial } from "@/components/projetos/ProjetoModal";
+import { toast } from "sonner";
 
 type EstadoCTA = "CRIAR_ARTE" | "PEDIR_APROVACAO" | "CONCLUIR";
 
@@ -106,6 +109,21 @@ export default function ProjetoPage() {
     return pedida && ABAS_VALIDAS.includes(pedida) ? pedida : "overview";
   });
   const [acessosAberto, setAcessosAberto] = useState(false);
+  /**
+   * "Editar" no cabeçalho empurrava `?edit=1` e ninguém lia o parâmetro — o
+   * botão trocava a URL e não abria nada. O mesmo modal atende "Definir
+   * prazo" nos próximos passos, que também era um `console.log`.
+   */
+  const [editando, setEditando] = useState(false);
+
+  /**
+   * `?edit=1` continua funcionando para quem chega de fora com esse link.
+   * Lido depois da montagem: decidir no primeiro render divergiria da
+   * hidratação, porque o servidor não vê a URL do navegador.
+   */
+  useEffect(() => {
+    if (searchParams.get("edit") === "1") setEditando(true);
+  }, [searchParams]);
 
   useEffect(() => {
     let mounted = true;
@@ -140,13 +158,6 @@ export default function ProjetoPage() {
   const [passos, setPassos] = useState<LibProximoPasso[]>([]);
   const [kanban, setKanban] = useState<TarefasKanban | null>(null);
 
-  const ALLOWED_KINDS: ReadonlyArray<ProximoPassoKind> =
-    ["APROVADOR", "PRAZO", "TAREFA", "APROVACAO", "GENERIC"];
-  function coerceKind(input: any): ProximoPassoKind {
-    const k = String(input ?? "").toUpperCase() as ProximoPassoKind;
-    return (ALLOWED_KINDS as readonly string[]).includes(k) ? k : "GENERIC";
-  }
-
   function adaptResumo(raw: any): ProjetoResumoUI {
     return {
       artesAprovadas: Number(raw?.artesAprovadas ?? raw?.aprovadas ?? raw?.aprovadas_count ?? 0),
@@ -172,11 +183,20 @@ export default function ProjetoPage() {
         getTarefasKanban(id),
       ]);
 
+      /**
+       * O `kind` chega pronto de `getProximosPassos` e é o que diz o que
+       * fazer. Antes ele passava por um `coerceKind` que só aceitava cinco
+       * valores — `DEFINIR_PRAZO_PROJETO` e `ENVIAR_APROVACAO` viravam
+       * `GENERIC` — e um `tipo: it.tipo ?? "TAREFA"` carimbava tudo como
+       * tarefa. O botão "Resolver" então decidia o destino a partir de um
+       * campo que já tinha perdido a informação, e mandava todo mundo para a
+       * aba Tarefas.
+       */
       const passosLib: LibProximoPasso[] = (p ?? []).map((it: any, idx: number) => ({
         id: String(it.id ?? idx),
-        kind: coerceKind(it.kind ?? it.tipo ?? "GENERIC"),
-        label: String(it.label ?? "Tarefa"),
-        tipo: it.tipo ?? "TAREFA",
+        kind: it.kind,
+        label: String(it.label ?? "Próximo passo"),
+        meta: it.meta,
         done: !!it.done,
       }));
 
@@ -221,7 +241,7 @@ export default function ProjetoPage() {
       return {
         id: String(r.id),
         nome: String(r.nome ?? "Sem nome"),
-        thumb: r.thumb ?? r.preview ?? null,
+        preview_url: r.preview_url ?? null,
         versao: Number(r.versao ?? 1),
         status: String(r.status ?? "EM_ANALISE"),
         tipo: String(r.tipo ?? "DESCONHECIDO"),
@@ -268,6 +288,7 @@ export default function ProjetoPage() {
           versaoAtual: Number(e.versao ?? 1),
           status: "EM_ANALISE",
           criadoEm: e.criado_em,
+          previewUrl: e.arte_preview_url ?? null,
           aprovadores: [],
         });
       }
@@ -296,6 +317,37 @@ export default function ProjetoPage() {
     try {
       setPainel(adaptPainel(await getAprovacaoPainel(id)));
     } finally { setApLoading(false); }
+  }
+
+  /**
+   * Era `console.log("Concluir projeto")`. O CTA aparece justamente quando
+   * tudo já foi aprovado — o momento em que a pessoa quer fechar — e não
+   * fazia nada.
+   */
+  /** O modal edita a partir do formato do formulário, não do da API. */
+  function paraEdicao(p: Projeto): ProjetoInitial {
+    return {
+      id: p.id,
+      nome: p.nome,
+      descricao: p.descricao ?? null,
+      status: p.status,
+      orcamento: p.orcamento ?? 0,
+      prazo: p.prazo ?? null,
+      cliente_id: p.cliente?.id ?? null,
+      equipe_id: p.equipe?.id ?? null,
+    };
+  }
+
+  async function concluirProjeto() {
+    if (!projeto) return;
+    if (!confirm(`Concluir "${projeto.nome}"? Ele sai da lista de projetos em andamento.`)) return;
+    try {
+      const atualizado = await updateProjeto(projeto.id, { status: "CONCLUIDO" });
+      setProjeto(atualizado);
+      toast.success("Projeto concluído.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não foi possível concluir o projeto.");
+    }
   }
 
   async function lembrarAprovadores(aprovacaoId: string) {
@@ -371,7 +423,7 @@ export default function ProjetoPage() {
       <ProjetoHeader
         projeto={projeto}
         statusPill={statusPill ?? undefined}
-        onEditar={() => router.push(`/projetos/${projeto.id}?edit=1`)}
+        onEditar={() => setEditando(true)}
         onPessoas={() => setAcessosAberto(true)}
         onDuplicar={() => console.log("duplicar", projeto.id)}
         onExportar={() => console.log("exportar", projeto.id)}
@@ -387,33 +439,57 @@ export default function ProjetoPage() {
             <OverviewSkeleton />
           ) : (
             <>
-              <ResumoCards resumo={resumo} />
-              <div className="grid gap-4 md:grid-cols-2">
+              {/*
+                * A ordem responde três perguntas, nesta sequência: em que pé
+                * está, o que eu faço agora, e o que os números dizem. Antes a
+                * tela abria pelos números e escondia a ação no rodapé.
+                */}
+              <EstadoDoProjeto
+                resumo={resumo}
+                estado={resumo.estado ?? "CRIAR_ARTE"}
+                onAction={() => {
+                  if (resumo.estado === "CONCLUIR") concluirProjeto();
+                  else if (resumo.estado === "PEDIR_APROVACAO") setTab("approval");
+                  else setTab("artes");
+                }}
+              />
+
+              {/* O kanban tem três colunas dentro: em metade da largura os
+                  cartões ficam espremidos. */}
+              <div className="grid gap-4 md:grid-cols-[2fr_3fr]">
                 <ProximosPassos
                   passos={passos}
                   onAction={passo => {
-                    if (passo.tipo === "APROVADOR") setTab("approval");
-                    if (passo.tipo === "PRAZO") console.log("definir prazo");
-                    if (passo.tipo === "TAREFA") console.log("abrir tarefa");
-                    if (passo.tipo === "APROVACAO") setTab("approval");
+                    switch (passo.kind) {
+                      // O prazo se define no mesmo modal do "Editar".
+                      case "DEFINIR_PRAZO_PROJETO":
+                      case "PRAZO":
+                        setEditando(true);
+                        break;
+                      case "ENVIAR_APROVACAO":
+                      case "LEMBRAR_APROVADORES":
+                      case "CONVIDAR_APROVADOR":
+                      case "APROVADOR":
+                      case "APROVACAO":
+                        setTab("approval");
+                        break;
+                      case "ATRIBUIR_TAREFA":
+                      case "TAREFA":
+                        setTab("tasks");
+                        break;
+                      default:
+                        setTab("artes");
+                    }
                   }}
                 />
-                <MicroKanban
-                  kanban={kanban}
-                  onNovo={() => console.log("nova tarefa")}
-                  onAbrir={tid => console.log("abrir tarefa", tid)}
-                />
+                <MicroKanban kanban={kanban} onAbrir={() => setTab("tasks")} />
               </div>
-              <div className="flex justify-end">
-                <CTAContextual
-                  estado={resumo.estado ?? "CRIAR_ARTE"}
-                  onClick={() => {
-                    if (resumo.estado === "CONCLUIR") console.log("Concluir projeto");
-                    else if (resumo.estado === "PEDIR_APROVACAO") setTab("approval");
-                    else setTab("artes");
-                  }}
-                />
-              </div>
+
+              <NumerosDoProjeto
+                resumo={resumo}
+                onDefinirPrazo={() => setEditando(true)}
+                onEditarOrcamento={() => setEditando(true)}
+              />
             </>
           )
         )}
@@ -459,8 +535,7 @@ export default function ProjetoPage() {
                 em_andamento: { top: [], total: 0 },
                 concluida: { top: [], total: 0 },
               }}
-              onNovo={() => console.log("nova tarefa")}
-              onAbrir={tid => console.log("abrir tarefa", tid)}
+              onAbrir={() => router.push("/tarefas")}
             />
           )
         )}
@@ -495,13 +570,39 @@ export default function ProjetoPage() {
               total={actTotal}
               loading={actLoading}
               onLoadMore={() => loadActivity(true)}
-              onOpen={ref => console.log("abrir no contexto", ref)}
+              /**
+               * Antes isto era um `console.log`: o botão existia em toda linha
+               * do feed e não levava a lugar nenhum. Cada tipo tem um destino
+               * dentro do próprio projeto — a arte abre a gaveta de preview,
+               * tarefa e aprovação trocam de aba.
+               */
+              onOpen={ref => {
+                if (ref.kind === "arte") { setTab("artes"); setPeekId(ref.id); return; }
+                if (ref.kind === "tarefa") { setTab("tasks"); return; }
+                if (ref.kind === "aprovacao") { setTab("approval"); return; }
+                if (ref.kind === "convite") router.push("/convites");
+              }}
             />
           )
         )}
 
         {tab === "billing" && <FaturaTab projetoId={id} />}
       </div>
+
+      <ProjetoModal
+        open={editando}
+        onOpenChange={setEditando}
+        initial={paraEdicao(projeto)}
+        onSubmit={async (valores) => {
+          const atualizado = await updateProjeto(projeto.id, valores);
+          setProjeto(atualizado);
+          setEditando(false);
+          toast.success("Projeto atualizado.");
+          // O resumo carrega prazo e orçamento: sem recarregar, a faixa de
+          // números continuaria mostrando o valor antigo.
+          loadOverview();
+        }}
+      />
     </div>
   );
 }
