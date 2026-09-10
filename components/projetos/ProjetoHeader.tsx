@@ -27,8 +27,9 @@ export default function ProjetoHeader({
   onEditar,
   onPessoas,
   onDuplicar,
-  onExportar,
-  onArquivar,
+  onPausar,
+  onRetomar,
+  onCancelar,
 }: {
   projeto: Projeto;
   statusPill?: { label: string; tone: PillTone };
@@ -36,8 +37,17 @@ export default function ProjetoHeader({
   /** Abre o painel de pessoas com acesso e convites do projeto. */
   onPessoas?: () => void;
   onDuplicar: () => void;
-  onExportar: () => void;
-  onArquivar: () => void;
+  /**
+   * O menu tinha "Duplicar", "Exportar" e "Arquivar", os três ligados a
+   * `console.log`. "Arquivar" não existe no modelo de dados — os estados são
+   * RASCUNHO, EM_ANDAMENTO, PAUSADO, CONCLUIDO e CANCELADO — e chamar de
+   * arquivo o que na verdade cancela seria mentir sobre o que o clique faz.
+   * "Exportar" não tem formato nem endpoint definidos, então sai daqui: item
+   * de menu não é lugar de guardar intenção.
+   */
+  onPausar: () => void;
+  onRetomar: () => void;
+  onCancelar: () => void;
 }) {
   return (
     <header className="flex items-start justify-between gap-3">
@@ -95,10 +105,22 @@ export default function ProjetoHeader({
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem onClick={onDuplicar}>Duplicar</DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportar}>Exportar</DropdownMenuItem>
-            <DropdownMenuItem onClick={onArquivar}>Arquivar</DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={onDuplicar}>Duplicar projeto</DropdownMenuItem>
+            {/* As transições vêm de PROJETO_TRANSITIONS no backend: pausar só
+                vale para quem está em andamento, retomar só para quem está
+                pausado, e concluído ou cancelado não voltam. */}
+            {projeto.status === "EM_ANDAMENTO" && (
+              <DropdownMenuItem onClick={onPausar}>Pausar</DropdownMenuItem>
+            )}
+            {projeto.status === "PAUSADO" && (
+              <DropdownMenuItem onClick={onRetomar}>Retomar</DropdownMenuItem>
+            )}
+            {["RASCUNHO", "EM_ANDAMENTO", "PAUSADO"].includes(projeto.status) && (
+              <DropdownMenuItem onClick={onCancelar} className="text-destructive">
+                Cancelar projeto
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
