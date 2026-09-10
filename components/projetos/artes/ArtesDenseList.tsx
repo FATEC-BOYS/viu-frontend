@@ -2,7 +2,9 @@
 
 import Thumb from "@/components/layout/Thumb";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { rotuloArte, rotuloTipoArte } from "@/lib/rotulos";
 import { cn } from "@/lib/utils";
 import { Eye, Plus, Send, ExternalLink } from "lucide-react";
 
@@ -60,19 +62,26 @@ export default function ArtesDenseList({
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium truncate">{a.nome}</div>
-                <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  v{a.versao} • {a.status}
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium">{a.nome}</span>
+                {/* `EM_ANALISE` era mostrado cru, com underscore e em caixa alta. */}
+                <Badge variant="outline" className="shrink-0 rounded-full text-[11px] font-normal">
+                  {rotuloArte(a.status)}
+                </Badge>
               </div>
-              <div className="text-xs text-muted-foreground truncate">
-                {a.tipo} • {a.autor?.nome ?? "—"} • {new Date(a.criado_em).toLocaleDateString("pt-BR")}
+              <div className="truncate text-xs text-muted-foreground">
+                v{a.versao} · {rotuloTipoArte(a.tipo)} · {a.autor?.nome ?? "—"} ·{" "}
+                {new Date(a.criado_em).toLocaleDateString("pt-BR")}
               </div>
             </div>
 
-            {/* Ações no hover */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+            {/*
+              * As ações estavam em `opacity-0 group-hover:opacity-100`: no
+              * celular, onde não existe hover, elas simplesmente não existiam
+              * — e no desktop ninguém descobre o que não aparece. Ficam
+              * visíveis, discretas, e ganham peso ao passar o mouse.
+              */}
+            <div className="flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
               <Button variant="ghost" size="icon" title="Prever" onClick={() => onPeek(a.id)}>
                 <Eye className="h-4 w-4" />
               </Button>

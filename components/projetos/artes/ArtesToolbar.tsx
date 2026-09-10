@@ -88,7 +88,11 @@ export default function ArtesToolbar({
 
       {/* Chips */}
       <div className="flex flex-wrap items-center gap-6">
-        {/* Tipo */}
+        {/*
+          * Sem tipos disponíveis não há grupo: antes sobrava um "Tipo:" solto
+          * na barra, apontando para nada.
+          */}
+        {(tiposDisponiveis?.length ?? 0) > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Tipo:</span>
           <div className="flex flex-wrap gap-1">
@@ -107,6 +111,7 @@ export default function ArtesToolbar({
             })}
           </div>
         </div>
+        )}
 
         {/* Status */}
         <div className="flex items-center gap-2">

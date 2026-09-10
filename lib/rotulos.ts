@@ -40,3 +40,28 @@ function traduzir(mapa: Record<string, string>, status: string | null | undefine
 export const rotuloArte = (s?: string | null) => traduzir(ARTE, s, 'Em análise')
 export const rotuloAprovacao = (s?: string | null) => traduzir(APROVACAO, s, 'Aguardando decisão')
 export const rotuloFeedback = (s?: string | null) => traduzir(FEEDBACK, s, 'Em aberto')
+
+/**
+ * O tipo de uma arte chega em dois formatos diferentes, porque a origem é
+ * inconsistente: o seed grava `IMAGEM`/`DOCUMENTO` e o upload grava o mimetype
+ * (`image/png`). Na tela, os dois viram a mesma palavra — mostrar "image/png"
+ * ao lado de "DOCUMENTO" na mesma lista é expor a bagunça do banco a quem só
+ * quer saber o que é o arquivo.
+ */
+const TIPO_ARTE: Record<string, string> = {
+  IMAGEM: 'Imagem',
+  VIDEO: 'Vídeo',
+  AUDIO: 'Áudio',
+  DOCUMENTO: 'Documento',
+  image: 'Imagem',
+  video: 'Vídeo',
+  audio: 'Áudio',
+  application: 'Documento',
+  text: 'Documento',
+}
+
+export function rotuloTipoArte(tipo?: string | null): string {
+  if (!tipo) return 'Arquivo'
+  const familia = tipo.includes('/') ? tipo.split('/')[0] : tipo.toUpperCase()
+  return TIPO_ARTE[familia] ?? 'Arquivo'
+}
