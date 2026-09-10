@@ -183,15 +183,15 @@ export default function TarefasPage() {
   const empty = filtered.length === 0;
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       {/* Header (mesma diagramação dos projetos) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Tarefas ✦</h1>
           <Badge variant="secondary" className="h-6">{stats.total} tarefas</Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
             <TabsList>
               <TabsTrigger value="cards"><LayoutGrid className="mr-2 h-4 w-4" /> Cards</TabsTrigger>

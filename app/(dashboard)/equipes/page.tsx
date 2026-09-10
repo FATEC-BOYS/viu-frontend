@@ -211,12 +211,12 @@ export default function EquipesPage() {
   }, [])
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-        className="flex items-start justify-between gap-4"
+        className="flex flex-wrap items-start justify-between gap-4"
       >
         <div>
           <div className="flex items-center gap-3">

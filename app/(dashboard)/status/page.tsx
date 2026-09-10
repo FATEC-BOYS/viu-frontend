@@ -113,8 +113,8 @@ export default function StatusPage() {
   }, [checks]);
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <Server className="h-6 w-6 text-primary" />
           <div>

@@ -235,7 +235,7 @@ export default function PerfilPage() {
   const isDesigner = usuario.tipo === 'DESIGNER'
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Meu Perfil</h1>
@@ -272,9 +272,9 @@ export default function PerfilPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <div className="relative group/avatar">
-                  <Avatar className="w-24 h-24">
+                  <Avatar className="size-24">
                     <AvatarImage src={avatarPreview ?? usuario.avatar ?? undefined} alt={usuario.nome} />
                     <AvatarFallback className="text-lg font-semibold">{getInitials(usuario.nome)}</AvatarFallback>
                   </Avatar>

@@ -264,9 +264,9 @@ export default function PrazosPage() {
   }
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
             <CalendarIcon className="h-7 w-7" /> Prazos
@@ -278,7 +278,7 @@ export default function PrazosPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por tarefa ou projeto"
-            className="w-72"
+            className="w-full sm:w-72"
           />
           <Button asChild variant="outline">
             <Link href="/projetos">Ver projetos</Link>

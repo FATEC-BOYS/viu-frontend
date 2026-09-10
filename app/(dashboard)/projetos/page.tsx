@@ -194,7 +194,7 @@ function ProjetosPageContent() {
     } finally { setBusy(false); }
   };
   const onDelete = async (id: string) => {
-    if (!confirm("Jogar fora? Tem certeza? Ainda dá tempo de desfazer…")) return;
+    if (!confirm("Jogar fora? Tem certeza? Ainda d�� tempo de desfazer…")) return;
     setBusy(true);
     try {
       const [artesRes, tarefasRes] = await Promise.all([
@@ -274,15 +274,15 @@ function ProjetosPageContent() {
   const empty = filtered.length === 0;
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Projetos ✦</h1>
           <Badge variant="secondary" className="h-6">{estatisticas.total} projetos</Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
             <TabsList>
               <TabsTrigger value="cards">Cards</TabsTrigger>

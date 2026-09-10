@@ -175,7 +175,7 @@ export default function PlanosPage() {
   const filteredPlanos = planos.filter(p => p.tipo === tab)
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -16 }}

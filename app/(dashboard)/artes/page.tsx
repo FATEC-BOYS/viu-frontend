@@ -378,9 +378,9 @@ function ArtesPageInner() {
 
   /* ===================== UI — “tcholinha” ===================== */
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       {/* Header compacto */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Artes ✦</h1>
           <Badge variant="secondary" className="h-6">{count} itens</Badge>

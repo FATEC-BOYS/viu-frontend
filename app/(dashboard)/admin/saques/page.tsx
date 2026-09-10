@@ -105,7 +105,7 @@ export default function AdminSaquesPage() {
   }
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Saques"
         description="Pagamentos solicitados pelos designers. O PIX é feito por fora — aqui você registra em que pé está."
