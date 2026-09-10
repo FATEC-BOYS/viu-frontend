@@ -43,12 +43,34 @@ export type ArteParaAprovacao = {
 export default function SolicitarAprovacaoDialog({
   artes,
   onSolicitado,
+  arteInicial,
+  aberto: abertoControlado,
+  onAbertoChange,
 }: {
   artes: ArteParaAprovacao[]
   onSolicitado?: () => void
+  /**
+   * Abre já com esta arte escolhida. A lista de artes tem um ícone de
+   * "solicitar aprovação" por linha; sem isto ele só conseguia jogar a
+   * pessoa na aba de aprovação para ela procurar a mesma arte de novo.
+   */
+  arteInicial?: string
+  /** Controlado por fora esconde o botão próprio e usa este estado. */
+  aberto?: boolean
+  onAbertoChange?: (v: boolean) => void
 }) {
-  const [aberto, setAberto] = useState(false)
+  const controlado = abertoControlado !== undefined
+  const [abertoInterno, setAbertoInterno] = useState(false)
+  const aberto = controlado ? abertoControlado : abertoInterno
+  const setAberto = (v: boolean) => {
+    if (controlado) onAbertoChange?.(v)
+    else setAbertoInterno(v)
+  }
   const [arteId, setArteId] = useState<string>('')
+
+  useEffect(() => {
+    if (aberto && arteInicial) setArteId(arteInicial)
+  }, [aberto, arteInicial])
   const [versao, setVersao] = useState<string>('')
   const [versoes, setVersoes] = useState<number[]>([])
   const [enviando, setEnviando] = useState(false)
@@ -102,11 +124,13 @@ export default function SolicitarAprovacaoDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={setAberto}>
-      <DialogTrigger asChild>
-        <Button size="sm" disabled={artes.length === 0}>
-          Solicitar aprovação
-        </Button>
-      </DialogTrigger>
+      {!controlado && (
+        <DialogTrigger asChild>
+          <Button size="sm" disabled={artes.length === 0}>
+            Solicitar aprovação
+          </Button>
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

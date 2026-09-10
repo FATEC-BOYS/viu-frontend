@@ -56,6 +56,8 @@ import type { AtividadeItem as UIAtividadeItem } from "@/components/projetos/act
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
+import NovaVersaoDialog from "@/components/artes/NovaVersaoDialog";
+import { getArteDetail, type ArteDetail } from "@/lib/artes";
 import ProjetoModal, { type ProjetoInitial } from "@/components/projetos/ProjetoModal";
 import { toast } from "sonner";
 
@@ -213,6 +215,10 @@ export default function ProjetoPage() {
   const [artFrom, setArtFrom] = useState(0);
   const [filters, setFilters] = useState<ArteFilters>({} as ArteFilters);
   const [peekId, setPeekId] = useState<string | null>(null);
+  /** Arte cujo diálogo de nova versão está aberto. */
+  const [arteVersao, setArteVersao] = useState<ArteDetail | null>(null);
+  /** Arte para a qual se está pedindo aprovação a partir da lista. */
+  const [arteAprovacao, setArteAprovacao] = useState<string | null>(null);
   const ART_PAGE = 12;
 
   function buildArtesQuery(from: number) {
@@ -384,7 +390,10 @@ export default function ProjetoPage() {
   }
 
   useEffect(() => {
-    if (tab === "overview" && !resumo) loadOverview();
+    // O kanban sai de `loadOverview`, e a aba Tarefas é só ele: quem entrava
+    // direto em `?tab=tasks` via três colunas vazias para sempre, porque nada
+    // tinha buscado as tarefas.
+    if ((tab === "overview" || tab === "tasks") && !resumo) loadOverview();
     // A aba de aprovação também depende das artes: é delas que sai a lista do
     // dialog de solicitar. Sem isso o botão nasce desabilitado para quem entra
     // direto nela.
@@ -514,6 +523,19 @@ export default function ProjetoPage() {
                   loading={artLoading}
                   onLoadMore={() => loadArtes(true)}
                   onPeek={arteId => setPeekId(arteId)}
+                  /*
+                   * Os dois ícones existiam na lista e não eram ligados a
+                   * nada — a página simplesmente não passava as funções, e o
+                   * componente escondia o botão. Agora "nova versão" busca o
+                   * detalhe (o diálogo precisa dele) e "solicitar aprovação"
+                   * abre já com a arte escolhida.
+                   */
+                  onNovaVersao={async arteId => {
+                    const detalhe = await getArteDetail(arteId);
+                    if (!detalhe) { toast.error("Não foi possível abrir esta arte."); return; }
+                    setArteVersao(detalhe);
+                  }}
+                  onPedirAprovacao={arteId => setArteAprovacao(arteId)}
                 />
                 <ArteQuickPeekDrawer
                   open={!!peekId}
@@ -588,6 +610,23 @@ export default function ProjetoPage() {
 
         {tab === "billing" && <FaturaTab projetoId={id} />}
       </div>
+
+      {arteVersao && (
+        <NovaVersaoDialog
+          open
+          onOpenChange={v => !v && setArteVersao(null)}
+          arte={arteVersao}
+          onCreated={() => { setArteVersao(null); loadArtes(); }}
+        />
+      )}
+
+      <SolicitarAprovacaoDialog
+        artes={artRows.map(a => ({ id: a.id, nome: a.nome, versaoAtual: a.versao }))}
+        arteInicial={arteAprovacao ?? undefined}
+        aberto={!!arteAprovacao}
+        onAbertoChange={v => !v && setArteAprovacao(null)}
+        onSolicitado={() => { setArteAprovacao(null); loadApproval(); loadArtes(); }}
+      />
 
       <ProjetoModal
         open={editando}

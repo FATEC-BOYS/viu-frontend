@@ -57,6 +57,18 @@ export default function AprovacaoPanel({
           const pendentes = it.aprovadores.filter(a => a.status === "PENDENTE").length;
           const rejeitados = it.aprovadores.filter(a => a.status === "REJEITADO").length;
           const aprovado = it.status === "APROVADO" || (rejeitados === 0 && pendentes === 0 && it.aprovadores.length > 0);
+          const desde = new Date(it.criadoEm).toLocaleDateString("pt-BR");
+          const faltam = it.aprovadores.filter(a => a.status === "PENDENTE");
+          const recado =
+            rejeitados > 0
+              ? "Ajustes pedidos — os comentários estão na arte."
+              : pendentes > 0
+                ? faltam.length === 1
+                  ? `Esperando ${faltam[0].nome} desde ${desde}`
+                  : `Esperando ${faltam.length} pessoas desde ${desde}`
+                : aprovado
+                  ? `Aprovada em ${desde}`
+                  : "Ninguém foi convidado para aprovar ainda.";
 
           return (
             <Card key={it.aprovacaoId} className="overflow-hidden">
@@ -73,9 +85,7 @@ export default function AprovacaoPanel({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium truncate">{it.arteNome}</div>
-                      <div className="text-xs text-muted-foreground">
-                        v{it.versaoAtual} • {new Date(it.criadoEm).toLocaleDateString("pt-BR")}
-                      </div>
+                      <div className="text-xs text-muted-foreground">v{it.versaoAtual}</div>
                     </div>
 
                     <Badge
@@ -125,10 +135,19 @@ export default function AprovacaoPanel({
                                       "border border-border bg-muted text-muted-foreground"
                                   )}
                                 >
-                                  {ap.status === "APROVADO" && <Check className="h-3 w-3" />}
-                                  {ap.status === "REJEITADO" && <X className="h-3 w-3" />}
-                                  {ap.status === "PENDENTE" && <Clock className="h-3 w-3" />}
-                                  <span>{ap.status === "PENDENTE" ? "Pendente" : ap.status === "REJEITADO" ? "Rejeitado" : "Aprovado"}</span>
+                                  {/*
+                                    * Só o ícone. Com um aprovador, o cartão
+                                    * dizia "Pendente" três vezes: no badge da
+                                    * arte, aqui, e no rodapé. O nome de quem
+                                    * falta é o que se procura numa lista de
+                                    * aprovação; o estado é a marca ao lado.
+                                    */}
+                                  {ap.status === "APROVADO" && <Check className="h-3.5 w-3.5" />}
+                                  {ap.status === "REJEITADO" && <X className="h-3.5 w-3.5" />}
+                                  {ap.status === "PENDENTE" && <Clock className="h-3.5 w-3.5" />}
+                                  <span className="sr-only">
+                                    {ap.status === "PENDENTE" ? "Aguardando decisão" : ap.status === "REJEITADO" ? "Recusou" : "Aprovou"}
+                                  </span>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left">
@@ -152,13 +171,14 @@ export default function AprovacaoPanel({
 
                   {/* Ações */}
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] text-muted-foreground">
-                      {pendentes > 0
-                        ? `${pendentes} pendente${pendentes > 1 ? "s" : ""}`
-                        : rejeitados > 0
-                        ? `${rejeitados} rejeição${rejeitados > 1 ? "es" : ""}`
-                        : "Tudo aprovado"}
-                    </div>
+                    {/*
+                      * "1 pendente" e "Tudo aprovado" recontavam o que o badge
+                      * e os ícones já diziam — e "Tudo aprovado" no rodapé de
+                      * uma arte lia como estado do projeto inteiro. Aqui a
+                      * linha diz de quem se está esperando, que é a única
+                      * informação nova que cabe neste ponto.
+                      */}
+                    <div className="text-xs text-muted-foreground truncate">{recado}</div>
 
                     <div className="flex gap-2">
                       {pendentes > 0 && (
@@ -169,7 +189,9 @@ export default function AprovacaoPanel({
                           className="gap-1"
                         >
                           <BellRing className="h-3.5 w-3.5" />
-                          Lembrar
+                          {/* "Lembrar" sozinho lê como "lembrar-se de algo".
+                              Quem clica aqui está cobrando outra pessoa. */}
+                          Enviar lembrete
                         </Button>
                       )}
                     </div>
