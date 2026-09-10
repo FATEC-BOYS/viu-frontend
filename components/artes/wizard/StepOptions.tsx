@@ -1,11 +1,8 @@
 "use client";
-import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Link as LinkIcon, Copy } from "lucide-react";
-import { buildShareUrl } from "./helpers";
+import { Link as LinkIcon } from "lucide-react";
 
 type Props = {
   notificarAoEnviar: boolean;
@@ -16,8 +13,6 @@ type Props = {
   setSomenteLeitura: (b: boolean) => void;
   expiraDias: number;
   setExpiraDias: (n: number) => void;
-  preToken: string | null;
-  setPreToken: (s: string | null) => void;
 };
 
 export default function StepOptions({
@@ -25,38 +20,7 @@ export default function StepOptions({
   gerarLinkPublico, setGerarLinkPublico,
   somenteLeitura, setSomenteLeitura,
   expiraDias, setExpiraDias,
-  preToken, setPreToken,
 }: Props) {
-
-  const shareUrl = useMemo(() => (preToken ? buildShareUrl(preToken) : ""), [preToken]);
-
-  function handleToggle(checked: boolean) {
-    setGerarLinkPublico(checked);
-    if (checked && !preToken) {
-      const t = (typeof crypto !== "undefined" && "randomUUID" in crypto)
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setPreToken(t);
-    }
-    if (!checked) setPreToken(null);
-  }
-
-  async function copyToClipboard() {
-    if (!shareUrl) return;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = shareUrl;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-    } catch {}
-  }
-
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -71,7 +35,7 @@ export default function StepOptions({
 
       <div className="space-y-2">
         <Label className="inline-flex items-center gap-3">
-          <Switch checked={gerarLinkPublico} onCheckedChange={handleToggle} />
+          <Switch checked={gerarLinkPublico} onCheckedChange={setGerarLinkPublico} />
           Gerar link público
         </Label>
         <p className="text-xs text-muted-foreground">
@@ -101,23 +65,19 @@ export default function StepOptions({
               </div>
             </div>
 
-            {preToken && (
-              <div className="space-y-1">
-                <Label>Link</Label>
-                <div className="flex items-center gap-2">
-                  <Input readOnly value={shareUrl} className="flex-1" />
-                  <Button type="button" variant="outline" size="icon" onClick={copyToClipboard} title="Copiar">
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={() => shareUrl && window.open(shareUrl, "_blank")}>
-                    Abrir
-                  </Button>
-                </div>
-                <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <LinkIcon className="w-3.5 h-3.5" /> Será criado ao clicar em “Criar”.
-                </div>
-              </div>
-            )}
+            {/*
+              * Aqui havia um campo "Link" com Copiar e Abrir, preenchido com
+              * um token inventado no navegador (`crypto.randomUUID()`). Quem
+              * é dono do token é o servidor, e ele gera outro — então aquele
+              * endereço nunca existiu: "Abrir" dava 404 e "Copiar" entregava
+              * um link morto, que a pessoa podia mandar para o cliente.
+              *
+              * O link real aparece depois de "Criar", que é quando ele passa
+              * a existir.
+              */}
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <LinkIcon className="w-3.5 h-3.5" /> O link aparece aqui depois de “Criar”.
+            </div>
           </div>
         )}
       </div>
