@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Thumb from "@/components/layout/Thumb";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -48,14 +48,15 @@ export default function ArtesDenseList({
           )}
         >
           <div className="flex items-center gap-3">
+            {/*
+              * `Thumb` em vez de `<Image>` cru: sem `unoptimized`, o next/image
+              * recusa qualquer host fora do `remotePatterns` com "Invalid src
+              * prop" — e isso não degrada, derruba a página inteira. O link do
+              * R2 é assinado e pode mudar de domínio; uma miniatura que falha
+              * tem que virar ícone, não tela de erro.
+              */}
             <div className="relative h-12 w-12 rounded-md overflow-hidden bg-muted flex-shrink-0">
-              {a.preview_url ? (
-                <Image src={a.preview_url} alt={a.nome} fill className="object-cover" />
-              ) : (
-                <div className="h-full w-full grid place-items-center text-[10px] text-muted-foreground">
-                  sem preview
-                </div>
-              )}
+              <Thumb src={a.preview_url} alt={a.nome} sizes="48px" iconClassName="h-4 w-4" />
             </div>
 
             <div className="min-w-0 flex-1">

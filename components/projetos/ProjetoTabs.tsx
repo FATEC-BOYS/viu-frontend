@@ -9,7 +9,12 @@ const TABS: { key: ProjetoTabKey; label: string }[] = [
   { key: "artes", label: "Artes" },
   { key: "tasks", label: "Tarefas" },
   { key: "approval", label: "Aprovação" },
-  { key: "activity", label: "Atividade" },
+  /**
+   * "Atividade" ao lado de "Tarefas" lia como coisa a fazer, quando é o
+   * histórico do que já aconteceu. A chave continua `activity` porque é o
+   * que o `?tab=` dos links existentes usa.
+   */
+  { key: "activity", label: "Linha do tempo" },
   { key: "billing", label: "Fatura" },
 ];
 

@@ -360,6 +360,13 @@ export interface ArteListItem {
   autor_nome: string | null
   versoes_qtd: number
   tags?: string[]
+  /**
+   * URL assinada da miniatura. O backend chama de `previewUrl`, a lista densa
+   * lê `preview_url` e o adaptador da página procurava por `thumb`: três nomes
+   * para o mesmo dado, nenhum deles casando, e a aba mostrava "sem preview"
+   * para sempre.
+   */
+  preview_url: string | null
 }
 
 export interface ArteFilters {
@@ -394,6 +401,7 @@ export async function listArtes(
     status: a.status,
     criado_em: a.criadoEm ?? a.criado_em ?? '',
     autor_nome: a.autor?.nome ?? null,
+    preview_url: a.previewUrl ?? null,
     versoes_qtd: 1,
     tags: [],
   }))
@@ -488,6 +496,8 @@ export interface AprovadorEstado {
   criado_em: string
   arte_id: string
   arte_nome: string | null
+  /** URL assinada da arte, para o painel decidir olhando em vez de no escuro. */
+  arte_preview_url: string | null
   versao: number
 }
 
@@ -509,6 +519,7 @@ export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPa
     criado_em: ap.criadoEm ?? ap.criado_em ?? '',
     arte_id: ap.arte?.id ?? ap.arteId,
     arte_nome: ap.arte?.nome ?? null,
+    arte_preview_url: ap.arte?.previewUrl ?? null,
     versao: ap.versaoNumero ?? ap.arte?.versao ?? 1,
   }))
 

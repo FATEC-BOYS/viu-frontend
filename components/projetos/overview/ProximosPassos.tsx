@@ -2,7 +2,7 @@
 
 import type { ProximoPasso } from "@/lib/projects";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function ProximosPassos({
@@ -28,7 +28,12 @@ export default function ProximosPassos({
         <ul className="divide-y">
           {passos.map((p, i) => (
             <li key={i} className="p-4 flex items-center gap-3">
-              <Checkbox disabled className="translate-y-[1px]" />
+              {/*
+                * Havia um Checkbox `disabled` aqui. Uma caixa que não marca
+                * promete uma interação que não existe — e a ação de verdade
+                * já é o botão ao lado.
+                */}
+              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{p.label}</div>
                 {p.meta && (

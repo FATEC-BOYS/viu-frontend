@@ -3,7 +3,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   ImageIcon,
   Layers,
@@ -157,6 +156,13 @@ export default function AtividadeItemRow({
       </Badge>
     ) : null;
 
+  const destino =
+    item.ref.kind === "arte" ? "Abrir a arte" :
+    item.ref.kind === "tarefa" ? "Abrir a tarefa" :
+    item.ref.kind === "aprovacao" ? "Ver a aprovação" :
+    item.ref.kind === "convite" ? "Ver os convites" :
+    null;
+
   return (
     <div className={cn("flex items-start gap-3 py-2", className)}>
       <Avatar className="h-8 w-8 mt-0.5">
@@ -170,11 +176,17 @@ export default function AtividadeItemRow({
       </Avatar>
 
       <div className="flex-1 min-w-0">
+        {/*
+          * Só o tempo relativo, com a data completa no title. Mostrar "3m" e
+          * "10/09/2026, 09:49:47" lado a lado gasta a linha inteira dizendo a
+          * mesma coisa duas vezes, e a precisão de segundos não interessa a
+          * ninguém lendo um histórico.
+          */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Icon className="h-3.5 w-3.5" />
-          <span>{timeAgo(criado_em)}</span>
-          <Separator orientation="vertical" className="h-3" />
-          <span>{new Date(criado_em).toLocaleString("pt-BR")}</span>
+          <span title={new Date(criado_em).toLocaleString("pt-BR")}>
+            {timeAgo(criado_em)}
+          </span>
         </div>
 
         <div className="mt-1 text-sm leading-5">
@@ -187,16 +199,24 @@ export default function AtividadeItemRow({
           </div>
         )}
 
-        <div className="mt-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => onOpen(item.ref)}
-          >
-            Ver no contexto
-          </Button>
-        </div>
+        {/*
+          * O rótulo diz para onde vai. "Ver no contexto" era a mesma frase
+          * para arte, tarefa, aprovação e convite — e não dizia nada em
+          * nenhuma delas. Sem destino conhecido, não há botão: um botão que
+          * não leva a lugar nenhum é pior que a ausência dele.
+          */}
+        {destino && (
+          <div className="mt-1.5">
+            <Button
+              size="sm"
+              variant="link"
+              className="h-auto p-0 text-xs"
+              onClick={() => onOpen(item.ref)}
+            >
+              {destino}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
