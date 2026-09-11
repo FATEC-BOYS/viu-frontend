@@ -7,9 +7,21 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
   --color-border: var(--border);
+
+  /*
+   * Pastéis. Não entram no cromo da interface — a tela julga cor, e qualquer
+   * saturação ao redor desloca a percepção da arte. Vivem no site, nos estados
+   * vazios e nos momentos de comemoração, que é onde nenhuma arte está sendo
+   * avaliada ao lado.
+   */
+  --color-pastel-lavanda: var(--pastel-lavanda);
+  --color-pastel-menta: var(--pastel-menta);
+  --color-pastel-pessego: var(--pastel-pessego);
+  --color-pastel-algodao: var(--pastel-algodao);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
@@ -116,6 +128,12 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--primary);
+
+  /* Os pastéis do guia, dessaturados o bastante para conviver com o laranja. */
+  --pastel-lavanda: oklch(0.85 0.055 295);
+  --pastel-menta:   oklch(0.88 0.055 165);
+  --pastel-pessego: oklch(0.89 0.055 55);
+  --pastel-algodao: oklch(0.87 0.055 5);
 }
 
 .dark {
@@ -162,6 +180,13 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--primary);
+
+  /* No escuro os mesmos matizes descem de luminosidade: pastel claro sobre
+     fundo escuro vira néon e rouba o olho da arte. */
+  --pastel-lavanda: oklch(0.58 0.06 295);
+  --pastel-menta:   oklch(0.58 0.06 165);
+  --pastel-pessego: oklch(0.60 0.06 55);
+  --pastel-algodao: oklch(0.58 0.06 5);
 }
 
 @layer base {
