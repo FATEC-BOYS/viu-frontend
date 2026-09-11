@@ -1,26 +1,20 @@
 'use client'
 
 import { FadeIn } from "@/components/layout/Motion";
-import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  FolderOpen, Clock, MessageSquare, CalendarDays, Rocket,
-  Receipt, Wallet, AlertCircle, ArrowRight, CreditCard
-} from 'lucide-react'
+import { FolderOpen, Receipt, Wallet, AlertCircle, ArrowRight, CreditCard } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
 import { pagamentosApi, SaldoInfo, Assinatura, Fatura, formatReais } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
-import { prioridadeLabel, statusLabel } from '@/lib/tarefas'
-import type { ProjetoStatus } from '@/lib/projects'
-import StatusBadge from '@/components/projetos/StatusBadge'
+import PainelDoDia from '@/components/dashboard/PainelDoDia'
+import FilaDoDia, { type ItemDaFila } from '@/components/dashboard/FilaDoDia'
+import { prioridadeLabel } from '@/lib/tarefas'
 
 type Projeto = {
   id: string
@@ -64,15 +58,12 @@ function FinanceiroCard({
     !assinatura || assinatura.status === 'CANCELADA' || assinatura.status === 'EXPIRADA'
 
   return (
-    <Card className="h-full flex flex-col min-h-[360px]">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center text-base gap-2">
-          <Wallet className="h-5 w-5" />
+    <Card className="gap-0 py-0">
+      <CardContent className="flex flex-col gap-3 p-4">
+        <h2 className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+          <Wallet className="size-3.5" />
           Financeiro
-        </CardTitle>
-        <CardDescription>Resumo de pagamentos</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-3">
+        </h2>
         {/* assinatura alert */}
         {assinaturaAlerta && (
           <motion.div
@@ -306,26 +297,69 @@ export default function DashboardPage() {
     .sort((a, b) => new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime())
     .slice(0, 6)
 
+  const diasAte = (iso: string) =>
+    Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
+
+  /**
+   * Uma fila só, em ordem de quem está esperando: primeiro outra pessoa
+   * (feedback), depois o seu roteiro (tarefa), por último o calendário.
+   * Eram três cartões do mesmo tamanho, como se escolher entre eles fosse
+   * trabalho de quem lê.
+   */
+  const fila: ItemDaFila[] = [
+    ...feedbacks.slice(0, 4).map<ItemDaFila>(f => ({
+      id: f.id,
+      tipo: 'feedback',
+      titulo: `${f.autor?.nome || 'Alguém'} comentou`,
+      apoio: f.conteudo,
+      href: '/feedbacks',
+    })),
+    ...tarefas.slice(0, 3).map<ItemDaFila>(t => ({
+      id: t.id,
+      tipo: 'tarefa',
+      titulo: t.titulo,
+      apoio: [t.projeto?.nome, prioridadeLabel[t.prioridade] ?? t.prioridade]
+        .filter(Boolean)
+        .join(' · '),
+      href: '/tarefas',
+    })),
+    ...proximosPrazos.slice(0, 3).map<ItemDaFila>(p => {
+      const dias = diasAte(p.prazo as string)
+      return {
+        id: p.id,
+        tipo: 'prazo',
+        titulo: p.nome,
+        apoio:
+          dias < 0
+            ? `Passou do prazo em ${new Date(p.prazo as string).toLocaleDateString('pt-BR')}`
+            : dias === 0
+              ? 'Entrega hoje'
+              : `Entrega em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
+        href: `/projetos/${p.id}`,
+      }
+    }),
+  ]
+
+  const prazoProximo = proximosPrazos[0]
+    ? { nome: proximosPrazos[0].nome, dias: diasAte(proximosPrazos[0].prazo as string) }
+    : null
+
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-4 sm:p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/*
+        * O título era "Dashboard ✶" com a linha "Aqui vai um panorama do seu
+        * estúdio hoje" embaixo — duas linhas que ninguém lê duas vezes, no
+        * lugar mais valioso da tela. Quem já entrou sabe onde está; o que ele
+        * não sabe é o que precisa dele.
+        */}
+      {mostrarOnboarding && (
         <div>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-            {mostrarOnboarding ? 'Vamos começar ✶' : 'Dashboard ✶'}
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Vamos começar ✶</h1>
           <p className="text-sm text-muted-foreground">
-            {mostrarOnboarding
-              ? `Oi, ${displayName}! Complete os passos abaixo e desbloqueie sua primeira entrega.`
-              : `Bem-vindo(a), ${displayName}. Aqui vai um panorama do seu estúdio hoje.`}
+            Oi, {displayName}! Complete os passos abaixo e desbloqueie sua primeira entrega.
           </p>
         </div>
-        {!mostrarOnboarding && (
-          <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
-            <Rocket className="h-4 w-4" />
-            <span>Dica: use os atalhos abaixo para ganhar tempo</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {mostrarOnboarding && (
         <TrilhaInicial
@@ -337,203 +371,96 @@ export default function DashboardPage() {
       )}
 
       {!mostrarOnboarding && (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Hoje</CardTitle>
-              <CardDescription>Como você está indo</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1">
-              <div className="grid grid-cols-2 gap-3 h-full">
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Projetos ativos</p>
-                  <p className="text-2xl font-semibold">{metricas.projetosAtivos}</p>
-                  <p className="text-[11px] text-muted-foreground">{metricas.totalProjetos} no total</p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Artes</p>
-                  <p className="text-2xl font-semibold">{metricas.totalArtes}</p>
-                  {/* dizia só "no total" embaixo do total — legenda sem informação */}
-                  <p className="text-[11px] text-muted-foreground">{metricas.artesAprovadas} aprovadas</p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Feedbacks recentes</p>
-                  <p className="text-2xl font-semibold">{metricas.feedbacksRecentes}</p>
-                  <p className="text-[11px] text-muted-foreground">últimos itens</p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Tarefas pendentes</p>
-                  <p className="text-2xl font-semibold">{metricas.tarefasPendentes}</p>
-                  <p className="text-[11px] text-muted-foreground">a fazer</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex flex-col gap-4">
+          <PainelDoDia
+            nome={displayName}
+            pendencia={{
+              feedbacks: metricas.feedbacksRecentes,
+              tarefas: metricas.tarefasPendentes,
+              prazoProximo,
+            }}
+          />
 
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Atividade recente</CardTitle>
-              <CardDescription>Feedbacks e comentários</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 h-full overflow-y-auto overflow-x-hidden pr-1">
-                {feedbacks.slice(0, 10).map(fb => (
-                  <div key={fb.id} className="flex gap-3 rounded-md border p-2 hover:bg-muted/40 transition">
-                    <div className="w-8 h-8 bg-primary/10 rounded-full grid place-items-center">
-                      <MessageSquare className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{fb.autor?.nome || 'Alguém'} comentou</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{fb.conteudo}</p>
-                    </div>
+          {/*
+            * Os números em uma linha, não em quatro caixas dentro de um
+            * cartão. Quem procura o número acha; quem veio trabalhar não
+            * tropeça neles antes de chegar na fila.
+            */}
+          <div className="flex flex-wrap gap-x-6 gap-y-1 px-1 text-sm text-muted-foreground">
+            <span>
+              <b className="font-semibold tabular-nums text-foreground">{metricas.projetosAtivos}</b>{' '}
+              {metricas.projetosAtivos === 1 ? 'projeto ativo' : 'projetos ativos'}
+            </span>
+            <span>
+              <b className="font-semibold tabular-nums text-foreground">{metricas.totalArtes}</b>{' '}
+              {metricas.totalArtes === 1 ? 'arte' : 'artes'}
+            </span>
+            <span>
+              <b className="font-semibold tabular-nums text-foreground">{metricas.feedbacksRecentes}</b>{' '}
+              {metricas.feedbacksRecentes === 1 ? 'feedback' : 'feedbacks'}
+            </span>
+            <span>
+              <b className="font-semibold tabular-nums text-foreground">{metricas.tarefasPendentes}</b>{' '}
+              {metricas.tarefasPendentes === 1 ? 'tarefa aberta' : 'tarefas abertas'}
+            </span>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+            <FilaDoDia itens={fila} />
+
+            <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+                  Seus projetos
+                </h2>
+                <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                  <Link href="/projetos?novo=1">Novo projeto</Link>
+                </Button>
+              </div>
+
+              {projetosEmAndamento.length === 0 ? (
+                <div className="flex items-center gap-3 rounded-lg border border-dashed bg-pastel-lavanda/15 p-4">
+                  <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-pastel-lavanda">
+                    <FolderOpen className="size-4 text-foreground/70" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">Nenhum projeto em andamento</p>
+                    <p className="text-xs text-muted-foreground">
+                      É por onde o trabalho entra no VIU.
+                    </p>
                   </div>
-                ))}
-                {feedbacks.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">
-                    Sem novidades por aqui 🙂
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+              ) : (
+                <ul className="flex flex-col">
+                  {projetosEmAndamento.slice(0, 5).map(projeto => (
+                    <li key={projeto.id} className="border-b last:border-b-0">
+                      <Link
+                        href={`/projetos/${projeto.id}`}
+                        className="block rounded-md py-2.5 transition-colors hover:bg-muted/50"
+                      >
+                        <span className="block truncate text-sm font-medium">{projeto.nome}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {projeto.cliente?.nome || 'Sem cliente'} ·{' '}
+                          {projeto._count?.artes ?? 0} {(projeto._count?.artes ?? 0) === 1 ? 'arte' : 'artes'}
+                          {projeto.prazo
+                            ? ` · entrega ${new Date(projeto.prazo).toLocaleDateString('pt-BR')}`
+                            : ''}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
 
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Ações rápidas</CardTitle>
-              <CardDescription>Atalhos que você realmente usa</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1">
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm"><Link href="/projetos/novo">Novo projeto</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/artes/nova">Enviar arte</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/artes">Gerar link</Link></Button>
-                <Button asChild size="sm" variant="ghost"><Link href="/feedbacks">Ver feedbacks</Link></Button>
-              </div>
-              <div className="mt-4 rounded-md border p-3 text-xs text-muted-foreground">
-                Dica: arraste e solte arquivos na página de{' '}
-                <Link href="/artes" className="underline underline-offset-4">Artes</Link>.
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-base">
-                <FolderOpen className="h-5 w-5 mr-2" />
-                Projetos em andamento
-              </CardTitle>
-              <CardDescription>Progresso e prazos</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="grid grid-cols-1 gap-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
-                {projetosEmAndamento.slice(0, 8).map(projeto => (
-                  <div key={projeto.id} className="rounded-lg border p-3 card-interativo">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <h4 className="font-medium truncate">{projeto.nome}</h4>
-                        <p className="text-xs text-muted-foreground truncate">Cliente: {projeto.cliente?.nome || '—'}</p>
-                      </div>
-                      <StatusBadge status={projeto.status as ProjetoStatus} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span>{projeto._count?.artes ?? 0} artes</span>
-                      <span className="text-muted-foreground">
-                        <Clock className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />
-                        {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '—'}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex justify-end">
-                      <Button asChild size="sm" variant="ghost" className="h-7 px-2">
-                        <Link href={`/projetos/${projeto.id}`}>Abrir</Link>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {projetosEmAndamento.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">Nenhum projeto em andamento</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-base">
-                <Clock className="h-5 w-5 mr-2" />
-                Tarefas urgentes
-              </CardTitle>
-              <CardDescription>Prazos mais próximos</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
-                {tarefas.slice(0, 10).map(tarefa => (
-                  <div key={tarefa.id} className="space-y-1 border rounded-md p-2 hover:bg-muted/40 transition">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h5 className="font-medium text-sm truncate">{tarefa.titulo}</h5>
-                        <p className="text-xs text-muted-foreground truncate">{tarefa.projeto?.nome}</p>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">{prioridadeLabel[tarefa.prioridade] ?? tarefa.prioridade}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className="text-[10px]">{statusLabel[tarefa.status] ?? tarefa.status}</Badge>
-                      <span className="text-[11px] text-muted-foreground">
-                        {tarefa.prazo ? new Date(tarefa.prazo).toLocaleDateString('pt-BR') : '—'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {tarefas.length === 0 && (
-                  <div className="text-sm text-muted-foreground text-center py-6">Nada urgente por enquanto 🦙</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="h-full flex flex-col min-h-[360px]">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center text-base">
-                <CalendarDays className="h-5 w-5 mr-2" />
-                Próximos prazos
-              </CardTitle>
-              <CardDescription>O que vence primeiro</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="space-y-3 max-h-full overflow-y-auto overflow-x-hidden pr-1">
-                {proximosPrazos.length > 0 ? (
-                  proximosPrazos.map(p => (
-                    <div key={p.id} className="rounded-md border p-3 hover:bg-muted/40 transition">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{p.nome}</p>
-                          <p className="text-xs text-muted-foreground truncate">Cliente: {p.cliente?.nome || '—'}</p>
-                        </div>
-                        <Badge variant="secondary" className="shrink-0">
-                          {p.prazo ? new Date(p.prazo).toLocaleDateString('pt-BR') : '—'}
-                        </Badge>
-                      </div>
-                      <div className="mt-2 flex justify-end">
-                        <Button asChild size="sm" variant="ghost" className="h-7 px-2">
-                          <Link href={`/projetos/${p.id}`}>Abrir</Link>
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-sm text-muted-foreground text-center py-6">Sem prazos cadastrados</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* financial card */}
           <FinanceiroCard
             isDesigner={isDesigner}
             faturasPendentes={faturasPendentes}
             saldo={saldo}
             assinatura={assinatura}
           />
-        </section>
+        </div>
       )}
     </FadeIn>
   )

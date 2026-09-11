@@ -451,7 +451,9 @@ export default function ClienteDetailPage() {
             <CardContent className="flex flex-wrap gap-2">
               <Button onClick={criarProjetoRápido} size="sm"><Plus className="h-4 w-4 mr-1" /> Projeto</Button>
               <Button asChild size="sm" variant="outline"><Link href={`/links?cliente=${clienteSafe.id}`}>Gerar link</Link></Button>
-              <Button asChild size="sm" variant="outline"><Link href={`/artes/nova?cliente=${clienteSafe.id}`}>Enviar arte</Link></Button>
+              <Button asChild size="sm" variant="outline">{/* `/artes/nova` não existe — a página de artes abre o fluxo com
+                  `?novo=1`, como /clientes e /projetos. */}
+              <Link href="/artes?novo=1">Enviar arte</Link></Button>
               <Button asChild size="sm" variant="ghost"><Link href={`/feedbacks?cliente=${clienteSafe.id}`}>Ver feedbacks</Link></Button>
             </CardContent>
           </Card>
