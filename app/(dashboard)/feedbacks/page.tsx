@@ -787,12 +787,29 @@ export default function FeedbacksPage() {
         <TabsContent value="cards" className="mt-0">
           {empty ? (
             temFiltroFeedback ? (
+              /*
+               * A lista é paginada de 24 em 24, mas tipo, autor e projeto
+               * filtram só o que já foi carregado. Com os casamentos numa
+               * página posterior, esta ficava vazia — e "Carregar mais" morava
+               * dentro do ramo não-vazio logo abaixo, então sumia junto: a tela
+               * afirmava que não existe nada e tirava o único jeito de provar o
+               * contrário. Valia para autor e projeto desde antes; o filtro de
+               * tipo entrou nessa lista e tornou o caso comum.
+               *
+               * Quando ainda há páginas, o vazio diz que é desta página e
+               * oferece buscar o resto; limpar continua ao lado.
+               */
               <EmptyState
                 variante="filtro"
-                title="Nenhum feedback com esses filtros"
-                description="Tente outro termo ou limpe os filtros."
-                actionLabel="Limpar filtros"
-                onAction={limparFiltrosFeedback}
+                title={hasMore ? 'Nenhum feedback com esses filtros nesta página' : 'Nenhum feedback com esses filtros'}
+                description={
+                  hasMore
+                    ? 'Tipo, autor e projeto filtram o que já foi carregado — e ainda há feedbacks para buscar.'
+                    : 'Tente outro termo ou limpe os filtros.'
+                }
+                actionLabel={hasMore ? (loadingMore ? 'Carregando…' : 'Carregar mais') : 'Limpar filtros'}
+                onAction={hasMore ? handleLoadMore : limparFiltrosFeedback}
+                acaoSecundaria={hasMore ? { label: 'Limpar filtros', onClick: limparFiltrosFeedback } : undefined}
               />
             ) : (
               <EmptyState

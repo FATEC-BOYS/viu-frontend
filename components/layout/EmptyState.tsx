@@ -56,9 +56,18 @@ export default function EmptyState({
   actionLabel?: string;
   onAction?: () => void;
   /** O caminho que destrava o passo anterior, quando ele existe. */
-  acaoSecundaria?: { label: string; href: string };
+  acaoSecundaria?:
+    | { label: string; href: string; onClick?: never }
+    | { label: string; onClick: () => void; href?: never };
   className?: string;
 }) {
+  const secundaria = acaoSecundaria && (
+    "href" in acaoSecundaria && acaoSecundaria.href ? (
+      <Link href={acaoSecundaria.href}>{acaoSecundaria.label}</Link>
+    ) : (
+      <button type="button" onClick={acaoSecundaria.onClick}>{acaoSecundaria.label}</button>
+    )
+  );
   if (variante === "filtro") {
     return (
       <div
@@ -70,10 +79,19 @@ export default function EmptyState({
         <div className="max-w-sm space-y-2">
           <p className="text-sm font-medium">{title}</p>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
-          {actionLabel && onAction && (
-            <Button variant="outline" size="sm" onClick={onAction} className="mt-1">
-              {actionLabel}
-            </Button>
+          {(acaoSecundaria || (actionLabel && onAction)) && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+              {actionLabel && onAction && (
+                <Button variant="outline" size="sm" onClick={onAction}>
+                  {actionLabel}
+                </Button>
+              )}
+              {secundaria && (
+                <Button asChild variant="ghost" size="sm">
+                  {secundaria}
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -111,7 +129,7 @@ export default function EmptyState({
         {(acaoSecundaria || (actionLabel && onAction)) && (
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             {actionLabel && onAction && <Button onClick={onAction}>{actionLabel}</Button>}
-            {acaoSecundaria && (
+            {secundaria && (
               /*
                * Sozinha, uma ação em `ghost` some: sem fundo e sem contorno ela
                * lê como legenda, não como algo clicável — e em telas onde não
@@ -120,7 +138,7 @@ export default function EmptyState({
                * discreta em relação a ele.
                */
               <Button asChild variant={actionLabel && onAction ? "ghost" : "outline"}>
-                <Link href={acaoSecundaria.href}>{acaoSecundaria.label}</Link>
+                {secundaria}
               </Button>
             )}
           </div>
