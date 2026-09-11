@@ -3,12 +3,16 @@
 import { motion, useReducedMotion } from 'framer-motion'
 
 /**
- * Entrada suave, uma vez só.
+ * Entrada suave, uma vez só — e sempre a partir de um estado legível.
  *
- * `amount` fica baixo de propósito: seções mais altas que a viewport nunca
- * atingiriam um limiar alto, e o bloco ficaria invisível para sempre em telas
- * pequenas. Quem pediu menos movimento no sistema recebe o conteúdo direto,
- * sem animação nenhuma — não uma versão mais lenta dela.
+ * Antes o bloco nascia em `opacity: 0` e só aparecia quando o observer
+ * disparava. Rolando funcionava; em tudo o mais, não: print da página,
+ * pré-visualização de link compartilhado, leitor que chega por âncora, busca
+ * do navegador em texto ainda não revelado. A página inteira, fora o topo,
+ * era uma sequência de faixas vazias — que é exatamente o que se vê ao
+ * compartilhar o link.
+ *
+ * Agora só o deslocamento é animado. O texto está lá desde o primeiro quadro.
  */
 export default function Reveal({
   children,
@@ -26,10 +30,10 @@ export default function Reveal({
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={{ y: 14 }}
+      whileInView={{ y: 0 }}
       viewport={{ once: true, amount: 0.15 }}
-      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay }}
     >
       {children}
     </motion.div>

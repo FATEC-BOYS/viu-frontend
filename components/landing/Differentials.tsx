@@ -1,46 +1,59 @@
 'use client'
 
 import { MousePointerClick, Mic, History, FileCheck2 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
 import Reveal from './Reveal'
 
+/**
+ * Quatro cartões idênticos, com ícone laranja e título em negrito, davam o
+ * mesmo peso a tudo — e o laranja, que é a cor da ação no produto, aparecia
+ * quatro vezes sem nada para clicar.
+ *
+ * Aqui viram uma lista de dois em dois, com o argumento antes do rótulo: quem
+ * lê em diagonal pega a frase que interessa, não o substantivo.
+ */
 const DIFERENCIAIS = [
   {
     icone: MousePointerClick,
-    titulo: 'Comentários Visuais',
-    texto: "Acabe com o 'muda aquele negócio ali'. O cliente marca o ponto exato na arte.",
+    titulo: 'Comentário no ponto exato',
+    texto: 'Acaba o “muda aquele negócio ali”. O cliente clica onde está o problema.',
   },
   {
     icone: Mic,
-    titulo: 'Áudio Integrado',
-    texto: 'A voz do seu cliente, salva junto da versão correta. Sem precisar procurar no histórico.',
+    titulo: 'Áudio junto da versão',
+    texto: 'A voz do cliente fica salva ao lado da arte certa — não perdida numa conversa.',
   },
   {
     icone: History,
-    titulo: 'Histórico Blindado',
-    texto: 'Cada alteração registrada. Cada versão documentada. Saiba exatamente o que mudou.',
+    titulo: 'Histórico de versões',
+    texto: 'Cada ajuste vira uma versão. Dá para ver o que mudou, quando e a pedido de quem.',
   },
   {
     icone: FileCheck2,
-    titulo: 'Aprovação com Validade',
-    texto: "Transforme o 'pode seguir' em um registro formal. Ideal para evitar cobranças futuras.",
+    titulo: 'Aprovação com data e hora',
+    texto: 'O “pode seguir” vira registro. É o que você mostra quando a cobrança vem depois.',
   },
 ]
 
 export default function Differentials() {
   return (
-    <section className="border-t border-border/60 bg-muted/40 px-6 py-24 md:py-32">
+    <section className="border-t border-border/60 bg-muted/40 px-6 py-20 md:py-28">
       <div className="mx-auto max-w-5xl">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <Reveal className="max-w-2xl">
+          <h2 className="text-balance font-display text-3xl font-extrabold tracking-[-0.03em] sm:text-4xl">
+            O que muda no seu dia
+          </h2>
+        </Reveal>
+
+        <div className="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2">
           {DIFERENCIAIS.map(({ icone: Icone, titulo, texto }, i) => (
             <Reveal key={titulo} delay={i * 0.06}>
-              <Card className="h-full gap-0 py-0">
-                <CardContent className="p-7 md:p-8">
-                  <Icone aria-hidden className="size-5 text-primary" strokeWidth={1.75} />
-                  <h3 className="mt-5 text-lg font-semibold tracking-[-0.02em]">{titulo}</h3>
-                  <p className="mt-2 text-pretty leading-relaxed text-muted-foreground">{texto}</p>
-                </CardContent>
-              </Card>
+              <div className="border-t-2 border-foreground/85 pt-5">
+                <div className="flex items-center gap-2.5">
+                  <Icone aria-hidden className="size-[18px] text-foreground/60" strokeWidth={1.75} />
+                  <h3 className="text-base font-semibold tracking-[-0.01em]">{titulo}</h3>
+                </div>
+                <p className="mt-2.5 text-pretty leading-relaxed text-muted-foreground">{texto}</p>
+              </div>
             </Reveal>
           ))}
         </div>
