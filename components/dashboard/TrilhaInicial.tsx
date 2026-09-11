@@ -35,8 +35,30 @@ type Estado = 'feito' | 'agora' | 'depois'
 
 export interface TrilhaInicialProps {
   /** Já vêm carregados pelo dashboard — não vale buscar de novo. */
+  /**
+   * A trilha perguntava isso ao backend, em `GET /usuarios?tipo=CLIENTE`.
+   * Essa rota é ADMIN-only — para o designer, que é o único público desta
+   * trilha, ela sempre respondeu 403. O `allSettled` engolia a falha e
+   * `temCliente` ficava `false` para sempre: o passo 1 nunca podia ser
+   * concluído, por mais clientes que a pessoa cadastrasse, e a trilha nunca
+   * chegava ao fim.
+   *
+   * Não existe rota de "meus clientes": a tela de Clientes também deriva de
+   * projetos. Então quem sabe é quem já tem os projetos em mãos — o Dashboard.
+   */
+  temCliente: boolean
   temProjeto: boolean
   temArte: boolean
+  /**
+   * Avisa quando os quatro passos fecharam.
+   *
+   * O progresso dos passos 1 e 4 (cliente cadastrado, link enviado) só existe
+   * aqui dentro — são duas buscas próprias. O Dashboard precisa do mesmo fato
+   * para decidir se ainda mostra a trilha, e inventar uma segunda regra lá foi
+   * exatamente o que quebrou antes: a trilha se dava por concluída enquanto o
+   * Dashboard continuava escondido atrás de "ter projeto concluído".
+   */
+  aoConcluir?: () => void
   projetoId?: string
   clienteNome?: string | null
 }
@@ -98,33 +120,36 @@ function montarPassos(projetoId?: string): Passo[] {
 }
 
 export default function TrilhaInicial({
+  temCliente,
   temProjeto,
   temArte,
   projetoId,
   clienteNome,
+  aoConcluir,
 }: TrilhaInicialProps) {
-  const [temCliente, setTemCliente] = useState(false)
   const [temLink, setTemLink] = useState(false)
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
     let vivo = true
-    Promise.allSettled([
-      api.get<{ pagination?: { total: number } }>('/usuarios?tipo=CLIENTE&limit=1'),
-      api.get<{ pagination?: { total: number }; data?: unknown[] }>('/links?limit=1'),
-    ]).then(([clientes, links]) => {
-      if (!vivo) return
-      if (clientes.status === 'fulfilled') {
-        setTemCliente((clientes.value.pagination?.total ?? 0) > 0)
-      }
-      if (links.status === 'fulfilled') {
-        const total = links.value.pagination?.total ?? links.value.data?.length ?? 0
-        setTemLink(total > 0)
-      }
-      setCarregando(false)
-    })
+    api
+      .get<{ pagination?: { total: number }; data?: unknown[] }>('/links?limit=1')
+      .then((res) => {
+        if (!vivo) return
+        setTemLink((res.pagination?.total ?? res.data?.length ?? 0) > 0)
+      })
+      .catch(() => {})
+      .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
   }, [])
+
+  // Só depois que as duas buscas voltam: antes disso `temCliente` e `temLink`
+  // são `false` por ignorância, não por falta, e avisar "concluiu" aqui seria
+  // mentira ao contrário.
+  const tudoFeito = !carregando && temCliente && temProjeto && temArte && temLink
+  useEffect(() => {
+    if (tudoFeito) aoConcluir?.()
+  }, [tudoFeito, aoConcluir])
 
   if (carregando) {
     return (

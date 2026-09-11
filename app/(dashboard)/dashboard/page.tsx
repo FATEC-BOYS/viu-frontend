@@ -4,7 +4,7 @@ import { FadeIn } from "@/components/layout/Motion";
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FolderOpen, Receipt, Wallet, AlertCircle, ArrowRight, CreditCard } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
@@ -183,7 +183,6 @@ export default function DashboardPage() {
     totalProjetos: 0,
     projetosAtivos: 0,
     totalArtes: 0,
-    artesAprovadas: 0,
     feedbacksRecentes: 0,
     tarefasPendentes: 0,
   })
@@ -195,6 +194,9 @@ export default function DashboardPage() {
    * /links guarda acessos e criadoEm, e a Aprovacao tem decididoEm.
    */
   const [links, setLinks] = useState<any[]>([])
+  // Sem isto, `links` vazio por ainda não ter carregado e vazio por não existir
+  // link nenhum são indistinguíveis — e a dica do vazio sairia errada num piscar.
+  const [contextoCarregado, setContextoCarregado] = useState(false)
   const [notificacoes, setNotificacoes] = useState<any[]>([])
   const [aprovacoes, setAprovacoes] = useState<any[]>([])
 
@@ -256,7 +258,6 @@ export default function DashboardPage() {
           totalProjetos: projetosData.length,
           projetosAtivos: projetosData.filter(p => p.status === 'EM_ANDAMENTO').length,
           totalArtes,
-          artesAprovadas: 0,
           feedbacksRecentes: feedbacksData.length,
           tarefasPendentes: tarefasData.length,
         })
@@ -302,20 +303,37 @@ export default function DashboardPage() {
       if (linksRes.status === 'fulfilled') setLinks(linksRes.value.data ?? [])
       if (notifRes.status === 'fulfilled') setNotificacoes(notifRes.value.data ?? [])
       if (aprovRes.status === 'fulfilled') setAprovacoes(aprovRes.value.data ?? [])
+      setContextoCarregado(true)
     })
   }, [authLoading])
 
   const displayName = user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
   const temProjeto = projetos.length > 0
-  const temProjetoConcluido = useMemo(
-    () => projetos.some(p =>
-      ['CONCLUIDO', 'CONCLUÍDO', 'FINALIZADO', 'FINALIZADA'].includes(p.status?.toUpperCase?.() ?? '')
-    ),
-    [projetos]
-  )
-  const onboardingConcluido = temProjetoConcluido || (temProjeto && metricas.artesAprovadas > 0)
-  const mostrarOnboarding = !onboardingConcluido
+
+  /*
+   * Antes: `onboardingConcluido = temProjetoConcluido || (temProjeto &&
+   * metricas.artesAprovadas > 0)`. O segundo termo era morto — `artesAprovadas`
+   * nunca saía do literal 0 —, então a única saída da trilha era ter um projeto
+   * com status CONCLUÍDO. Nenhum dos quatro passos conclui projeto: dava para
+   * cadastrar cliente, criar projeto, subir arte e mandar o link, ver a trilha
+   * se dar por encerrada, e ainda assim ficar sem Dashboard até fechar um
+   * projeto inteiro — semanas depois, no primeiro projeto real.
+   *
+   * Agora são duas perguntas separadas, porque são duas coisas diferentes:
+   *
+   *   o Dashboard aparece quando existe projeto — é o portão de qualquer
+   *   métrica, e quem chegou até aqui já tem o que olhar;
+   *
+   *   a trilha continua acima enquanto os quatro passos não fecham, e some
+   *   quando ela própria avisa que fecharam. Quem sabe disso é ela: o
+   *   progresso dos passos 1 e 4 vem de duas buscas que só existem lá dentro.
+   *   Foi manter uma segunda regra aqui que criou o problema.
+   */
+  const [trilhaConcluida, setTrilhaConcluida] = useState(false)
+  const aoConcluirTrilha = useCallback(() => setTrilhaConcluida(true), [])
+  const mostrarTrilha = !trilhaConcluida
+  const mostrarDashboard = temProjeto
 
   if (loading || authLoading)
     return (
@@ -481,6 +499,15 @@ export default function DashboardPage() {
       : null,
   }
 
+  /*
+   * Enquanto a conta está se montando, um cartão vazio não é "nada acontecendo"
+   * — é "falta um passo". Dizer qual evita que a pessoa ache que o produto está
+   * quebrado, e evita a pergunta "e agora?" em quatro lugares ao mesmo tempo.
+   */
+  const temArte = metricas.totalArtes > 0
+  const proximoPasso: 'arte' | 'link' | null =
+    !contextoCarregado ? null : !temArte ? 'arte' : links.length === 0 ? 'link' : null
+
   const prazoProximo = proximosPrazos[0]
     ? { nome: proximosPrazos[0].nome, dias: diasAte(proximosPrazos[0].prazo as string) }
     : null
@@ -493,7 +520,9 @@ export default function DashboardPage() {
         * lugar mais valioso da tela. Quem já entrou sabe onde está; o que ele
         * não sabe é o que precisa dele.
         */}
-      {mostrarOnboarding && (
+      {/* O cabeçalho de boas-vindas é só de quem ainda não tem projeto: com o
+          Dashboard na tela, ele competiria com o recado do dia. */}
+      {mostrarTrilha && !temProjeto && (
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Vamos começar ✶</h1>
           <p className="text-sm text-muted-foreground">
@@ -502,16 +531,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {mostrarOnboarding && (
+      {mostrarTrilha && (
         <TrilhaInicial
+          /* Não há rota de "meus clientes" — GET /usuarios é ADMIN-only, e a
+             tela de Clientes também deriva de projetos. Como criar projeto
+             exige clienteId, ter projeto prova ter cliente. */
+          temCliente={projetos.some(p => !!p.cliente)}
           temProjeto={temProjeto}
           temArte={metricas.totalArtes > 0}
           projetoId={projetos[0]?.id}
           clienteNome={projetos[0]?.cliente?.nome}
+          aoConcluir={aoConcluirTrilha}
         />
       )}
 
-      {!mostrarOnboarding && (
+      {mostrarDashboard && (
         <div className="flex flex-col gap-4">
           <PainelDoDia
             nome={displayName}
@@ -519,6 +553,7 @@ export default function DashboardPage() {
               feedbacks: metricas.feedbacksRecentes,
               tarefas: metricas.tarefasPendentes,
               prazoProximo,
+              temArte,
             }}
           />
 
@@ -554,12 +589,12 @@ export default function DashboardPage() {
           {/* `items-start`: sem isso a coluna da direita estica para acompanhar
               a fila, e duas linhas paradas viram uma caixa de meia tela vazia. */}
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[3fr_2fr]">
-            <FilaDoDia itens={fila} />
-            <ParadoNoCliente itens={itensParados} />
+            <FilaDoDia itens={fila} proximoPasso={proximoPasso} />
+            <ParadoNoCliente itens={itensParados} proximoPasso={proximoPasso} />
           </div>
 
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[3fr_2fr]">
-            <DesdeOntem eventos={eventosDesdeOntem} />
+            <DesdeOntem eventos={eventosDesdeOntem} proximoPasso={proximoPasso} />
             <EstaSemana resumo={resumoSemana} />
           </div>
 

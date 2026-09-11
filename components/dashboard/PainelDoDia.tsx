@@ -18,6 +18,12 @@ export type Pendencia = {
   feedbacks: number
   tarefas: number
   prazoProximo?: { nome: string; dias: number } | null
+  /**
+   * Quem ainda não subiu nenhuma arte não tem "próxima" — tem a primeira.
+   * O Dashboard passou a aparecer já no primeiro projeto, e esse estado, que
+   * antes ficava escondido atrás do onboarding, virou o mais comum de todos.
+   */
+  temArte?: boolean
 }
 
 /** A frase é derivada do que já foi buscado — nada aqui pede dado novo. */
@@ -54,6 +60,13 @@ export function recadoDoDia(p: Pendencia, nome: string): {
       titulo: p.tarefas === 1 ? '1 tarefa aberta' : `${p.tarefas} tarefas abertas`,
       detalhe: 'Nada de fora esperando por você — só o seu próprio roteiro.',
       acao: { label: 'Abrir projetos', href: '/projetos' },
+    }
+  }
+  if (p.temArte === false) {
+    return {
+      titulo: `Tudo pronto para começar, ${nome}`,
+      detalhe: 'O projeto está de pé. Falta a arte — é ela que o cliente abre e comenta.',
+      acao: { label: 'Enviar primeira arte', href: '/artes?novo=1' },
     }
   }
   return {

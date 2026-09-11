@@ -13,6 +13,14 @@ import Link from 'next/link'
  * O pino de 3px é a única cor da linha. Basta para o olho separar os tipos, e
  * é pouca o bastante para não competir com a arte em nenhuma outra tela.
  */
+/**
+ * O que falta para esta faixa ter dado.
+ *
+ * `null` quer dizer "nada falta" — a faixa está vazia porque está calma, e aí
+ * a copy não deve mandar ninguém fazer nada.
+ */
+export type ProximoPasso = 'arte' | 'link' | null
+
 export type ItemDaFila = {
   id: string
   tipo: 'feedback' | 'tarefa' | 'prazo'
@@ -27,7 +35,13 @@ const PINO: Record<ItemDaFila['tipo'], string> = {
   prazo: 'bg-pastel-menta',
 }
 
-export default function FilaDoDia({ itens }: { itens: ItemDaFila[] }) {
+export default function FilaDoDia({
+  itens,
+  proximoPasso = null,
+}: {
+  itens: ItemDaFila[]
+  proximoPasso?: ProximoPasso
+}) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
@@ -40,9 +54,15 @@ export default function FilaDoDia({ itens }: { itens: ItemDaFila[] }) {
             ✓
           </span>
           <div>
-            <p className="text-sm font-medium">Nada na fila</p>
+            <p className="text-sm font-medium">
+              {proximoPasso ? 'A fila ainda não começou' : 'Nada na fila'}
+            </p>
             <p className="text-xs text-muted-foreground">
-              Nenhum feedback, tarefa ou prazo pedindo atenção agora.
+              {proximoPasso === 'arte'
+                ? 'Suba a primeira arte: é dela que nascem feedback, prazo e aprovação.'
+                : proximoPasso === 'link'
+                  ? 'Mande o link da arte ao cliente — a fila enche com o que ele responder.'
+                  : 'Nenhum feedback, tarefa ou prazo pedindo atenção agora.'}
             </p>
           </div>
         </div>

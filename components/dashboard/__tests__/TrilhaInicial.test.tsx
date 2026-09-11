@@ -18,14 +18,15 @@ vi.mock('@/lib/api', () => ({ api: { get: vi.fn() } }))
 
 import { api } from '@/lib/api'
 
-/** Respostas de `/usuarios?tipo=CLIENTE` e `/links`, nessa ordem. */
+/**
+ * Só `/links` sobrou: `temCliente` virou prop. A trilha perguntava por clientes
+ * em `GET /usuarios`, que é ADMIN-only e respondia 403 justamente para o
+ * designer — o único público dela.
+ */
 function respondeCom({ clientes, links }: { clientes: number; links: number }) {
-  vi.mocked(api.get).mockImplementation(((rota: string) =>
-    Promise.resolve(
-      rota.includes('/usuarios')
-        ? { pagination: { total: clientes } }
-        : { pagination: { total: links } },
-    )) as never)
+  void clientes
+  vi.mocked(api.get).mockImplementation((() =>
+    Promise.resolve({ pagination: { total: links } })) as never)
 }
 
 beforeEach(() => {
@@ -37,7 +38,7 @@ const link = (nome: RegExp) => screen.queryByRole('link', { name: nome })
 
 describe('passo travado', () => {
   it('não oferece link para clicar', async () => {
-    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+    render(<TrilhaInicial temCliente={false} temProjeto={false} temArte={false} />)
 
     // O primeiro passo é o único acionável; os demais dependem dele.
     expect(await screen.findByRole('link', { name: /cadastrar cliente/i })).toBeInTheDocument()
@@ -47,7 +48,7 @@ describe('passo travado', () => {
   })
 
   it('explica o que falta em vez de só apagar o botão', async () => {
-    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+    render(<TrilhaInicial temCliente={false} temProjeto={false} temArte={false} />)
 
     expect(await screen.findByText(/cadastre um cliente primeiro/i)).toBeInTheDocument()
     expect(screen.getByText(/crie um projeto primeiro/i)).toBeInTheDocument()
@@ -62,7 +63,7 @@ describe('passo travado', () => {
  */
 describe('destinos', () => {
   it('manda para as rotas que existem, abrindo o cadastro direto', async () => {
-    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+    render(<TrilhaInicial temCliente={false} temProjeto={false} temArte={false} />)
 
     expect(await screen.findByRole('link', { name: /cadastrar cliente/i })).toHaveAttribute(
       'href',
@@ -72,7 +73,7 @@ describe('destinos', () => {
 
   it('vale também para o projeto', async () => {
     respondeCom({ clientes: 1, links: 0 })
-    render(<TrilhaInicial temProjeto={false} temArte={false} />)
+    render(<TrilhaInicial temCliente temProjeto={false} temArte={false} />)
 
     expect(await screen.findByRole('link', { name: /criar projeto/i })).toHaveAttribute(
       'href',
@@ -84,7 +85,7 @@ describe('destinos', () => {
 describe('progresso', () => {
   it('destaca só o próximo passo pendente', async () => {
     respondeCom({ clientes: 1, links: 0 })
-    render(<TrilhaInicial temProjeto temArte={false} />)
+    render(<TrilhaInicial temCliente temProjeto temArte={false} />)
 
     // Cliente e projeto feitos → o passo da vez é a arte, e só ele tem ação.
     expect(await screen.findByRole('link', { name: /enviar arte/i })).toBeInTheDocument()
@@ -94,14 +95,14 @@ describe('progresso', () => {
 
   it('conta os passos concluídos', async () => {
     respondeCom({ clientes: 1, links: 0 })
-    render(<TrilhaInicial temProjeto temArte />)
+    render(<TrilhaInicial temCliente temProjeto temArte />)
 
     expect(await screen.findByText(/passo 4 de 4/i)).toBeInTheDocument()
   })
 
   it('leva a arte para o projeto que já existe', async () => {
     respondeCom({ clientes: 1, links: 0 })
-    render(<TrilhaInicial temProjeto temArte={false} projetoId="p1" />)
+    render(<TrilhaInicial temCliente temProjeto temArte={false} projetoId="p1" />)
 
     expect(await screen.findByRole('link', { name: /enviar arte/i })).toHaveAttribute(
       'href',
@@ -117,7 +118,7 @@ describe('progresso', () => {
 describe('tudo feito', () => {
   it('vira estado de espera, não mais um passo', async () => {
     respondeCom({ clientes: 1, links: 1 })
-    render(<TrilhaInicial temProjeto temArte clienteNome="João" />)
+    render(<TrilhaInicial temCliente temProjeto temArte clienteNome="João" />)
 
     expect(await screen.findByText(/aguardando joão revisar/i)).toBeInTheDocument()
     expect(screen.queryByText(/passo \d de \d/i)).not.toBeInTheDocument()
@@ -125,7 +126,7 @@ describe('tudo feito', () => {
 
   it('funciona sem saber o nome do cliente', async () => {
     respondeCom({ clientes: 1, links: 1 })
-    render(<TrilhaInicial temProjeto temArte />)
+    render(<TrilhaInicial temCliente temProjeto temArte />)
 
     expect(await screen.findByText(/aguardando a revisão do cliente/i)).toBeInTheDocument()
   })
@@ -134,7 +135,7 @@ describe('tudo feito', () => {
 describe('carregamento', () => {
   it('não pisca a trilha antes de saber o progresso', async () => {
     vi.mocked(api.get).mockImplementation((() => new Promise(() => {})) as never)
-    const { container } = render(<TrilhaInicial temProjeto temArte />)
+    const { container } = render(<TrilhaInicial temCliente temProjeto temArte />)
 
     expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument()
     await waitFor(() => expect(link(/cadastrar cliente/i)).not.toBeInTheDocument())
