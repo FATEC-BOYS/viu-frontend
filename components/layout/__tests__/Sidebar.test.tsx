@@ -45,7 +45,7 @@ beforeEach(() => {
 describe('DESIGNER', () => {
   it('vê o menu de operação completo', () => {
     renderComo('DESIGNER')
-    for (const item of [/projetos/i, /artes/i, /tarefas/i, /prazos/i, /clientes/i, /equipes/i]) {
+    for (const item of [/projetos/i, /artes/i, /prazos/i, /clientes/i, /equipes/i]) {
       expect(link(item)).toBeInTheDocument()
     }
   })
@@ -79,7 +79,6 @@ describe('CLIENTE', () => {
     renderComo('CLIENTE')
     for (const item of [
       /equipes/i,
-      /^tarefas$/i,
       /saques/i,
       /extrato/i,
       /disputas/i,
@@ -104,11 +103,29 @@ describe('CLIENTE', () => {
   })
 })
 
+/**
+ * Tarefas saiu do menu enquanto não existe criador de tarefa no produto: os
+ * dois botões de criar tinham um comentário no lugar do onClick, e o único
+ * caminho real é "Criar tarefa" sobre um feedback. Sem este teste, repor o
+ * item por engano não quebraria nada — e cinco asserções sobre Tarefas foram
+ * removidas daqui junto com ele, então o arquivo ficaria sem dizer nada a
+ * respeito.
+ */
+describe('Tarefas escondida', () => {
+  it('não aparece no menu de ninguém', () => {
+    for (const papel of ['DESIGNER', 'ADMIN', 'CLIENTE'] as const) {
+      const { unmount } = renderComo(papel)
+      expect(link(/^tarefas$/i)).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+})
+
 describe('ADMIN', () => {
   /** Mesmo shell do designer — sem área separada, sem redirect. */
   it('mantém o menu de operação do designer', () => {
     renderComo('ADMIN')
-    for (const item of [/projetos/i, /artes/i, /tarefas/i, /clientes/i]) {
+    for (const item of [/projetos/i, /artes/i, /clientes/i]) {
       expect(link(item)).toBeInTheDocument()
     }
   })
@@ -169,7 +186,7 @@ describe('itens que dependem de conteúdo', () => {
     renderComo('DESIGNER')
 
     await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
-    for (const item of [/^tarefas$/i, /^prazos$/i, /^equipes$/i, /^faturas$/i, /^extrato$/i]) {
+    for (const item of [/^prazos$/i, /^equipes$/i, /^faturas$/i, /^extrato$/i]) {
       expect(bloqueado(item)).toBe(true)
     }
   })
@@ -209,7 +226,7 @@ describe('itens que dependem de conteúdo', () => {
     renderComo('DESIGNER')
 
     await waitFor(() => expect(link(/^artes$/i)).toBeInTheDocument())
-    for (const item of [/^feedbacks$/i, /links compartilhados/i, /^tarefas$/i, /^faturas$/i]) {
+    for (const item of [/^feedbacks$/i, /links compartilhados/i, /^faturas$/i]) {
       expect(link(item)).toBeInTheDocument()
     }
   })
