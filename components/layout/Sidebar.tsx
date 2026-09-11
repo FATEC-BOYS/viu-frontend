@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Home, FolderOpen, FileImage, CheckSquare, Users, Users2, MessageSquare, Bell,
+  Home, FolderOpen, FileImage, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
   CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock
@@ -272,7 +272,10 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           { title: 'Dashboard', href: '/dashboard', icon: Home },
           { title: 'Projetos', href: '/projetos', icon: FolderOpen, badge: contadores.projetsVencendo },
           { title: 'Artes', href: '/artes', icon: FileImage, precisa: 'projeto' },
-          { title: 'Tarefas', href: '/tarefas', icon: CheckSquare, badge: contadores.tarefasPendentes, precisa: 'projeto' },
+          // Tarefas saiu do menu enquanto não existe criador de tarefa no
+          // produto — ver app/(dashboard)/tarefas/page.tsx. As tarefas seguem
+          // dentro do projeto, na aba Tarefas. O contador continua sendo
+          // buscado de propósito: repor este item é uma linha.
           { title: 'Prazos', href: '/prazos', icon: Clock, precisa: 'projeto' },
         ],
       },
@@ -337,7 +340,6 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
   }, [
     ehAdmin,
     ehCliente,
-    contadores.tarefasPendentes,
     contadores.feedbacksPendentes,
     contadores.notificacoesNaoLidas,
     contadores.projetsVencendo,

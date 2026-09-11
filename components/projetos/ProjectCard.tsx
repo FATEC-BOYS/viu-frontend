@@ -95,11 +95,32 @@ export default function ProjectCard({
           )}
         </div>
 
-        {/* Ações (hover) */}
-        <div className="flex justify-end gap-2 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity">
+        {/*
+          As três ações viviam atrás de `opacity-0 group-hover:opacity-100`.
+          Celular e tablet não têm hover: no telefone sobrava uma faixa vazia
+          no rodapé do cartão, com três botões invisíveis e ainda clicáveis, e
+          "Abrir" — a ação principal — entre eles. Dava para chegar ao projeto
+          só acertando o nome no título.
+
+          "Abrir" sai do grupo e fica sempre visível, porque esconder a ação
+          principal de um cartão nunca foi a intenção. Editar e Excluir usam
+          `acoes-hover`, que só se esconde onde existe cursor. E Excluir deixa
+          de ser um bloco vermelho: visível o tempo todo em cada cartão de uma
+          grade, ele virava a coisa mais chamativa da tela.
+        */}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-2">
+          <div className="flex gap-1 acoes-hover">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              Excluir
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onEdit}>Editar</Button>
+          </div>
           <Button variant="outline" size="sm" asChild><Link href={`/projetos/${p.id}`}>Abrir</Link></Button>
-          <Button variant="outline" size="sm" onClick={onEdit}>Editar</Button>
-          <Button variant="destructive" size="sm" onClick={onDelete}>Excluir</Button>
         </div>
       </CardContent>
     </Card>

@@ -458,10 +458,14 @@ export default function PrazosPage() {
                     <p className="text-muted-foreground">{t.projeto?.nome ?? '—'}</p>
                   </div>
                 ))}
+                {/* "Ver todas" levava à tela global de Tarefas, que agora
+                    redireciona. Sem destino equivalente, o rodapé diz quantas
+                    ficaram de fora em vez de prometer uma tela que não existe. */}
                 {tarefasSemPrazo.length > 8 && (
-                  <Button asChild variant="link" className="px-0">
-                    <Link href="/tarefas?f=sem-prazo">Ver todas</Link>
-                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    e mais {tarefasSemPrazo.length - 8}{' '}
+                    {tarefasSemPrazo.length - 8 === 1 ? 'tarefa sem prazo' : 'tarefas sem prazo'}
+                  </p>
                 )}
               </CardContent>
             </Card>

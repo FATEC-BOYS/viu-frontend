@@ -53,7 +53,7 @@ export function recadoDoDia(p: Pendencia, nome: string): {
     return {
       titulo: p.tarefas === 1 ? '1 tarefa aberta' : `${p.tarefas} tarefas abertas`,
       detalhe: 'Nada de fora esperando por você — só o seu próprio roteiro.',
-      acao: { label: 'Ver tarefas', href: '/tarefas' },
+      acao: { label: 'Abrir projetos', href: '/projetos' },
     }
   }
   return {

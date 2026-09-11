@@ -273,6 +273,17 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
+                {/*
+                  O véu escuro com a câmera só aparecia no hover. Quem entra
+                  pelo celular tocava num alvo invisível — o botão cobre o
+                  avatar inteiro, então trocar a foto funcionava por acidente,
+                  sem nada na tela dizendo que dava. Cobrir o avatar de preto
+                  o tempo todo no toque também não serve: some a foto que a
+                  pessoa veio conferir.
+
+                  Então o véu continua sendo coisa de cursor, e no toque quem
+                  avisa é um selo de câmera no canto, sempre visível.
+                */}
                 <div className="relative group/avatar">
                   <Avatar className="w-24 h-24">
                     <AvatarImage src={avatarPreview ?? usuario.avatar ?? undefined} alt={usuario.nome} />
@@ -282,13 +293,19 @@ export default function PerfilPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={avatarUploading}
-                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity disabled:cursor-not-allowed"
+                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover/avatar:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed"
                     aria-label="Alterar foto de perfil"
                   >
                     {avatarUploading
                       ? <Loader2 className="h-6 w-6 text-white animate-spin" />
                       : <Camera className="h-6 w-6 text-white" />}
                   </button>
+                  <span
+                    aria-hidden
+                    className="so-no-toque pointer-events-none absolute bottom-0 right-0 size-7 place-items-center rounded-full border-2 border-background bg-secondary text-foreground/70"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                  </span>
                   <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
                     className="hidden" onChange={handleAvatarChange} />
                 </div>

@@ -151,7 +151,7 @@ function ArteCard({
         <div className="absolute left-2 top-2">
           <StatusBadge status={arte.status} />
         </div>
-        <div className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition">
+        <div className="absolute right-2 bottom-2 acoes-hover">
           <div className="flex gap-1">
             <Button variant="secondary" size="sm" onClick={() => onQuickLook(arte.id, "resumo")}>
               <Eye className="h-4 w-4" />
