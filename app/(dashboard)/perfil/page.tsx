@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import {
   User as UserIcon, Calendar, Edit, Save, X, Loader2,
-  Shield, Bell, Lock, Trash2, Download,
+  Bell, Lock, Trash2, Download, Palette, UserRound,
   BarChart3, Award, Clock, CheckCircle2, Camera,
   CreditCard, Wallet, ArrowDownToLine, ArrowRight,
 } from 'lucide-react'
@@ -143,8 +143,8 @@ export default function PerfilPage() {
           totalArtes, artesAprovadas, totalFeedbacks, totalTarefas, tarefasConcluidas,
         })
 
-        // payment data
-        const tipo = u.tipo === 'DESIGNER' ? 'designer' : 'cliente'
+        // payment data — sobrava aqui um `const tipo` que ninguém lia desde
+        // que a chamada de faturas saiu desta tela.
         const [assinaturaRes, saldoRes] = await Promise.allSettled([
           pagamentosApi.getMinhaAssinatura(),
           u.tipo === 'DESIGNER' ? pagamentosApi.getSaldo() : Promise.resolve(null),
@@ -241,9 +241,17 @@ export default function PerfilPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Meu Perfil</h1>
           <p className="text-sm text-muted-foreground">Gerencie suas informações pessoais e configurações</p>
         </div>
+        {/*
+          Dizia `DESIGNER` — a palavra do banco, em caixa alta, atrás de um
+          ícone de escudo que sugere permissão e não papel. Era o único lugar
+          do produto que respondia "que tipo de conta eu tenho?", e respondia
+          mal: dava para usar o VIU sem nunca descobrir o que se escolheu no
+          cadastro. O tipo decide o que aparece no menu e de que lado das
+          faturas a conta está, então vale dizer por extenso.
+        */}
         <Badge variant="secondary" className="gap-2">
-          <Shield className="h-3 w-3" />
-          {usuario.tipo}
+          {isDesigner ? <Palette className="h-3 w-3" /> : <UserRound className="h-3 w-3" />}
+          {isDesigner ? 'Conta de designer' : 'Conta de cliente'}
         </Badge>
       </div>
 
