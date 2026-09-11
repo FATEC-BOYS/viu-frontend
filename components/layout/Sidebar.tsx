@@ -13,7 +13,8 @@ import {
   Home, FolderOpen, FileImage, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock,
+  Palette, UserRound
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { convitesApi, convitesEquipeApi } from '@/lib/convites';
@@ -579,20 +580,49 @@ function NavItemRow({
   return content;
 }
 
+/**
+ * O rodapé dizia nome e e-mail — quem é a conta, nunca que tipo de conta é.
+ *
+ * O tipo é escolhido uma vez no cadastro e nunca mais aparece: decide o que
+ * entra no menu e de que lado das faturas a conta está, e a única tela que o
+ * mostrava era o Perfil, com a palavra crua do banco. Dava para usar o VIU sem
+ * lembrar o que se escolheu.
+ *
+ * Aqui ele vira uma tarja acima do nome, no mesmo idioma dos rótulos de seção
+ * do produto. Recolhida, a barra guarda só o ícone — por isso o ícone também
+ * muda com o papel, em vez do bonequinho genérico que servia para os dois.
+ */
 function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const { user } = useAuth();
   const nome = user?.nome ?? 'Usuário';
   const email = user?.email ?? '—';
 
+  const tipo = (user as { tipo?: string } | null)?.tipo;
+  const papel =
+    tipo === 'DESIGNER' ? { rotulo: 'Designer', Icone: Palette }
+    : tipo === 'CLIENTE' ? { rotulo: 'Cliente', Icone: UserRound }
+    : tipo === 'ADMIN' ? { rotulo: 'Admin', Icone: ShieldCheck }
+    // Enquanto a sessão não chega não se inventa papel: o ícone genérico é a
+    // resposta honesta para "ainda não sei".
+    : { rotulo: null, Icone: User };
+
   return (
-    <div className={cn("border-t p-2", collapsed && "p-2")}>
+    <div className="border-t p-2">
       <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-          <User className="h-4 w-4 text-primary" />
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10"
+          title={papel.rotulo ? `${nome} — conta de ${papel.rotulo.toLowerCase()}` : nome}
+        >
+          <papel.Icone className="h-4 w-4 text-primary" />
         </div>
         {!collapsed && (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{nome}</p>
+            {papel.rotulo && (
+              <p className="font-mono text-[10px] uppercase tracking-[0.09em] text-muted-foreground">
+                {papel.rotulo}
+              </p>
+            )}
+            <p className="truncate text-sm font-medium leading-tight">{nome}</p>
             <p className="truncate text-xs text-muted-foreground">{email}</p>
           </div>
         )}
