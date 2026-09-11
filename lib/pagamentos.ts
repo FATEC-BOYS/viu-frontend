@@ -147,7 +147,15 @@ export const pagamentosApi = {
   cancelarAssinatura: (id: string) =>
     api.put<{ success: boolean }>(`/assinaturas/${id}/cancelar`, {}),
 
-  getFaturas: (tipo: 'cliente' | 'designer' = 'cliente') =>
+  /**
+   * `tipo` não é quem o usuário é — é de que lado da fatura ele está:
+   * 'cliente' filtra por clienteId (o que ele paga), 'designer' por designerId
+   * (o que ele recebe). O default 'cliente' devolvia a lista errada em
+   * silêncio para quem esquecesse o argumento, e foi assim que a tela de
+   * Faturas passou a abrir sempre no lado de quem paga. Sem default: quem
+   * chama decide, e erra alto.
+   */
+  getFaturas: (tipo: 'cliente' | 'designer') =>
     api.get<{ data: Fatura[] }>(`/faturas?tipo=${tipo}`),
 
   getFatura: (id: string) =>

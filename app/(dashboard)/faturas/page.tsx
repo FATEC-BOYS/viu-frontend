@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
+import { useAuth } from '@/contexts/AuthContext'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Pendente', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -75,19 +76,44 @@ function FaturaRow({ fatura, index, tipo }: { fatura: Fatura; index: number; tip
 }
 
 export default function FaturasPage() {
-  const [tipo, setTipo] = useState<'cliente' | 'designer'>('cliente')
+  /*
+   * O `tipo` da API não é quem você é — é de que lado da fatura você está:
+   * 'cliente' filtra por clienteId (o que eu pago) e 'designer' por designerId
+   * (o que eu recebo). Isso virava duas abas "Como cliente / Como designer",
+   * com useState('cliente') fixo, então todo designer abria esta tela na aba
+   * de cliente.
+   *
+   * E essa aba não estava só errada por padrão: estava garantidamente vazia.
+   * projetoService exige `tipo: 'CLIENTE'` no cliente do projeto, então uma
+   * conta DESIGNER nunca é clienteId de fatura nenhuma — e vice-versa. O
+   * seletor oferecia escolher entre os seus dados e uma aba que não pode
+   * conter nada, e abria na que não pode.
+   *
+   * O Dashboard já derivava certo (`isDesigner ? 'designer' : 'cliente'`) e a
+   * aba de faturas do projeto já busca os dois e junta. Esta era a única tela
+   * que devolvia a pergunta para quem entrou.
+   */
+  const { user } = useAuth()
+  const ehDesigner = (user as any)?.tipo === 'DESIGNER'
+  const tipo: 'cliente' | 'designer' = ehDesigner ? 'designer' : 'cliente'
+
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Depende do id e não do objeto `user`: o contexto devolve uma referência
+  // nova a cada render, e com ela na lista o efeito refazia a busca à toa.
+  const usuarioId = (user as any)?.id as string | undefined
+
   useEffect(() => {
+    if (!usuarioId) return
     setLoading(true)
     setError(null)
     pagamentosApi.getFaturas(tipo)
       .then(res => setFaturas(res.data ?? []))
       .catch(() => setError('Erro ao carregar faturas'))
       .finally(() => setLoading(false))
-  }, [tipo])
+  }, [usuarioId, tipo])
 
   const pendentes = faturas.filter(f => f.status === 'PENDENTE')
   const pagas = faturas.filter(f => f.status === 'PAGA')
@@ -95,32 +121,13 @@ export default function FaturasPage() {
 
   return (
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
-      <PageHeader title="Faturas" description="Acompanhe seus pagamentos." />
-
-      {/* Tab */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.08 }}
-        className="flex bg-muted rounded-xl p-1 gap-1 w-fit"
-      >
-        {(['cliente', 'designer'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTipo(t)}
-            className="relative px-4 py-1.5 text-sm font-medium rounded-lg transition-colors"
-          >
-            {tipo === t && (
-              <motion.div
-                layoutId="fatura-tab"
-                className="absolute inset-0 bg-background rounded-lg shadow-sm"
-                transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-              />
-            )}
-            <span className="relative z-10 capitalize">{t === 'cliente' ? 'Como cliente' : 'Como designer'}</span>
-          </button>
-        ))}
-      </motion.div>
+      {/* O rótulo passa a ser sobre dinheiro, não sobre identidade: era
+          justamente "Como cliente / Como designer" que fazia quem entrava
+          parar para lembrar que tipo de conta tinha. */}
+      <PageHeader
+        title="Faturas"
+        description={ehDesigner ? 'O que você tem a receber.' : 'O que você tem a pagar.'}
+      />
 
       <AnimatePresence mode="wait">
         {loading ? (
@@ -138,7 +145,11 @@ export default function FaturasPage() {
           <motion.div key="empty" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
             className="text-center py-16 text-muted-foreground">
             <Receipt className="h-8 w-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhuma fatura encontrada.</p>
+            <p className="text-sm">
+              {ehDesigner
+                ? 'Nenhuma fatura emitida ainda. Elas nascem de um projeto entregue.'
+                : 'Nenhuma fatura para pagar.'}
+            </p>
           </motion.div>
         ) : (
           <motion.div key={tipo} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
