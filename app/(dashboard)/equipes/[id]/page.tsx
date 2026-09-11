@@ -444,7 +444,7 @@ export default function EquipeDetailPage() {
                   <PapelBadge papel={m.papel} />
                 )}
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 acoes-hover">
                   {isDono && m.usuarioId !== equipe.donoPrincipalId && (
                     <button
                       onClick={() => setEditandoPapel(editandoPapel === m.usuarioId ? null : m.usuarioId)}
@@ -517,7 +517,7 @@ export default function EquipeDetailPage() {
                   {isLider && (
                     <button
                       onClick={() => handleDesvincularProjeto(p.id, p.nome)}
-                      className="rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                      className="rounded p-1 text-muted-foreground hover:text-destructive acoes-hover"
                       aria-label="Desvincular projeto"
                     >
                       <Link2Off className="h-3.5 w-3.5" />

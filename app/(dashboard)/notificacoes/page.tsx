@@ -128,7 +128,7 @@ function NotificacaoRow({
           </div>
 
           {/* ações rápidas */}
-          <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition">
+          <div className="flex shrink-0 items-center gap-1 acoes-hover">
             <Button
               size="icon"
               variant="ghost"

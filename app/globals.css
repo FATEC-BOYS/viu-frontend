@@ -230,3 +230,42 @@
     transition-property: border-color;
   }
 }
+
+/* ==========================================================================
+   Ações reveladas por hover
+   `opacity-0 group-hover:opacity-100` some para sempre em quem toca a tela:
+   telefone e tablet não têm hover, então o botão fica invisível — porém
+   ainda clicável, que é pior que ausente. No cartão de projeto isso
+   escondia "Abrir", "Editar" e "Excluir" de uma vez: no celular sobrava
+   uma faixa vazia no rodapé e o único jeito de abrir era acertar o nome.
+   Também mirava alvo invisível quem navega por teclado.
+
+   Aqui a ação só se esconde onde existe um cursor para revelá-la, e volta
+   no foco de teclado.
+   ========================================================================== */
+.acoes-hover {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .acoes-hover {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .group:hover .acoes-hover,
+  .acoes-hover:hover,
+  .acoes-hover:focus-within {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acoes-hover { transition: none; }
+}
+
+/* O contrário: o aviso que só faz sentido para quem não tem cursor — um selo
+   de câmera no avatar, por exemplo, onde o véu de hover nunca vai aparecer. */
+.so-no-toque {
+  display: grid;
+}
+@media (hover: hover) and (pointer: fine) {
+  .so-no-toque { display: none; }
+}

@@ -38,7 +38,7 @@ type Tarefa = {
   status: string
   prioridade: string
   prazo?: string | null
-  projeto?: { nome?: string | null } | null
+  projeto?: { id?: string | null; nome?: string | null } | null
 }
 
 // --- mini financial card ---
@@ -228,7 +228,9 @@ export default function DashboardPage() {
                 id: t.id, titulo: t.titulo, status: t.status,
                 prioridade: t.prioridade ?? 'MEDIA',
                 prazo: t.prazo ?? null,
-                projeto: t.projeto ? { nome: t.projeto.nome } : null,
+                // `/tarefas` já devolve projeto: { id, nome } — o id era jogado
+                // fora aqui, e sem ele a tarefa não tem como abrir no projeto.
+                projeto: t.projeto ? { id: t.projeto.id, nome: t.projeto.nome } : null,
               }))
             : []
 
@@ -321,7 +323,9 @@ export default function DashboardPage() {
       apoio: [t.projeto?.nome, prioridadeLabel[t.prioridade] ?? t.prioridade]
         .filter(Boolean)
         .join(' · '),
-      href: '/tarefas',
+      // A tarefa mora dentro do projeto, e é lá que ela abre — /tarefas agora
+      // só redireciona. `/tarefas` já devolve projeto.id no include.
+      href: t.projeto?.id ? `/projetos/${t.projeto.id}?tab=tasks` : '/projetos',
     })),
     ...proximosPrazos.slice(0, 3).map<ItemDaFila>(p => {
       const dias = diasAte(p.prazo as string)

@@ -612,7 +612,10 @@ export default function ProjetoPage() {
                 em_andamento: { top: [], total: 0 },
                 concluida: { top: [], total: 0 },
               }}
-              onAbrir={() => router.push("/tarefas")}
+              /* Mandava para a tela global de Tarefas — que agora redireciona,
+                 e que mesmo antes tirava a pessoa do projeto que ela estava
+                 lendo. O outro MicroKanban desta mesma tela já fazia certo. */
+              onAbrir={() => setTab("tasks")}
             />
           )
         )}
