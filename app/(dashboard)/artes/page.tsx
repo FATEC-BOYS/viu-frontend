@@ -330,6 +330,17 @@ function ArtesPageInner() {
   const [projectsForChooser, setProjectsForChooser] = useState<{ id: string; nome: string }[]>([]);
   const [choosingProject, setChoosingProject] = useState(false);
 
+  /**
+   * `?novo=1` abre o fluxo de nova arte direto, para quem chega de um atalho
+   * de fora — o mesmo que /clientes e /projetos já fazem. Lido depois da
+   * montagem: decidir no primeiro render divergiria da hidratação, porque o
+   * servidor não vê a URL do navegador.
+   */
+  useEffect(() => {
+    if (getParam("novo") === "1") handleOpenNewArte();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleOpenNewArte() {
     let resolvedProjectId: string | null = null;
 
