@@ -146,15 +146,33 @@ export default function PlanosPage() {
   const [loading, setLoading] = useState(true)
   const [assinating, setAssinating] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'DESIGNER' | 'CLIENTE'>('DESIGNER')
+  /*
+   * Isto era um par de abas "Designer / Cliente", com useState('DESIGNER')
+   * fixo — o mesmo parâmetro de API virado seletor de identidade que havia em
+   * Faturas.
+   *
+   * Aqui era ainda mais estranho: o Sidebar não mostra /planos para conta
+   * CLIENTE, então quem chega nesta tela é sempre designer (ou admin) — e a
+   * tela oferecia navegar pelos planos de cliente, que não são dele. Pior:
+   * `criarAssinatura` não confere se o tipo do plano bate com o tipo da conta,
+   * então a aba era um caminho para assinar o plano errado.
+   *
+   * O tipo sai da conta. `useAuth` já era chamado aqui e o `user` ficava sem
+   * uso — a página buscava quem era a pessoa e ignorava.
+   */
+  const tipo: 'DESIGNER' | 'CLIENTE' =
+    (user as { tipo?: string } | null)?.tipo === 'CLIENTE' ? 'CLIENTE' : 'DESIGNER'
+  const usuarioId = (user as { id?: string } | null)?.id
 
   useEffect(() => {
+    if (!usuarioId) return
     setLoading(true)
-    pagamentosApi.getPlanos(tab)
+    setError(null)
+    pagamentosApi.getPlanos(tipo)
       .then(res => setPlanos(res.data ?? []))
       .catch(() => setError('Erro ao carregar planos'))
       .finally(() => setLoading(false))
-  }, [tab])
+  }, [usuarioId, tipo])
 
   async function handleAssinar(planoId: string) {
     setAssinating(planoId)
@@ -172,7 +190,9 @@ export default function PlanosPage() {
     }
   }
 
-  const filteredPlanos = planos.filter(p => p.tipo === tab)
+  // `getPlanos` já filtra por tipo no servidor; filtrar de novo aqui protege
+  // contra uma resposta em cache do tipo anterior, e custa nada.
+  const filteredPlanos = planos.filter(p => p.tipo === tipo)
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -185,33 +205,6 @@ export default function PlanosPage() {
       >
         <h1 className="text-2xl font-semibold tracking-tight">Escolha seu plano</h1>
         <p className="text-sm text-muted-foreground">Comece grátis. Escale quando precisar.</p>
-      </motion.div>
-
-      {/* Tab switcher */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="flex items-center justify-center"
-      >
-        <div className="flex bg-muted rounded-xl p-1 gap-1">
-          {(['DESIGNER', 'CLIENTE'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="relative px-5 py-1.5 text-sm font-medium rounded-lg transition-colors"
-            >
-              {tab === t && (
-                <motion.div
-                  layoutId="tab-indicator"
-                  className="absolute inset-0 bg-background rounded-lg shadow-sm"
-                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-                />
-              )}
-              <span className="relative z-10">{t === 'DESIGNER' ? 'Designer' : 'Cliente'}</span>
-            </button>
-          ))}
-        </div>
       </motion.div>
 
       {/* Cards */}
@@ -237,9 +230,25 @@ export default function PlanosPage() {
             <AlertCircle className="h-8 w-8" />
             <p className="text-sm">{error}</p>
           </motion.div>
+        ) : filteredPlanos.length === 0 ? (
+          /* Sem isto, uma lista vazia renderizava a grade sem nenhum cartão:
+             a tela ficava em branco abaixo do título, sem dizer por quê. */
+          <motion.div
+            key="vazio"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center gap-2 py-20 text-center"
+          >
+            <p className="text-sm font-medium">Nenhum plano disponível agora</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Sua conta continua funcionando normalmente. Assim que houver plano para contratar,
+              ele aparece aqui.
+            </p>
+          </motion.div>
         ) : (
           <motion.div
-            key={tab}
+            key="planos"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
