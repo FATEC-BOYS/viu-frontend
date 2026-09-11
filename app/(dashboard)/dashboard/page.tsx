@@ -14,6 +14,9 @@ import { pagamentosApi, SaldoInfo, Assinatura, Fatura, formatReais } from '@/lib
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
 import PainelDoDia from '@/components/dashboard/PainelDoDia'
 import FilaDoDia, { type ItemDaFila } from '@/components/dashboard/FilaDoDia'
+import ParadoNoCliente, { type ItemParado } from '@/components/dashboard/ParadoNoCliente'
+import DesdeOntem, { type Evento } from '@/components/dashboard/DesdeOntem'
+import EstaSemana, { type SemanaResumo } from '@/components/dashboard/EstaSemana'
 import { prioridadeLabel } from '@/lib/tarefas'
 
 type Projeto = {
@@ -185,6 +188,16 @@ export default function DashboardPage() {
     tarefasPendentes: 0,
   })
 
+  /*
+   * As três perguntas que o Dashboard não respondia depois do onboarding: o que
+   * mudou desde ontem, o que está parado no cliente, e quanto já foi entregue.
+   * Nenhuma precisou de rota nova — /notificacoes já é o log de eventos do VIU,
+   * /links guarda acessos e criadoEm, e a Aprovacao tem decididoEm.
+   */
+  const [links, setLinks] = useState<any[]>([])
+  const [notificacoes, setNotificacoes] = useState<any[]>([])
+  const [aprovacoes, setAprovacoes] = useState<any[]>([])
+
   // financial state
   const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
   const [saldo, setSaldo] = useState<SaldoInfo | null>(null)
@@ -274,6 +287,24 @@ export default function DashboardPage() {
     }).catch(console.error)
   }, [authLoading, isDesigner])
 
+  /*
+   * Efeito próprio: estas três faixas são contexto, não a ação do dia. Se uma
+   * delas demorar ou falhar, a fila já está na tela — por isso allSettled e
+   * nenhum setLoading aqui.
+   */
+  useEffect(() => {
+    if (authLoading) return
+    Promise.allSettled([
+      api.get<{ data: any[] }>('/links'),
+      api.get<{ data: any[] }>('/notificacoes?limit=100'),
+      api.get<{ data: any[] }>('/aprovacoes?status=APROVADO&limit=100'),
+    ]).then(([linksRes, notifRes, aprovRes]) => {
+      if (linksRes.status === 'fulfilled') setLinks(linksRes.value.data ?? [])
+      if (notifRes.status === 'fulfilled') setNotificacoes(notifRes.value.data ?? [])
+      if (aprovRes.status === 'fulfilled') setAprovacoes(aprovRes.value.data ?? [])
+    })
+  }, [authLoading])
+
   const displayName = user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
   const temProjeto = projetos.length > 0
@@ -344,6 +375,112 @@ export default function DashboardPage() {
     }),
   ]
 
+  /* ---------- Parado no cliente ---------- */
+
+  const meiaNoite = (recuoEmDias = 0) => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - recuoEmDias)
+    return d
+  }
+  /** Segunda-feira como início: é a semana de trabalho, não a do calendário. */
+  const inicioDaSemana = (recuoEmSemanas = 0) => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - recuoEmSemanas * 7)
+    return d
+  }
+
+  /* Uma arte já aprovada não está parada — está pronta. */
+  const artesAprovadas = new Set(
+    aprovacoes.map((a: any) => a.arteId ?? a.arte?.id).filter(Boolean),
+  )
+
+  const itensParados: ItemParado[] = links
+    .filter((l: any) => {
+      if (l.revogado) return false
+      if (l.expiraEm && new Date(l.expiraEm).getTime() < Date.now()) return false
+      const arteId = l.arte?.id
+      return !!arteId && !artesAprovadas.has(arteId)
+    })
+    .map((l: any) => ({
+      id: String(l.id),
+      arte: l.arte?.nome || 'Arte sem nome',
+      cliente: l.arte?.projeto?.cliente?.nome || 'O cliente',
+      dias: Math.max(0, Math.floor((Date.now() - new Date(l.criadoEm).getTime()) / 86400000)),
+      aberto: (l.acessos ?? 0) > 0,
+      href: `/artes/${l.arte.id}`,
+    }))
+    // Quem nunca abriu vem primeiro: o link pode nem ter chegado, e é a única
+    // das duas situações em que reenviar resolve.
+    .sort((a, b) => Number(a.aberto) - Number(b.aberto) || b.dias - a.dias)
+    .slice(0, 4)
+
+  /* ---------- Desde ontem ---------- */
+
+  const DESTINO_POR_TIPO: Record<string, string> = {
+    NOVO_PROJETO: '/projetos',
+    NOVA_ARTE: '/artes',
+    NOVO_FEEDBACK: '/feedbacks',
+    APROVACAO: '/artes',
+    PRAZO: '/prazos',
+  }
+
+  const desdeOntem = meiaNoite(1).getTime()
+  const eventosDesdeOntem: Evento[] = notificacoes
+    .filter((n: any) => new Date(n.criadoEm ?? n.criado_em ?? 0).getTime() >= desdeOntem)
+    .sort(
+      (a: any, b: any) =>
+        new Date(b.criadoEm ?? b.criado_em).getTime() - new Date(a.criadoEm ?? a.criado_em).getTime(),
+    )
+    .slice(0, 6)
+    .map((n: any) => ({
+      id: String(n.id),
+      titulo: n.titulo ?? 'Atividade',
+      apoio: n.conteudo ?? null,
+      hora: new Date(n.criadoEm ?? n.criado_em).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      // Notificacao não guarda o id do recurso, só o tipo — dá para levar à
+      // tela certa, não à linha certa. Melhor isso que um link que erra o alvo.
+      href: DESTINO_POR_TIPO[n.tipo] ?? null,
+    }))
+
+  /* ---------- Esta semana ---------- */
+
+  /** `decididoEm` é quando a aprovação saiu de PENDENTE — é a data da entrega. */
+  const decididasEm = aprovacoes
+    .map((a: any) => a.decididoEm ?? a.decidido_em)
+    .filter(Boolean)
+    .map((d: string) => new Date(d).getTime())
+
+  const historicoAprovacoes = [3, 2, 1, 0].map((recuo) => {
+    const inicio = inicioDaSemana(recuo).getTime()
+    const fim = recuo === 0 ? Infinity : inicioDaSemana(recuo - 1).getTime()
+    return decididasEm.filter((t) => t >= inicio && t < fim).length
+  })
+
+  const proximaFatura = [...faturasPendentes]
+    .filter(f => f.dataVencimento)
+    .sort((a, b) =>
+      new Date(a.dataVencimento as string).getTime() - new Date(b.dataVencimento as string).getTime())[0]
+
+  const resumoSemana: SemanaResumo = {
+    aprovacoes: historicoAprovacoes[historicoAprovacoes.length - 1],
+    historico: historicoAprovacoes,
+    aReceberCentavos: faturasPendentes.reduce((soma, f) => soma + (f.valor ?? 0), 0),
+    proximaFatura: proximaFatura
+      ? {
+          id: proximaFatura.id,
+          vence: new Date(proximaFatura.dataVencimento as string).toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+          }),
+        }
+      : null,
+  }
+
   const prazoProximo = proximosPrazos[0]
     ? { nome: proximosPrazos[0].nome, dias: diasAte(proximosPrazos[0].prazo as string) }
     : null
@@ -409,10 +546,26 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+          {/*
+            * Duas linhas, e a ordem é a da urgência: em cima o que se faz
+            * agora — a sua fila, e ao lado o que não está na sua mão. Embaixo
+            * o contexto, que se lê e não se responde.
+            */}
+          {/* `items-start`: sem isso a coluna da direita estica para acompanhar
+              a fila, e duas linhas paradas viram uma caixa de meia tela vazia. */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[3fr_2fr]">
             <FilaDoDia itens={fila} />
+            <ParadoNoCliente itens={itensParados} />
+          </div>
 
-            <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[3fr_2fr]">
+            <DesdeOntem eventos={eventosDesdeOntem} />
+            <EstaSemana resumo={resumoSemana} />
+          </div>
+
+          {/* "Seus projetos" sai da primeira linha e desce inteiro: é
+              navegação, não coisa a fazer hoje. */}
+          <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
                   Seus projetos
@@ -455,7 +608,6 @@ export default function DashboardPage() {
                   ))}
                 </ul>
               )}
-            </div>
           </div>
 
           <FinanceiroCard
