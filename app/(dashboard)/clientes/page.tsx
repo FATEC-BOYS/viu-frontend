@@ -16,8 +16,9 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Loader2, Settings2, Phone, Mail, Calendar, CheckCircle2, ChevronRight, Trash2, Undo2, Pencil,
+  Plus, Loader2, Settings2, Phone, Mail, Calendar, CheckCircle2, ChevronRight, Trash2, Undo2, Pencil, UserRound,
 } from "lucide-react";
+import EmptyState from "@/components/layout/EmptyState";
 
 import ClienteWizard from "@/components/clientes/ClienteWizard";
 
@@ -378,6 +379,12 @@ export default function ClientesPage() {
   }
 
   const empty = filtered.length === 0;
+  const temFiltroCliente = !!searchTerm || statusFilter !== "todos" || prazoPreset !== "todos";
+  const limparFiltrosCliente = () => {
+    setSearchTerm("");
+    setStatusFilter("todos");
+    setPrazoPreset("todos");
+  };
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -453,22 +460,24 @@ export default function ClientesPage() {
       <Tabs value={mode}>
         <TabsContent value="cards" className="mt-0">
           {empty ? (
-            <div className="p-10 text-center">
-              <h3 className="text-lg font-semibold mb-2">
-                {searchTerm || statusFilter !== "todos" || prazoPreset !== "todos"
-                  ? "Não achei nada por aqui 🐈‍⬛" : "Seus clientes aparecerão aqui"}
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                {searchTerm || statusFilter !== "todos" || prazoPreset !== "todos"
-                  ? "Tente outro termo ou limpe filtros."
-                  : "Crie seu primeiro cliente — prometo que é rápido."}
-              </p>
-              {!(searchTerm || statusFilter !== "todos" || prazoPreset !== "todos") && (
-                <Button onClick={() => setOpenClienteWizard(true)}>
-                  <Plus className="h-4 w-4 mr-2" />Criar cliente
-                </Button>
-              )}
-            </div>
+            temFiltroCliente ? (
+              <EmptyState
+                variante="filtro"
+                title="Nenhum cliente com esses filtros"
+                description="Tente outro termo ou limpe os filtros."
+                actionLabel="Limpar filtros"
+                onAction={limparFiltrosCliente}
+              />
+            ) : (
+              <EmptyState
+                icon={UserRound}
+                tom="pessego"
+                title="Nenhum cliente ainda"
+                description="É o cliente que recebe o link, comenta a arte e assina o aceite. Todo projeto pertence a um."
+                actionLabel="Cadastrar cliente"
+                onAction={() => setOpenClienteWizard(true)}
+              />
+            )
           ) : (
             <>
               <BulkBarClientes

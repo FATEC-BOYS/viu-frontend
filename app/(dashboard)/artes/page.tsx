@@ -5,6 +5,7 @@ import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
 import { listArtesOverview, type ArteOverview, type ArteStatus } from "@/lib/artes";
@@ -396,6 +397,10 @@ function ArtesPageInner() {
     clienteFilter !== "todos" ||
     autorFilter !== "todos";
 
+  /* Mesma limpeza do botão "Limpar" da barra de filtros, reaproveitada no vazio. */
+  const limparFiltrosArte = () =>
+    setParams({ status: "todos", tipo: "todos", projeto: "todos", cliente: "todos", autor: "todos", q: "" });
+
   /* ===================== UI — “tcholinha” ===================== */
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -469,9 +474,7 @@ function ArtesPageInner() {
             </SelectContent>
           </Select>
 
-          <Button variant="outline" size="sm" onClick={() => {
-            setParams({ status: "todos", tipo: "todos", projeto: "todos", cliente: "todos", autor: "todos", q: "" });
-          }}>
+          <Button variant="outline" size="sm" onClick={limparFiltrosArte}>
             <Filter className="h-4 w-4 mr-2" /> Limpar
           </Button>
         </div>
@@ -584,15 +587,29 @@ function ArtesPageInner() {
           ))}
         </div>
       ) : (
-        <EmptyState
-          icon={FileImage}
-          title="Nenhuma arte encontrada"
-          description={temFiltro ? "Tente ajustar os filtros." : "Comece criando sua primeira arte."}
-          // com filtro ativo o vazio é resultado da busca, não falta de conteúdo:
-          // oferecer "Nova Arte" ali empurra para o caminho errado
-          actionLabel={temFiltro ? undefined : "Nova Arte"}
-          onAction={temFiltro ? undefined : handleOpenNewArte}
-        />
+        /*
+         * Com filtro ativo o vazio é resultado da busca, não falta de conteúdo:
+         * oferecer "Nova arte" ali empurra para o caminho errado — o que se
+         * quer é limpar o filtro.
+         */
+        temFiltro ? (
+          <EmptyState
+            variante="filtro"
+            title="Nenhuma arte com esses filtros"
+            description="Tente outro termo ou limpe os filtros."
+            actionLabel="Limpar filtros"
+            onAction={limparFiltrosArte}
+          />
+        ) : (
+          <EmptyState
+            icon={FileImage}
+            tom="menta"
+            title="Nenhuma arte ainda"
+            description="Suba a primeira e mande o link. Seu cliente abre, comenta no ponto exato e aprova — sem criar conta."
+            actionLabel="Nova arte"
+            onAction={handleOpenNewArte}
+          />
+        )
       )}
 
       {/* Quick Look */}
@@ -616,7 +633,12 @@ function ArtesPageInner() {
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Criar nova arte</DialogTitle>
+            {/* Sem projeto não há arte a criar — o título não deve prometer o contrário. */}
+            <DialogTitle>
+              {choosingProject && !wizardProjectId && projectsForChooser.length === 0
+                ? "Antes da arte, o projeto"
+                : "Criar nova arte"}
+            </DialogTitle>
           </DialogHeader>
 
           {!user ? (
@@ -624,21 +646,42 @@ function ArtesPageInner() {
               Você precisa estar logado para criar uma arte.
             </div>
           ) : choosingProject && !wizardProjectId ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Selecione um projeto para associar a arte:
-              </p>
-              <Select onValueChange={chooseProjectAndContinue}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolha um projeto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projectsForChooser.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            /*
+             * A API exige projetoId para criar uma arte (CreateArteRequestSchema),
+             * e projetos exigem clienteId. Numa conta nova esta lista vem vazia:
+             * o modal abria com "Selecione um projeto" e um <Select> sem nenhuma
+             * opção — clicar, não ver nada e fechar era o fim da linha, sem uma
+             * palavra sobre o porquê. Aqui o pré-requisito é dito no momento em
+             * que ele morde, com o caminho que destrava.
+             */
+            projectsForChooser.length === 0 ? (
+              <div className="space-y-3 text-sm">
+                <p className="font-medium">Você ainda não tem um projeto.</p>
+                <p className="text-muted-foreground">
+                  Toda arte vive dentro de um projeto — é o que guarda as versões e diz de
+                  quem é o aceite. Crie o projeto primeiro e volte aqui.
+                </p>
+                <Button asChild>
+                  <Link href="/projetos?novo=1">Criar projeto</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Selecione um projeto para associar a arte:
+                </p>
+                <Select onValueChange={chooseProjectAndContinue}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha um projeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectsForChooser.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
           ) : wizardProjectId ? (
             <ArteWizard
               projetoId={wizardProjectId}

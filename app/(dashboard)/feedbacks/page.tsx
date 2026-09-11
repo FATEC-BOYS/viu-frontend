@@ -1,6 +1,5 @@
 'use client';
 
-import { arteStatusLabel } from "@/lib/artes";
 import Thumb from "@/components/layout/Thumb";
 import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
@@ -19,13 +18,22 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  MessageSquare, Search, Mic, Type, MapPin, Reply, Eye, Download, PlusCircle, Settings2,
+  MessageSquare, Search, Mic, Check, RotateCcw, Eye, Download, PlusCircle,
 } from 'lucide-react';
 
 /* =========================
    Tipos
    ========================= */
-type FeedbackTipo = 'TEXTO' | 'AUDIO';
+/*
+ * `tipo` é uma coluna String, não um enum do banco, e o backend grava três
+ * valores nela: TEXTO, AUDIO e POSICIONAL. POSICIONAL mistura duas coisas que
+ * não são a mesma — o meio (texto ou áudio) e o fato de o comentário ter um
+ * ponto na arte, que já está em posicaoX/posicaoY. O union daqui dizia só
+ * 'TEXTO' | 'AUDIO', então POSICIONAL vazava cru: o selo escrevia "POSICIONAL"
+ * em caixa alta e, pior, `tipo === 'AUDIO'` dava falso — um áudio gravado em
+ * cima da arte nunca ganhava player. O cliente falou e ninguém conseguia ouvir.
+ */
+type FeedbackTipo = 'TEXTO' | 'AUDIO' | 'POSICIONAL';
 type AutorTipo = 'CLIENTE' | 'DESIGNER';
 // O schema não tem coluna de status: uma thread está aberta ou resolvida,
 // conforme resolvidoEm. Estados intermediários não existem no banco.
@@ -67,26 +75,17 @@ type FilterStatus = 'todos' | FeedbackStatus;
    ========================= */
 const LOADER_LINES = ['Afiando os lápis…','Abrindo pastas…','Buscando inspirações…','Alinhando pixels…'] as const;
 
-function TipoBadge({ tipo }: { tipo: FeedbackTipo | string }) {
-  const map = {
-    TEXTO: { label: 'Texto', icon: Type, cls: 'bg-blue-100 text-blue-900 border-blue-200' },
-    AUDIO: { label: 'Áudio', icon: Mic, cls: 'bg-purple-100 text-purple-900 border-purple-200' },
-  } as const;
-  const cfg = (map as any)[tipo] ?? { label: tipo, icon: MessageSquare, cls: 'bg-slate-100 text-slate-900 border-slate-200' };
-  const Icon = cfg.icon;
-  return <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${cfg.cls}`}><Icon className="h-3 w-3" />{cfg.label}</span>;
+/**
+ * Um feedback é de áudio quando tem áudio — e não quando o rótulo diz AUDIO.
+ * `arquivo` só é preenchido pelo caminho de upload de voz, então ele responde
+ * certo para as três variantes de `tipo`, inclusive as linhas antigas.
+ */
+function ehAudio(fb: Pick<FeedbackRow, 'arquivo' | 'audio_signed_url'>) {
+  return !!(fb.audio_signed_url || fb.arquivo);
 }
-function StatusBadge({ status }: { status: FeedbackStatus }) {
-  const map: Record<FeedbackStatus, { label: string; cls: string }> = {
-    ABERTO:    { label: 'Aberto',    cls: 'bg-amber-100 text-amber-900 border-amber-200' },
-    RESOLVIDO: { label: 'Resolvido', cls: 'bg-emerald-100 text-emerald-900 border-emerald-200' },
-  };
-  const cfg = map[status];
-  return <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${cfg.cls}`}>{cfg.label}</span>;
-}
+
 function formatDateTime(s: string) { return new Date(s).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
 function formatTime(s: string) { return new Date(s).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }); }
-function isHttpUrl(path?: string | null) { return !!path && /^https?:\/\//i.test(path); }
 
 /* =========================
    API mapper
@@ -121,71 +120,94 @@ function mapFeedback(fb: any): FeedbackRow {
    List item
    ========================= */
 function ListItem({
-  fb, selected, onOpen, onVerNaArte, onResponder, onCriarTarefa,
+  fb, selected, onOpen, onVerNaArte, onAlternarResolvido, onCriarTarefa,
 }: {
   fb: FeedbackRow; selected?: boolean;
-  onOpen: (id: string) => void; onVerNaArte: (f: FeedbackRow) => void; onResponder: (f: FeedbackRow) => void; onCriarTarefa: (f: FeedbackRow) => void;
+  onOpen: (id: string) => void;
+  onVerNaArte: (f: FeedbackRow) => void;
+  onAlternarResolvido: (f: FeedbackRow) => void;
+  onCriarTarefa: (f: FeedbackRow) => void;
 }) {
   const hasPos = fb.posicao_x != null && fb.posicao_y != null;
   const isResolved = fb.status === 'RESOLVIDO';
-  const TipoIcon = fb.tipo === 'AUDIO' ? Mic : Type;
-
-  const pill = useMemo(() => {
-    return isResolved
-      ? { label: 'Resolvido', tone: 'emerald' }
-      : { label: 'Aguardando resposta', tone: 'amber' };
-  }, [isResolved]);
-
-  const toneMap: Record<string, string> = {
-    amber: 'bg-amber-100 text-amber-900 border-amber-200',
-    blue: 'bg-blue-100 text-blue-900 border-blue-200',
-    emerald: 'bg-emerald-100 text-emerald-900 border-emerald-200',
-    slate: 'bg-slate-100 text-slate-900 border-slate-200',
-  };
+  const audio = ehAudio(fb);
 
   return (
+    /*
+     * O comentário do cliente é o produto desta tela, e era o menor elemento
+     * dela: vinha depois do breadcrumb, do selo de estado, do chip de tipo, e
+     * antes da data, do autor e de "posicionado" — oito pedaços de metadado
+     * ao redor de uma frase. Aqui a frase vem primeiro e grande; o resto é
+     * uma linha de apoio.
+     */
     <div
-      className={`group relative grid grid-cols-[86px_1fr_auto] gap-3 rounded-md border p-3 card-interativo ${selected ? 'ring-2 ring-primary' : ''} ${isResolved ? 'opacity-80' : ''}`}
+      className={`group relative flex flex-wrap items-start gap-3 rounded-lg border p-3 card-interativo ${selected ? 'ring-2 ring-primary' : ''} ${isResolved ? 'opacity-70' : ''}`}
       role="button"
       onClick={() => onOpen(fb.id)}
     >
-      <div className="relative h-[72px] w-[86px] overflow-hidden rounded-md border bg-muted">
-        <Thumb src={fb.preview_signed_url} alt={fb.arte_nome} sizes="86px" iconClassName="h-4 w-4" />
+      <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-md border bg-muted">
+        <Thumb src={fb.preview_signed_url} alt={fb.arte_nome} sizes="80px" iconClassName="h-4 w-4" />
         {hasPos && (
-          <div className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${fb.posicao_x}%`, top: `${fb.posicao_y}%` }}>
-            <span className="inline-block h-3 w-3 rounded-full bg-red-500 ring-2 ring-white shadow" />
+          <div
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+            style={{ left: `${fb.posicao_x}%`, top: `${fb.posicao_y}%` }}
+          >
+            {/* O pino já diz que o comentário tem lugar na arte — a palavra
+                "posicionado" na linha de apoio dizia a mesma coisa de novo. */}
+            <span className="inline-block h-3 w-3 rounded-full bg-primary ring-2 ring-white shadow" />
           </div>
         )}
-        {fb.arte_status_atual && (
-          <span className="absolute left-1 top-1 rounded border bg-background/90 px-1 text-[10px]">{arteStatusLabel(fb.arte_status_atual)}</span>
-        )}
       </div>
 
-      <div className="min-w-0">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">{fb.projeto_nome} <span className="opacity-50">›</span> {fb.arte_nome}</p>
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${toneMap[pill.tone]}`}>{pill.label}</span>
-        </div>
+      {/*
+        O selo e os três botões ficavam numa coluna `shrink-0` de ~130px que no
+        celular não tinha para onde ir: sobravam 90px para o comentário, que
+        quebrava em cinco linhas, e a linha de apoio virava "João Santos ·…".
+        Com `flex-wrap` e uma largura mínima no texto, esse bloco desce inteiro
+        para a linha de baixo quando não cabe — e continua à direita no desktop.
+      */}
+      <div className="min-w-[180px] flex-1">
+        <p className={`text-sm leading-snug ${isResolved ? 'text-muted-foreground line-through decoration-1' : 'font-medium'}`}>
+          {audio && (
+            <Mic aria-hidden className="mr-1.5 inline size-3.5 -translate-y-[1px] text-primary" />
+          )}
+          {fb.conteudo || <em className="font-normal text-muted-foreground">Áudio sem transcrição</em>}
+        </p>
 
-        <div className="flex items-start gap-2">
-          <span className="mt-[2px] inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px]">
-            <TipoIcon className="h-3 w-3" /> {fb.tipo === 'AUDIO' ? 'Áudio' : 'Texto'}
+        <p className="mt-1.5 truncate text-xs text-muted-foreground">
+          {fb.autor_nome} · {fb.arte_nome} · {new Date(fb.criado_em).toLocaleDateString('pt-BR')}
+        </p>
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {!isResolved && (
+          <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+            Aguardando resposta
           </span>
-          <p className={`line-clamp-2 text-sm ${isResolved ? 'text-muted-foreground' : ''}`}>{fb.conteudo || <em className="text-muted-foreground">sem texto</em>}</p>
+        )}
+        {/*
+          O botao do meio era um "Responder" que so chamava setSelectedId — o
+          mesmo que clicar na linha. Resolver, a acao que de fato tira o item
+          da fila, so existia dentro da aba Quadro, atras de um <select> que
+          mostrava "ABERTO" em caixa alta. Trocamos um pelo outro.
+        */}
+        <div className="flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
+          <Button variant="ghost" size="icon" className="size-8" onClick={(e) => { e.stopPropagation(); onVerNaArte(fb); }} title="Ver na arte">
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={(e) => { e.stopPropagation(); onAlternarResolvido(fb); }}
+            title={isResolved ? 'Reabrir' : 'Marcar como resolvido'}
+          >
+            {isResolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+          </Button>
+          <Button variant="ghost" size="icon" className="size-8" onClick={(e) => { e.stopPropagation(); onCriarTarefa(fb); }} title="Criar tarefa">
+            <PlusCircle className="h-4 w-4" />
+          </Button>
         </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <span>{new Date(fb.criado_em).toLocaleDateString('pt-BR')}</span>
-          <span>•</span>
-          <span>{fb.autor_nome}</span>
-          {hasPos && (<><span>•</span><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />posicionado</span></>)}
-        </div>
-      </div>
-
-      <div className="flex flex-col items-end gap-1">
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onVerNaArte(fb); }} title="Ver na arte"><Eye className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onResponder(fb); }} title="Responder"><Reply className="h-4 w-4" /></Button>
-        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onCriarTarefa(fb); }} title="Criar tarefa"><PlusCircle className="mr-1 h-4 w-4" />Tarefa</Button>
       </div>
     </div>
   );
@@ -204,12 +226,14 @@ function AudioInline({ src }: { src: string }) {
 }
 
 function FeedbackDetail({
-  fb, onVerNaArte, onCriarTarefa,
+  fb, onVerNaArte, onAlternarResolvido, onCriarTarefa,
 }: {
   fb: FeedbackRow;
   onVerNaArte: (f: FeedbackRow) => void;
+  onAlternarResolvido: (f: FeedbackRow) => void;
   onCriarTarefa: (f: FeedbackRow) => void;
 }) {
+  const isResolved = fb.status === 'RESOLVIDO';
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [thread, setThread] = useState<
@@ -261,16 +285,39 @@ function FeedbackDetail({
     }
   }
 
+  /*
+   * O painel repetia a lista inteira: chip de tipo, selo de estado, nome da
+   * arte, projeto, cliente e data no cabeçalho — e só então o comentário, numa
+   * caixa cinza igual à das respostas. Quem já tinha lido o item na esquerda
+   * lia tudo de novo antes de chegar ao que importa.
+   *
+   * Aqui o cabeçalho diz só onde estamos (arte, e abaixo projeto · cliente), o
+   * comentário original ganha a barra da cor do pino — a mesma que marca o
+   * ponto na miniatura — e as respostas ficam em caixas neutras. A diferença
+   * visual entre "o que o cliente disse" e "o que respondemos" passa a ser a
+   * primeira coisa que se enxerga.
+   */
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className="mb-1 flex items-center gap-2"><TipoBadge tipo={fb.tipo} /><StatusBadge status={fb.status} /></div>
-            <p className="text-sm font-semibold">{fb.arte_nome}</p>
-            <p className="text-xs text-muted-foreground">{fb.projeto_nome} • {fb.cliente_nome}</p>
+    <Card className="gap-0 overflow-hidden py-0">
+      <CardHeader className="border-b px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{fb.arte_nome}</p>
+            {/* O projeto já é o caminho de volta — não precisa de um botão
+                "Abrir projeto" repetindo-o lá embaixo, numa quarta linha de
+                ações que quebrava sozinha. */}
+            <p className="truncate text-xs text-muted-foreground">
+              <Link href={`/projetos/${fb.projeto_id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                {fb.projeto_nome}
+              </Link>
+              {' · '}{fb.cliente_nome}
+            </p>
           </div>
-          <div className="text-[11px] text-muted-foreground">{formatDateTime(fb.criado_em)}</div>
+          {isResolved && (
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200">
+              Resolvido
+            </span>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
@@ -279,42 +326,55 @@ function FeedbackDetail({
             <Thumb src={fb.preview_signed_url} alt={fb.arte_nome} sizes="(max-width: 1024px) 100vw, 420px" iconClassName="h-8 w-8" />
           </div>
         )}
-        {fb.conteudo && <div className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{fb.conteudo}</div>}
-        {fb.tipo === 'AUDIO' && (fb.audio_signed_url || fb.arquivo) && <AudioInline src={fb.audio_signed_url || fb.arquivo!} />}
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onVerNaArte(fb)}><Eye className="mr-1 h-4 w-4" /> Ver na arte</Button>
-          <Button variant="ghost" size="sm" onClick={() => onCriarTarefa(fb)}><PlusCircle className="mr-1 h-4 w-4" /> Criar tarefa</Button>
-          <Button asChild variant="link" size="sm"><Link href={`/projetos/${fb.projeto_id}`}>Abrir projeto</Link></Button>
-        </div>
-
-        {/* Thread */}
-        <div className="space-y-3">
-          <div className="text-xs font-semibold text-muted-foreground">Respostas</div>
-          {loadingThread ? (
-            <div className="text-xs text-muted-foreground">Carregando…</div>
-          ) : thread.length === 0 ? (
-            <div className="text-xs text-muted-foreground">Ainda não há respostas.</div>
-          ) : (
-            <div className="space-y-2">
-              {thread.map((r) => (
-                <div key={r.id} className="rounded-md border p-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-medium">{r.autor?.nome ?? 'Usuário'}</div>
-                    <div className="text-[10px] text-muted-foreground">{formatDateTime(r.criado_em)}</div>
-                  </div>
-                  <div className="mt-1 whitespace-pre-wrap text-sm">{r.conteudo}</div>
-                </div>
-              ))}
+        <div className="border-l-2 border-primary pl-3">
+          <p className="text-xs text-muted-foreground">
+            {fb.autor_nome} · {formatDateTime(fb.criado_em)}
+          </p>
+          {fb.conteudo && (
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{fb.conteudo}</p>
+          )}
+          {ehAudio(fb) && (
+            <div className="mt-2">
+              <AudioInline src={fb.audio_signed_url || fb.arquivo!} />
             </div>
           )}
         </div>
 
-        {/* Composer */}
+        <div className="flex flex-wrap items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => onAlternarResolvido(fb)}>
+            {isResolved
+              ? (<><RotateCcw className="mr-1.5 h-4 w-4" /> Reabrir</>)
+              : (<><Check className="mr-1.5 h-4 w-4" /> Resolver</>)}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onVerNaArte(fb)}><Eye className="mr-1.5 h-4 w-4" /> Ver na arte</Button>
+          <Button variant="ghost" size="sm" onClick={() => onCriarTarefa(fb)}><PlusCircle className="mr-1.5 h-4 w-4" /> Criar tarefa</Button>
+        </div>
+
+        {/* Respostas — o título só aparece quando há o que titular. */}
+        {loadingThread ? (
+          <p className="text-xs text-muted-foreground">Carregando respostas…</p>
+        ) : thread.length > 0 ? (
+          <div className="space-y-2">
+            <p className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+              {thread.length === 1 ? '1 resposta' : `${thread.length} respostas`}
+            </p>
+            {thread.map((r) => (
+              <div key={r.id} className="rounded-md border p-2.5">
+                <p className="text-[11px] text-muted-foreground">
+                  {r.autor?.nome ?? 'Usuário'} · {formatDateTime(r.criado_em)}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{r.conteudo}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* Composer: o placeholder já diz o que o campo faz — o rótulo
+            "Responder" acima dele era a terceira vez que a palavra aparecia. */}
         <div className="space-y-2">
-          <label className="text-xs text-muted-foreground">Responder</label>
           <textarea
-            className="min-h-[90px] w-full resize-y rounded-md border bg-background p-2 text-sm"
+            className="min-h-[90px] w-full resize-y rounded-md border bg-background p-2.5 text-sm"
             placeholder={`Responder para ${fb.autor_nome}…`}
             value={reply}
             onChange={(e) => setReply(e.target.value)}
@@ -325,10 +385,15 @@ function FeedbackDetail({
               }
             }}
           />
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] text-muted-foreground">Dica: Ctrl/Cmd+Enter envia • Shift+Enter quebra linha</div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setReply('')} disabled={sending}>Limpar</Button>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">Ctrl/Cmd + Enter envia</p>
+            <div className="flex shrink-0 items-center gap-1">
+              {/* "Limpar" era um botão outline do mesmo tamanho do "Enviar":
+                  dois pesos iguais, e o destrutivo vinha primeiro. Agora só
+                  existe quando há algo escrito, e sem contorno. */}
+              {reply.trim().length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setReply('')} disabled={sending}>Limpar</Button>
+              )}
               <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim()}>{sending ? 'Enviando…' : 'Enviar'}</Button>
             </div>
           </div>
@@ -357,18 +422,29 @@ function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; on
           <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-semibold">{c.title}</h4><Badge variant="secondary">{grouped[c.key].length}</Badge></div>
           <div className="space-y-2">
             {grouped[c.key].map(fb => (
-              <div key={fb.id} className="cursor-pointer rounded-md border bg-card p-2 text-sm card-interativo" onClick={() => onOpen(fb.id)}>
-                <div className="mb-1 flex items-center gap-2"><TipoBadge tipo={fb.tipo} /><span className="text-[11px] text-muted-foreground truncate">{fb.projeto_nome}</span></div>
-                <div className="truncate">{fb.conteudo || fb.arte_nome}</div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">{fb.autor_nome}</span>
-                  <Select onValueChange={(v)=>onMove(fb.id, v as FeedbackStatus)}>
-                    <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder={fb.status} /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ABERTO">Aberto</SelectItem>
-                      <SelectItem value="RESOLVIDO">Resolvido</SelectItem>
-                    </SelectContent>
-                  </Select>
+              /*
+                Cada cartão trazia um <select> de estado que, fechado, escrevia
+                "ABERTO" em caixa alta — repetindo o nome da coluna em que o
+                próprio cartão estava. Com duas colunas só existe um destino
+                possível, então o destino vira um botão que o diz.
+              */
+              <div key={fb.id} className="group rounded-md border bg-card p-2.5 text-sm card-interativo" role="button" onClick={() => onOpen(fb.id)}>
+                <p className="line-clamp-2 leading-snug">
+                  {ehAudio(fb) && <Mic aria-hidden className="mr-1.5 inline size-3.5 -translate-y-[1px] text-primary" />}
+                  {fb.conteudo || fb.arte_nome}
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="truncate text-[11px] text-muted-foreground">{fb.autor_nome} · {fb.projeto_nome}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-xs opacity-70 transition-opacity group-hover:opacity-100"
+                    onClick={(e) => { e.stopPropagation(); onMove(fb.id, c.key === 'ABERTO' ? 'RESOLVIDO' : 'ABERTO'); }}
+                  >
+                    {c.key === 'ABERTO'
+                      ? (<><Check className="mr-1 h-3.5 w-3.5" /> Resolver</>)
+                      : (<><RotateCcw className="mr-1 h-3.5 w-3.5" /> Reabrir</>)}
+                  </Button>
                 </div>
               </div>
             ))}
@@ -393,8 +469,13 @@ function FeedbackTimelineView({ items, onOpen }: { items: FeedbackRow[]; onOpen:
           <div className="space-y-2">
             {arr.map(fb => (
               <div key={fb.id} className="cursor-pointer rounded-md border p-3 card-interativo" onClick={() => onOpen(fb.id)}>
-                <div className="mb-1 flex items-center justify-between"><div className="flex items-center gap-2"><TipoBadge tipo={fb.tipo} /><span className="text-xs text-muted-foreground">{fb.projeto_nome} • {fb.cliente_nome}</span></div><span className="text-[11px] text-muted-foreground">{formatTime(fb.criado_em)}</span></div>
-                <div className="text-sm">{fb.conteudo || <em className="text-muted-foreground">sem texto</em>}</div>
+                <p className="text-sm leading-snug">
+                  {ehAudio(fb) && <Mic aria-hidden className="mr-1.5 inline size-3.5 -translate-y-[1px] text-primary" />}
+                  {fb.conteudo || <em className="text-muted-foreground">Áudio sem transcrição</em>}
+                </p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {fb.autor_nome} · {fb.arte_nome} · {formatTime(fb.criado_em)}
+                </p>
               </div>
             ))}
           </div>
@@ -454,7 +535,14 @@ export default function FeedbacksPage() {
     qs.set('page', String(page));
     qs.set('limit', String(PAGE_SIZE));
     if (statusFilter !== 'todos') qs.set('status', statusFilter);
-    if (tipoFilter !== 'todos') qs.set('tipo', tipoFilter);
+    /*
+     * O filtro de tipo era server-side e mandava `tipo=AUDIO` cru. Um áudio
+     * gravado em cima da arte fica gravado como POSICIONAL, então não casava
+     * nem com "Só áudio" nem com "Só texto": sumia dos dois. Aqui ele passa a
+     * ser aplicado no cliente por `ehAudio`, que olha o arquivo e acerta nas
+     * três variantes — do mesmo jeito que os filtros de autor e projeto, que
+     * já eram client-side.
+     */
     if (debouncedSearch.trim()) qs.set('search', debouncedSearch.trim());
     const res = await api.get<{ data: any[] }>(`/feedbacks?${qs}`);
     return (res.data ?? []).map(mapFeedback);
@@ -487,7 +575,7 @@ export default function FeedbacksPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, statusFilter, tipoFilter, debouncedSearch]);
+  }, [user, statusFilter, debouncedSearch]);
 
   // carregar mais
   const handleLoadMore = async () => {
@@ -515,6 +603,7 @@ export default function FeedbacksPage() {
         f.autor_nome.toLowerCase().includes(st),
       );
     }
+    if (tipoFilter !== 'todos') arr = arr.filter((f) => (tipoFilter === 'AUDIO' ? ehAudio(f) : !ehAudio(f)));
     if (autorFilter !== 'todos') arr = arr.filter((f) => f.autor_tipo === autorFilter);
     if (projetoFilter !== 'todos') arr = arr.filter((f) => f.projeto_nome === projetoFilter);
     arr.sort((a, b) => {
@@ -527,7 +616,7 @@ export default function FeedbacksPage() {
       }
     });
     return arr;
-  }, [rows, searchTerm, autorFilter, projetoFilter, sortBy]);
+  }, [rows, searchTerm, tipoFilter, autorFilter, projetoFilter, sortBy]);
 
   /* ----------- ações ----------- */
   const handleVerNaArte = (fb: FeedbackRow) => {
@@ -536,9 +625,28 @@ export default function FeedbacksPage() {
       : `/artes/${fb.arte_id}`;
     window.open(url, '_blank');
   };
-  const handleResponder = async (fb: FeedbackRow) => {
-    setSelectedId(fb.id); // foca o detalhe para responder
+  /*
+   * Resolver e reabrir são a mesma transição em sentidos opostos, e viviam
+   * escritas só dentro do <select> da aba Quadro. Aqui viram uma função só,
+   * compartilhada pela lista, pelo painel de detalhe e pelo quadro — com o
+   * mesmo desfazer otimista nos três.
+   */
+  const moverPara = async (fbId: string, to: FeedbackStatus) => {
+    const anterior = rows.find((r) => r.id === fbId)?.status;
+    if (!anterior || anterior === to) return;
+    setRows((prev) => prev.map((x) => (x.id === fbId ? { ...x, status: to } : x)));
+    try {
+      await api.put(`/feedbacks/${fbId}/${to === 'RESOLVIDO' ? 'resolver' : 'reabrir'}`, {});
+      toast.success(to === 'RESOLVIDO' ? 'Feedback resolvido.' : 'Feedback reaberto.');
+    } catch (e: any) {
+      setRows((prev) => prev.map((x) => (x.id === fbId ? { ...x, status: anterior } : x)));
+      toast.error(
+        (to === 'RESOLVIDO' ? 'Não consegui resolver. ' : 'Não consegui reabrir. ') + (e?.message ?? ''),
+      );
+    }
   };
+  const handleAlternarResolvido = (fb: FeedbackRow) =>
+    moverPara(fb.id, fb.status === 'RESOLVIDO' ? 'ABERTO' : 'RESOLVIDO');
   const handleCriarTarefa = async (fb: FeedbackRow) => {
     try {
       if (!user) { toast.error('Você precisa estar autenticado.'); return; }
@@ -581,6 +689,16 @@ export default function FeedbacksPage() {
   }
 
   const empty = filteredOrdered.length === 0;
+  const temFiltroFeedback =
+    !!searchTerm || statusFilter !== 'todos' || tipoFilter !== 'todos' ||
+    autorFilter !== 'todos' || projetoFilter !== 'todos';
+  const limparFiltrosFeedback = () => {
+    setSearchTerm('');
+    setStatusFilter('todos');
+    setTipoFilter('todos');
+    setAutorFilter('todos');
+    setProjetoFilter('todos');
+  };
   const selected = selectedId ? filteredOrdered.find(f => f.id === selectedId) || rows.find(f => f.id === selectedId) : null;
 
   return (
@@ -590,81 +708,103 @@ export default function FeedbacksPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Feedbacks ✦</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
-            <TabsList>
-              <TabsTrigger value="cards">Cards</TabsTrigger>
-              <TabsTrigger value="board">Board</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button variant="outline" size="sm"><Settings2 className="mr-2 h-4 w-4" /> Preferências</Button>
-        </div>
+        {/*
+          "Cards / Board / Timeline" num produto em português, e um botão
+          "Preferências" sem onClick — clicar nele nunca fez nada. Os nomes
+          agora dizem o formato ("Por dia" é literalmente o que a terceira aba
+          faz: agrupa por data), e o botão morto saiu.
+        */}
+        <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+          <TabsList>
+            <TabsTrigger value="cards">Lista</TabsTrigger>
+            <TabsTrigger value="board">Quadro</TabsTrigger>
+            <TabsTrigger value="timeline">Por dia</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w=[260px] flex-1">
+      {/*
+        Cinco seletores lado a lado, e três deles fechados escreviam só "Todos",
+        "Todos" e "Todos Projetos" — dava para ver que havia filtros, não o que
+        cada um filtrava. O `placeholder` de cada <SelectValue> nunca aparecia,
+        porque todos começam com valor definido: quem manda é o rótulo da opção.
+        Então é o rótulo que precisa se explicar sozinho.
+
+        (O `min-w=[260px]` do campo de busca também não era classe nenhuma —
+        `=` no lugar de `-`. O campo nunca teve largura mínima.)
+      */}
+      <div className="space-y-2">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Buscar por conteúdo, arte, projeto ou autor…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FilterStatus)}>
-          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos Status</SelectItem>
-            <SelectItem value="ABERTO">Aberto</SelectItem>
-            <SelectItem value="RESOLVIDO">Resolvido</SelectItem>
+            <SelectItem value="todos">Abertos e resolvidos</SelectItem>
+            <SelectItem value="ABERTO">Só os abertos</SelectItem>
+            <SelectItem value="RESOLVIDO">Só os resolvidos</SelectItem>
           </SelectContent>
         </Select>
         <Select value={tipoFilter} onValueChange={(v) => setTipoFilter(v as FilterTipo)}>
-          <SelectTrigger className="w-[130px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="TEXTO">Texto</SelectItem>
-            <SelectItem value="AUDIO">Áudio</SelectItem>
+            <SelectItem value="todos">Texto e áudio</SelectItem>
+            <SelectItem value="TEXTO">Só texto</SelectItem>
+            <SelectItem value="AUDIO">Só áudio</SelectItem>
           </SelectContent>
         </Select>
         <Select value={autorFilter} onValueChange={(v) => setAutorFilter(v as FilterAutor)}>
-          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Autor" /></SelectTrigger>
+          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="CLIENTE">Clientes</SelectItem>
-            <SelectItem value="DESIGNER">Designers</SelectItem>
+            <SelectItem value="todos">Qualquer autor</SelectItem>
+            <SelectItem value="CLIENTE">Só do cliente</SelectItem>
+            <SelectItem value="DESIGNER">Só da equipe</SelectItem>
           </SelectContent>
         </Select>
         <Select value={projetoFilter} onValueChange={(v) => setProjetoFilter(v)}>
-          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Projeto" /></SelectTrigger>
+          <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos Projetos</SelectItem>
+            <SelectItem value="todos">Todos os projetos</SelectItem>
             {projetos.map((nome) => (<SelectItem key={nome} value={nome}>{nome}</SelectItem>))}
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-          <SelectTrigger className="w-[150px]"><SelectValue placeholder="Ordenar" /></SelectTrigger>
+          <SelectTrigger className="w-[215px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="criado_em">Mais Recente</SelectItem>
-            <SelectItem value="arte">Arte</SelectItem>
-            <SelectItem value="projeto">Projeto</SelectItem>
-            <SelectItem value="autor">Autor</SelectItem>
+            <SelectItem value="criado_em">Mais recentes primeiro</SelectItem>
+            <SelectItem value="arte">Agrupados por arte</SelectItem>
+            <SelectItem value="projeto">Agrupados por projeto</SelectItem>
+            <SelectItem value="autor">Agrupados por autor</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       </div>
 
       {/* Conteúdo */}
       <Tabs value={mode}>
         <TabsContent value="cards" className="mt-0">
           {empty ? (
-            <EmptyState
-              icon={MessageSquare}
-              title="Nenhum feedback encontrado"
-              description={
-                searchTerm || tipoFilter !== 'todos' || autorFilter !== 'todos' || projetoFilter !== 'todos' || statusFilter !== 'todos'
-                  ? 'Tente ajustar os filtros.'
-                  : 'Os feedbacks aparecerão aqui conforme forem enviados.'
-              }
-            />
+            temFiltroFeedback ? (
+              <EmptyState
+                variante="filtro"
+                title="Nenhum feedback com esses filtros"
+                description="Tente outro termo ou limpe os filtros."
+                actionLabel="Limpar filtros"
+                onAction={limparFiltrosFeedback}
+              />
+            ) : (
+              <EmptyState
+                icon={MessageSquare}
+                tom="pessego"
+                title="Nenhum feedback ainda"
+                description="O feedback chega quando o cliente abre o link de uma arte e comenta. Nada para responder por enquanto."
+                acaoSecundaria={{ label: 'Ver artes', href: '/artes' }}
+              />
+            )
           ) : (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
               <div className="space-y-3">
                 {filteredOrdered.map((fb) => (
                   <ListItem
@@ -673,7 +813,7 @@ export default function FeedbacksPage() {
                     selected={selectedId === fb.id}
                     onOpen={(id) => setSelectedId(id)}
                     onVerNaArte={handleVerNaArte}
-                    onResponder={handleResponder}
+                    onAlternarResolvido={handleAlternarResolvido}
                     onCriarTarefa={handleCriarTarefa}
                   />
                 ))}
@@ -692,6 +832,7 @@ export default function FeedbacksPage() {
                   <FeedbackDetail
                     fb={selected}
                     onVerNaArte={handleVerNaArte}
+                    onAlternarResolvido={handleAlternarResolvido}
                     onCriarTarefa={handleCriarTarefa}
                   />
                 )}
@@ -704,19 +845,7 @@ export default function FeedbacksPage() {
           <FeedbackBoardView
             items={filteredOrdered}
             onOpen={(id) => setSelectedId(id)}
-            onMove={async (fbId, to) => {
-              const anterior = rows.find(r => r.id === fbId)?.status;
-              if (anterior === to) return;
-              setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: to } : x));
-              try {
-                // não existe PUT de status: a thread é resolvida ou reaberta
-                const acao = to === 'RESOLVIDO' ? 'resolver' : 'reabrir';
-                await api.put(`/feedbacks/${fbId}/${acao}`, {});
-              } catch {
-                toast.error('Não consegui mover, desfazendo…');
-                setRows(prev => prev.map(x => x.id === fbId ? { ...x, status: rows.find(r => r.id === fbId)?.status ?? x.status } : x));
-              }
-            }}
+            onMove={moverPara}
           />
         </TabsContent>
 

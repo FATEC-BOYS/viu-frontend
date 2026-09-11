@@ -520,7 +520,7 @@ export default function ProjetoPage() {
 
               {/* O kanban tem três colunas dentro: em metade da largura os
                   cartões ficam espremidos. */}
-              <div className="grid gap-4 md:grid-cols-[2fr_3fr]">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_3fr]">
                 <ProximosPassos
                   passos={passos}
                   onAction={passo => {

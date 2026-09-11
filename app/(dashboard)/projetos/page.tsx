@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, Settings2 } from "lucide-react";
+import { Plus, Loader2, Settings2, FolderOpen } from "lucide-react";
+import EmptyState from "@/components/layout/EmptyState";
 import ProjetoModal from "@/components/projetos/ProjetoModal";
 import { toast } from "sonner";
 import {
@@ -111,10 +112,22 @@ function ProjetosPageContent() {
     return () => clearInterval(id);
   }, [loading]);
 
+  /*
+   * `reload` roda uma vez só, na montagem — e mandava `searchTerm` e
+   * `statusFilter` junto. Abrindo /projetos?q=algo, o termo já estava no estado
+   * inicial (lido da URL), então a busca ia para o servidor e `rows` nascia
+   * cortado. Como não há refetch quando o filtro muda, limpar a busca filtrava
+   * uma lista que já vinha vazia: a tela ficava permanentemente sem projetos
+   * até um F5. O mesmo valia para /projetos?status=…
+   *
+   * O filtro que funciona é o client-side logo abaixo, que reage a todos os
+   * critérios. Este aqui só precisa trazer a lista inteira — `listAllProjetos`
+   * já pagina tudo — e deixar a filtragem em um lugar só.
+   */
   const reload = async () => {
     setLoading(true);
     try {
-      const rows = await listAllProjetos({ search: searchTerm, status: statusFilter });
+      const rows = await listAllProjetos();
       setRows(rows);
       setError(null);
     } catch (e: any) {
@@ -272,6 +285,20 @@ function ProjetosPageContent() {
   }
 
   const empty = filtered.length === 0;
+  /*
+   * A mesma conjunção de quatro filtros aparecia três vezes no JSX do vazio —
+   * uma para escolher o título, outra para o texto, outra para decidir se
+   * mostrava o botão. Derivar uma vez deixa claro que são dois vazios
+   * diferentes: "não existe projeto" e "o filtro não achou projeto".
+   */
+  const temFiltroProjeto =
+    !!searchTerm || statusFilter !== "todos" || prazoPreset !== "todos" || clienteFilter !== "todos";
+  const limparFiltrosProjeto = () => {
+    setSearchTerm("");
+    setStatusFilter("todos");
+    setPrazoPreset("todos");
+    setClienteFilter("todos");
+  };
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -317,20 +344,24 @@ function ProjetosPageContent() {
       <Tabs value={mode}>
         <TabsContent value="cards" className="mt-0">
           {empty ? (
-            <div className="p-10 text-center">
-              <h3 className="text-lg font-semibold mb-2">
-                {searchTerm || statusFilter !== "todos" || prazoPreset !== "todos" || clienteFilter !== "todos"
-                  ? "Não achei nada por aqui 🐈‍⬛" : "Seus projetos aparecerão aqui"}
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                {searchTerm || statusFilter !== "todos" || prazoPreset !== "todos" || clienteFilter !== "todos"
-                  ? "Tentar outro termo, limpar filtros ou criar um novo projeto."
-                  : "Crie seu primeiro projeto — prometo que é rápido."}
-              </p>
-              {!(searchTerm || statusFilter !== "todos" || prazoPreset !== "todos" || clienteFilter !== "todos") && (
-                <Button onClick={() => { setEditing(null); setOpenModal(true); }}><Plus className="h-4 w-4 mr-2" />Criar projeto</Button>
-              )}
-            </div>
+            temFiltroProjeto ? (
+              <EmptyState
+                variante="filtro"
+                title="Nenhum projeto com esses filtros"
+                description="Tente outro termo ou limpe os filtros."
+                actionLabel="Limpar filtros"
+                onAction={limparFiltrosProjeto}
+              />
+            ) : (
+              <EmptyState
+                icon={FolderOpen}
+                tom="lavanda"
+                title="Nenhum projeto ainda"
+                description="O projeto é onde o trabalho entra no VIU: guarda as artes de um cliente e o histórico de cada versão."
+                actionLabel="Criar projeto"
+                onAction={() => { setEditing(null); setOpenModal(true); }}
+              />
+            )
           ) : (
             <>
               {selectMode && (

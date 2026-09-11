@@ -405,7 +405,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
             <FilaDoDia itens={fila} />
 
             <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">

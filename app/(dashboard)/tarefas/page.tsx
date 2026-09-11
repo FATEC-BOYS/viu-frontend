@@ -6,7 +6,8 @@ import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, LayoutGrid, Kanban as KanbanIcon, CalendarDays, Loader2 } from "lucide-react";
+import { LayoutGrid, Kanban as KanbanIcon, CalendarDays, Loader2, ListChecks } from "lucide-react";
+import EmptyState from "@/components/layout/EmptyState";
 import { FiltersBar } from "@/components/tarefas/FiltersBar";
 import { GridSkeleton } from "@/components/tarefas/skeletons";
 import { TaskCard, type Tarefa } from "@/components/tarefas/TaskCard";
@@ -181,6 +182,14 @@ export default function TarefasPage() {
   }
 
   const empty = filtered.length === 0;
+  const temFiltroTarefa =
+    !!search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos";
+  const limparFiltrosTarefa = () => {
+    setSearch("");
+    setStatus("todos");
+    setPrioridade("todos");
+    setResponsavel("todos");
+  };
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -199,9 +208,6 @@ export default function TarefasPage() {
               <TabsTrigger value="calendar"><CalendarDays className="mr-2 h-4 w-4" /> Calendário</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button onClick={() => {/* abrir criador de tarefa */}} title="Criar tarefa — bora tirar do papel?">
-            <Plus className="h-4 w-4 mr-2" /> Nova
-          </Button>
         </div>
       </div>
 
@@ -220,22 +226,31 @@ export default function TarefasPage() {
         {/* Cards */}
         <TabsContent value="cards" className="mt-0">
           {empty ? (
-            <div className="p-10 text-center">
-              <h3 className="text-lg font-semibold mb-2">
-                {search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos"
-                  ? "Não achei nada por aqui 🐈‍⬛" : "Suas tarefas aparecerão aqui"}
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                {search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos"
-                  ? "Tente outro termo, limpe os filtros ou crie uma nova tarefa."
-                  : "Crie sua primeira tarefa — rapidinho!"}
-              </p>
-              {!(search || status !== "todos" || prioridade !== "todos" || responsavel !== "todos") && (
-                <Button onClick={() => {/* abrir criador de tarefa */}}>
-                  <Plus className="h-4 w-4 mr-2" /> Criar tarefa
-                </Button>
-              )}
-            </div>
+            temFiltroTarefa ? (
+              <EmptyState
+                variante="filtro"
+                title="Nenhuma tarefa com esses filtros"
+                description="Tente outro termo ou limpe os filtros."
+                actionLabel="Limpar filtros"
+                onAction={limparFiltrosTarefa}
+              />
+            ) : (
+              /*
+               * O texto anterior — "Crie sua primeira tarefa — rapidinho!" — vinha
+               * com um botão cujo onClick era um comentário no lugar do código,
+               * igual ao botão "Nova" do cabeçalho. Não existe criador de tarefa
+               * em lugar nenhum do produto: o único caminho real é "Criar tarefa"
+               * sobre um feedback. Enquanto for assim, o vazio diz o caminho que
+               * existe em vez de oferecer um botão que não faz nada.
+               */
+              <EmptyState
+                icon={ListChecks}
+                tom="algodao"
+                title="Nenhuma tarefa ainda"
+                description="As tarefas nascem de um feedback: ao ler o que o cliente pediu, você transforma o pedido em tarefa sem sair da tela."
+                acaoSecundaria={{ label: "Ver feedbacks", href: "/feedbacks" }}
+              />
+            )
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filtered.map((t) => (
