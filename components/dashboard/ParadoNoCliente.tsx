@@ -21,6 +21,8 @@ import Link from 'next/link'
  * O selo de dias esquenta em pêssego a partir de quatro dias; antes disso é
  * cedo para cobrar e a cor só faria barulho.
  */
+import type { ProximoPasso } from './FilaDoDia'
+
 export type ItemParado = {
   id: string
   arte: string
@@ -32,7 +34,13 @@ export type ItemParado = {
 
 const ESQUENTA_A_PARTIR_DE = 4
 
-export default function ParadoNoCliente({ itens }: { itens: ItemParado[] }) {
+export default function ParadoNoCliente({
+  itens,
+  proximoPasso = null,
+}: {
+  itens: ItemParado[]
+  proximoPasso?: ProximoPasso
+}) {
   return (
     <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
@@ -41,7 +49,11 @@ export default function ParadoNoCliente({ itens }: { itens: ItemParado[] }) {
 
       {itens.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nenhum link esperando resposta. Tudo que você mandou já teve retorno.
+          {proximoPasso === 'arte'
+            ? 'Nada compartilhado ainda — primeiro sobe a arte, depois vai o link.'
+            : proximoPasso === 'link'
+              ? 'Você ainda não mandou nenhum link. É ele que põe a arte na mão do cliente.'
+              : 'Nenhum link esperando resposta. Tudo que você mandou já teve retorno.'}
         </p>
       ) : (
         <ul className="flex flex-col">
