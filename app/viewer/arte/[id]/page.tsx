@@ -72,20 +72,26 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
   }
 
   if (!arteForClient.arquivo) {
+    /*
+     * Sem URL de exibição não há o que olhar, e este é o único caminho honesto
+     * entre mostrar a tela inteira vazia e não mostrar nada. Acontece quando a
+     * assinatura do arquivo falha — `signPath` devolve `null` e a arte existe,
+     * mas não tem por onde ser vista.
+     */
     return (
-      <main className="mx-auto max-w-7xl p-4 md:p-8">
-        <header className="rounded-2xl overflow-hidden border mb-4">
-          <div className="bg-gradient-to-r from-primary/70 to-primary/25 h-20" />
-          <div className="p-4 bg-card">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {arte.nome}{' '}
-              <span className="text-muted-foreground">— v{arte.versao}</span>
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">Preparando visualização…</p>
-          </div>
+      <main className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+        <header className="flex shrink-0 items-baseline gap-2 border-b px-4 py-2.5">
+          <h1 className="truncate text-sm font-semibold tracking-tight">{arte.nome}</h1>
+          <span className="font-mono text-xs text-muted-foreground">v{arte.versao}</span>
         </header>
-        <div className="rounded-2xl border overflow-hidden">
-          <div className="aspect-video bg-muted animate-pulse" />
+        <div className="grid flex-1 place-items-center bg-canvas p-6 text-center">
+          <div className="max-w-sm space-y-1">
+            <p className="text-sm font-medium">Não consegui abrir esta arte</p>
+            <p className="text-sm text-muted-foreground">
+              O arquivo existe, mas o endereço de visualização não foi gerado. Recarregue a
+              página; se continuar assim, avise quem mandou o link.
+            </p>
+          </div>
         </div>
       </main>
     )

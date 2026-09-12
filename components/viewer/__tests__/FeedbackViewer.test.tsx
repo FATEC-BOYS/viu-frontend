@@ -173,7 +173,7 @@ describe("FeedbackViewer", () => {
 
   it("shows empty state when no feedbacks", () => {
     render(<FeedbackViewer {...defaultProps} />);
-    expect(screen.getByText("Nenhum feedback ainda.")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum comentário ainda.")).toBeInTheDocument();
   });
 
   it("renders text feedbacks with avatar", () => {
@@ -193,27 +193,12 @@ describe("FeedbackViewer", () => {
     expect(audio?.src).toContain("audio.webm");
   });
 
-  it("shows 'Somente leitura' when readOnly is true", () => {
-    render(<FeedbackViewer {...defaultProps} readOnly={true} />);
-    expect(screen.getByText("Somente leitura")).toBeInTheDocument();
-  });
-
-  it("shows viewer email when identified", () => {
-    render(<FeedbackViewer {...defaultProps} />);
-    expect(screen.getByText("Comentando como viewer@test.com")).toBeInTheDocument();
-  });
-
-  /**
-   * Sem sessao nao ha o que "identificar": o botao abria um modal que pedia
-   * e-mail e nome de quem ja estava logado, e o dado era descartado na rota
-   * BFF antes de chegar ao backend, que grava `autorId` da sessao. Agora a
-   * tela diz o que resolve — entrar na conta.
+  /*
+   * "Somente leitura", "Comentando como <e-mail>" e "Entre na sua conta" eram
+   * verificados aqui porque o viewer repetia, acima do campo de texto, o que o
+   * cabeçalho já dizia. A frase agora existe uma vez só, na faixa do topo, e
+   * quem a trava é ViewerShell.test.tsx.
    */
-  it("manda entrar na conta quando nao ha sessao, em vez de pedir e-mail", () => {
-    render(<FeedbackViewer {...defaultProps} viewer={null} />);
-    expect(screen.getByText("Entre na sua conta para comentar")).toBeInTheDocument();
-    expect(screen.queryByText(/identificar/i)).not.toBeInTheDocument();
-  });
 
   it("disables send button when comment is empty", () => {
     render(<FeedbackViewer {...defaultProps} />);
@@ -308,7 +293,7 @@ describe("FeedbackViewer", () => {
   it("toggles to comment mode on Comentar click", async () => {
     render(<FeedbackViewer {...defaultProps} />);
     await userEvent.click(screen.getByText("Comentar"));
-    expect(screen.getByText("Comentando")).toBeInTheDocument();
+    expect(screen.getByText("Clique na arte")).toBeInTheDocument();
     expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
   });
 
@@ -316,21 +301,21 @@ describe("FeedbackViewer", () => {
     render(<FeedbackViewer {...defaultProps} />);
     expect(screen.getByText("Comentar")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "c" });
-    expect(screen.getByText("Comentando")).toBeInTheDocument();
+    expect(screen.getByText("Clique na arte")).toBeInTheDocument();
   });
 
   it("does NOT toggle comment mode when typing in textarea", async () => {
     render(<FeedbackViewer {...defaultProps} />);
     // First enable comment mode
     await userEvent.click(screen.getByText("Comentar"));
-    expect(screen.getByText("Comentando")).toBeInTheDocument();
+    expect(screen.getByText("Clique na arte")).toBeInTheDocument();
 
     // Focus textarea and press C — should NOT toggle
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");
     textarea.focus();
     fireEvent.keyDown(textarea, { key: "c" });
     // Still in comment mode
-    expect(screen.getByText("Comentando")).toBeInTheDocument();
+    expect(screen.getByText("Clique na arte")).toBeInTheDocument();
   });
 
   /* ---------------------------------------------------------------- */
@@ -415,12 +400,12 @@ describe("FeedbackViewer", () => {
     expect(screen.getByText("Muito bom!")).toBeInTheDocument();
   });
 
-  it("shows 'Nenhum feedback aberto.' when all are resolved and filter is on", async () => {
+  it("shows 'Nenhum comentário em aberto.' when all are resolved and filter is on", async () => {
     render(
       <FeedbackViewer {...defaultProps} initialFeedbacks={[resolvedFeedback]} />
     );
     await userEvent.click(screen.getByText("Todos"));
-    expect(screen.getByText("Nenhum feedback aberto.")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum comentário em aberto.")).toBeInTheDocument();
   });
 
   /* ---------------------------------------------------------------- */
@@ -431,9 +416,9 @@ describe("FeedbackViewer", () => {
     render(
       <FeedbackViewer {...defaultProps} initialFeedbacks={[positionedFeedback]} />
     );
-    expect(screen.getByText("1 pins")).toBeInTheDocument();
-    expect(screen.getByLabelText("Pin anterior")).toBeInTheDocument();
-    expect(screen.getByLabelText("Próximo pin")).toBeInTheDocument();
+    expect(screen.getByText("1 na arte")).toBeInTheDocument();
+    expect(screen.getByLabelText("Marcação anterior")).toBeInTheDocument();
+    expect(screen.getByLabelText("Próxima marcação")).toBeInTheDocument();
   });
 
   it("does not show pin navigation when no positioned feedbacks", () => {
@@ -448,27 +433,29 @@ describe("FeedbackViewer", () => {
   it("shows zoom controls", () => {
     render(<FeedbackViewer {...defaultProps} />);
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByLabelText("Zoom in")).toBeInTheDocument();
-    expect(screen.getByLabelText("Zoom out")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aumentar zoom")).toBeInTheDocument();
+    expect(screen.getByLabelText("Diminuir zoom")).toBeInTheDocument();
   });
 
   it("zoom in increases percentage", async () => {
     render(<FeedbackViewer {...defaultProps} />);
-    await userEvent.click(screen.getByLabelText("Zoom in"));
+    await userEvent.click(screen.getByLabelText("Aumentar zoom"));
     expect(screen.getByText("125%")).toBeInTheDocument();
   });
 
   it("zoom out decreases percentage", async () => {
     render(<FeedbackViewer {...defaultProps} />);
-    await userEvent.click(screen.getByLabelText("Zoom out"));
+    await userEvent.click(screen.getByLabelText("Diminuir zoom"));
     expect(screen.getByText("75%")).toBeInTheDocument();
   });
 
-  it("shows reset button only when zoomed", async () => {
+  it("oferece 'encaixar na tela' o tempo todo, não só depois de dar zoom", async () => {
     render(<FeedbackViewer {...defaultProps} />);
-    expect(screen.queryByLabelText("Reset zoom")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("Zoom in"));
-    expect(screen.getByLabelText("Reset zoom")).toBeInTheDocument();
+    // Antes o botão só nascia depois do primeiro zoom. Quem chegava com a arte
+    // grande demais para a tela não tinha como pedir que ela coubesse.
+    expect(screen.getByLabelText("Encaixar na tela")).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("Aumentar zoom"));
+    expect(screen.getByLabelText("Encaixar na tela")).toBeInTheDocument();
   });
 
   /* ---------------------------------------------------------------- */
@@ -580,9 +567,10 @@ describe("FeedbackViewer", () => {
   /*  Feedback count display                                            */
   /* ---------------------------------------------------------------- */
 
-  it("shows feedback count", () => {
+  it("conta os comentários no cabeçalho da trilha", () => {
     render(<FeedbackViewer {...defaultProps} initialFeedbacks={[baseFeedback, resolvedFeedback]} />);
-    expect(screen.getByText("(2)")).toBeInTheDocument();
+    const titulo = screen.getByRole("heading", { name: /Comentários/ });
+    expect(titulo).toHaveTextContent("(2)");
   });
 
   /* ---------------------------------------------------------------- */
@@ -611,11 +599,11 @@ describe("FeedbackViewer", () => {
     await userEvent.click(screen.getByText("Comentar"));
 
     // Click on image to place pin (mock getBoundingClientRect since jsdom returns 0s)
-    const imgContainer = document.querySelector(".cursor-crosshair")!;
-    vi.spyOn(imgContainer, "getBoundingClientRect").mockReturnValue({
+    const moldura = document.querySelector("[data-arte-moldura]")!;
+    vi.spyOn(moldura, "getBoundingClientRect").mockReturnValue({
       left: 0, top: 0, width: 500, height: 400, right: 500, bottom: 400, x: 0, y: 0, toJSON: () => {},
     });
-    fireEvent.click(imgContainer, { clientX: 100, clientY: 50 });
+    fireEvent.click(moldura, { clientX: 100, clientY: 50 });
 
     // Type comment and submit
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");

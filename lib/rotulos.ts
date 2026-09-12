@@ -11,6 +11,10 @@
 /** ARTE_TRANSITIONS: EM_ANALISE → APROVADO | REJEITADO */
 const ARTE: Record<string, string> = {
   EM_ANALISE: 'Em análise',
+  // Existe em `enums.ts` do backend e o seed grava — sem esta linha o cliente
+  // lia "REVISAO" gritado no viewer. (O `ARTE_TRANSITIONS` do backend não cita
+  // este estado, então nada sai dele: vale confirmar se ele deve existir.)
+  REVISAO: 'Em revisão',
   APROVADO: 'Aprovada',
   REJEITADO: 'Recusada',
 }
