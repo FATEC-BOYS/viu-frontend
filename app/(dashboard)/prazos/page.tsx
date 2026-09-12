@@ -1,593 +1,337 @@
 'use client';
 
-import { prioridadeLabel, statusLabel } from "@/lib/tarefas";
 import { FadeIn } from "@/components/layout/Motion";
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, getAll } from '@/lib/api';
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getAll } from '@/lib/api';
+import { pagamentosApi } from '@/lib/pagamentos';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar } from '@/components/ui/calendar';
+import { Loader2 } from 'lucide-react';
 
-import {
-  Calendar as CalendarIcon,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  UserCheck,
-  MessageSquare,
-  Link as LinkIcon,
-  ChevronRight,
-  Loader2,
-} from 'lucide-react';
+/**
+ * Uma agenda de entregas — o que vence, e quando.
+ *
+ * Esta tela era sete cartões de peso igual, e quatro deles respondiam o que
+ * outra tela já responde: "Feedbacks abertos" duplicava a fila do Dashboard e
+ * a tela de Feedbacks, "Aprovações pendentes" duplicava a aba do projeto, e
+ * "Resumo" repetia em quatro caixinhas os números dos cartões logo acima dele.
+ *
+ * Pior: os três cartões principais eram de TAREFA — "Tarefas cuja data é
+ * hoje", "Priorize estas tarefas" — num produto onde não existe criador de
+ * tarefa e a tela de Tarefas está escondida. Uma tela inteira organizada em
+ * volta do que o produto quase não tem.
+ *
+ * Sobrou o que só aqui existe: o calendário e as datas. Aprovação e feedback
+ * não entram porque não têm data nenhuma no schema — marcá-los numa agenda
+ * exigiria inventar um "quando" que não existe.
+ */
 
-/* ===========================
-   Tipos
-   =========================== */
+type Tipo = 'projeto' | 'tarefa' | 'fatura';
 
-export type Projeto = {
+type Compromisso = {
   id: string;
-  nome: string;
-  prazo: string | null;
-};
-
-export type Tarefa = {
-  id: string;
+  tipo: Tipo;
   titulo: string;
-  descricao: string | null;
-  status: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDA' | 'CANCELADA';
-  prioridade: 'ALTA' | 'MEDIA' | 'BAIXA';
-  prazo: string | null;
-  projeto: { nome: string } | null;
+  apoio: string;
+  /** ISO. Só entra na agenda quem tem data — é o que a agenda é. */
+  quando: string;
+  href: string;
 };
 
-export type Aprovacao = {
-  id: string;
-  status: string;
-  comentario: string | null;
-  criadoEm: string;
-  arte: { id: string; nome: string } | null;
-  aprovador: { id: string; nome: string } | null;
+/**
+ * A cor segue a do resto do produto: menta é prazo, lavanda é tarefa, pêssego
+ * é o que espera dinheiro ou resposta de fora.
+ */
+const PINO: Record<Tipo, string> = {
+  projeto: 'bg-pastel-menta',
+  tarefa: 'bg-pastel-lavanda',
+  fatura: 'bg-pastel-pessego',
 };
 
-export type Feedback = {
-  id: string;
-  conteudo: string;
-  criadoEm: string;
-  status: string;
-  arte: { id: string; nome: string } | null;
+const ROTULO: Record<Tipo, string> = {
+  projeto: 'Entrega do projeto',
+  tarefa: 'Tarefa',
+  fatura: 'Fatura',
 };
 
-/* ===========================
-   Utils
-   =========================== */
+function meiaNoite(d: Date = new Date()) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
 
-function formatDate(dateString?: string | null) {
-  if (!dateString) return '—';
-  try {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  } catch {
-    return '—';
+function mesmoDia(a: Date, b: Date) {
+  return meiaNoite(a).getTime() === meiaNoite(b).getTime();
+}
+
+function diasAte(iso: string) {
+  return Math.round((meiaNoite(new Date(iso)).getTime() - meiaNoite().getTime()) / 86400000);
+}
+
+/** A frase de quando, escrita como se fala. */
+export function quandoPorExtenso(iso: string): string {
+  const d = diasAte(iso);
+  const data = new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  if (d < -1) return `atrasado há ${-d} dias · ${data}`;
+  if (d === -1) return `atrasado desde ontem · ${data}`;
+  if (d === 0) return `hoje`;
+  if (d === 1) return `amanhã · ${data}`;
+  if (d <= 7) return `em ${d} dias · ${data}`;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+}
+
+type Faixa = { chave: string; titulo: string; itens: Compromisso[] };
+
+/**
+ * Agrupa por urgência, não por data: quem abre quer saber o que já passou e o
+ * que é hoje, não navegar um calendário mentalmente. Dentro de "atrasado" a
+ * ordem é do mais recente para o mais antigo — o que venceu ontem ainda dá
+ * para resolver; o de um ano atrás é história.
+ */
+export function agrupar(itens: Compromisso[]): Faixa[] {
+  const hoje = meiaNoite();
+  const fimDaSemana = new Date(hoje.getTime() + 7 * 86400000);
+
+  const atrasados = itens.filter((i) => meiaNoite(new Date(i.quando)) < hoje);
+  const deHoje = itens.filter((i) => mesmoDia(new Date(i.quando), hoje));
+  const daSemana = itens.filter((i) => {
+    const d = meiaNoite(new Date(i.quando));
+    return d > hoje && d <= fimDaSemana;
+  });
+  const depois = itens.filter((i) => meiaNoite(new Date(i.quando)) > fimDaSemana);
+
+  const porData = (a: Compromisso, b: Compromisso) => a.quando.localeCompare(b.quando);
+
+  return [
+    { chave: 'atrasado', titulo: 'Atrasado', itens: [...atrasados].sort((a, b) => porData(b, a)) },
+    { chave: 'hoje', titulo: 'Hoje', itens: [...deHoje].sort(porData) },
+    { chave: 'semana', titulo: 'Próximos 7 dias', itens: [...daSemana].sort(porData) },
+    { chave: 'depois', titulo: 'Depois', itens: [...depois].sort(porData) },
+  ].filter((f) => f.itens.length > 0);
+}
+
+/** A frase do topo: o próximo compromisso, ou o atraso mais recente. */
+export function recadoDaAgenda(itens: Compromisso[]): string {
+  if (itens.length === 0) return 'Nada com data marcada.';
+  const hoje = meiaNoite();
+  const atrasados = itens.filter((i) => meiaNoite(new Date(i.quando)) < hoje);
+  if (atrasados.length > 0) {
+    return atrasados.length === 1
+      ? '1 compromisso passou da data.'
+      : `${atrasados.length} compromissos passaram da data.`;
   }
+  const proximo = [...itens].sort((a, b) => a.quando.localeCompare(b.quando))[0];
+  const d = diasAte(proximo.quando);
+  if (d === 0) return `${proximo.titulo} vence hoje.`;
+  if (d === 1) return `${proximo.titulo} vence amanhã.`;
+  return `O próximo é ${proximo.titulo}, em ${d} dias.`;
 }
-
-function formatWeekday(dateString?: string | null) {
-  if (!dateString) return '';
-  try {
-    return new Date(dateString).toLocaleDateString('pt-BR', { weekday: 'short' });
-  } catch {
-    return '';
-  }
-}
-
-function getPriorityBadge(p: Tarefa['prioridade']) {
-  const map = {
-    ALTA: 'destructive',
-    MEDIA: 'default',
-    BAIXA: 'secondary',
-  } as const;
-  return <Badge variant={map[p]}>{prioridadeLabel[p] ?? p}</Badge>;
-}
-
-function mapTarefa(t: any): Tarefa {
-  return {
-    id: t.id,
-    titulo: t.titulo,
-    descricao: t.descricao ?? null,
-    status: t.status,
-    prioridade: t.prioridade,
-    prazo: t.prazo ?? null,
-    projeto: t.projeto ? { nome: t.projeto.nome } : null,
-  };
-}
-
-/* ===========================
-   Página de Prazos
-   =========================== */
 
 export default function PrazosPage() {
   const { user } = useAuth();
+  const usuarioId = (user as { id?: string } | null)?.id;
+  const ehDesigner = (user as { tipo?: string } | null)?.tipo === 'DESIGNER';
+
+  const [itens, setItens] = useState<Compromisso[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [query, setQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-
-  const [tarefasHoje, setTarefasHoje] = useState<Tarefa[]>([]);
-  const [tarefasProximas, setTarefasProximas] = useState<Tarefa[]>([]);
-  const [tarefasAtrasadas, setTarefasAtrasadas] = useState<Tarefa[]>([]);
-  const [tarefasSemPrazo, setTarefasSemPrazo] = useState<Tarefa[]>([]);
-
-  const [projetosComPrazo, setProjetosComPrazo] = useState<Projeto[]>([]);
-  const [aprovacoesPendentes, setAprovacoesPendentes] = useState<Aprovacao[]>([]);
-  const [feedbacksAbertos, setFeedbacksAbertos] = useState<Feedback[]>([]);
-
-  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [diaEscolhido, setDiaEscolhido] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
-    if (!user) return;
+    if (!usuarioId) return;
+    let vivo = true;
 
     (async () => {
       setLoading(true);
-      setError(null);
-
+      setErro(null);
       try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
-
-        const [pendentes, andamento, todosProjetos, aprovacoesRes, feedbacksRes] = await Promise.all([
+        const [projetos, tarefasPendentes, tarefasAndamento, faturas] = await Promise.all([
+          getAll<any>('/projetos'),
           getAll<any>('/tarefas?status=PENDENTE'),
           getAll<any>('/tarefas?status=EM_ANDAMENTO'),
-          getAll<any>('/projetos'),
-          api.get<{ data: any[] }>('/aprovacoes?status=PENDENTE&limit=50'),
-          api.get<{ data: any[] }>('/feedbacks?status=ABERTO&limit=50'),
+          pagamentosApi
+            .getFaturas(ehDesigner ? 'designer' : 'cliente')
+            .then((r) => r.data ?? [])
+            .catch(() => []),
         ]);
+        if (!vivo) return;
 
-        const tarefas = [...pendentes, ...andamento].map(mapTarefa);
+        const lista: Compromisso[] = [
+          ...projetos
+            .filter((p: any) => p.prazo)
+            .map((p: any) => ({
+              id: `projeto-${p.id}`,
+              tipo: 'projeto' as const,
+              titulo: p.nome,
+              apoio: p.cliente?.nome ?? 'Sem cliente',
+              quando: p.prazo,
+              href: `/projetos/${p.id}`,
+            })),
+          ...[...tarefasPendentes, ...tarefasAndamento]
+            .filter((t: any) => t.prazo)
+            .map((t: any) => ({
+              id: `tarefa-${t.id}`,
+              tipo: 'tarefa' as const,
+              titulo: t.titulo,
+              apoio: t.projeto?.nome ?? 'Sem projeto',
+              quando: t.prazo,
+              // A tarefa mora dentro do projeto — /tarefas hoje só redireciona.
+              href: t.projeto?.id ? `/projetos/${t.projeto.id}?tab=tasks` : '/projetos',
+            })),
+          ...faturas
+            .filter((f: any) => f.status === 'PENDENTE' && f.dataVencimento)
+            .map((f: any) => ({
+              id: `fatura-${f.id}`,
+              tipo: 'fatura' as const,
+              titulo: f.projeto?.nome ? `Fatura · ${f.projeto.nome}` : 'Fatura',
+              apoio: f.valorFormatado ?? '',
+              quando: f.dataVencimento,
+              href: `/faturas/${f.id}`,
+            })),
+        ];
 
-        const projetos: Projeto[] = todosProjetos
-          .filter((p: any) => p.prazo)
-          .map((p: any) => ({ id: p.id, nome: p.nome, prazo: p.prazo }));
-
-        const aprovacoes: Aprovacao[] = (aprovacoesRes.data || []).map((a: any) => ({
-          id: a.id,
-          status: a.status,
-          comentario: a.comentario ?? null,
-          criadoEm: a.criadoEm ?? '',
-          arte: a.arte ? { id: a.arte.id, nome: a.arte.nome } : null,
-          aprovador: a.aprovador ? { id: a.aprovador.id, nome: a.aprovador.nome } : null,
-        }));
-
-        const feedbacks: Feedback[] = (feedbacksRes.data || []).map((f: any) => ({
-          id: f.id,
-          conteudo: f.conteudo,
-          criadoEm: f.criadoEm ?? '',
-          status: f.status,
-          arte: f.arte ? { id: f.arte.id, nome: f.arte.nome } : null,
-        }));
-
-        const hoje: Tarefa[] = [];
-        const proximas: Tarefa[] = [];
-        const atrasadas: Tarefa[] = [];
-        const semPrazo: Tarefa[] = [];
-
-        for (const t of tarefas) {
-          if (!t.prazo) { semPrazo.push(t); continue; }
-          const d = new Date(t.prazo);
-          if (d < today) atrasadas.push(t);
-          else if (d >= today && d < tomorrow) hoje.push(t);
-          else proximas.push(t);
-        }
-
-        const byDate = (a?: string | null, b?: string | null) => (a || '').localeCompare(b || '');
-        hoje.sort((a, b) => byDate(a.prazo, b.prazo));
-        proximas.sort((a, b) => byDate(a.prazo, b.prazo));
-        atrasadas.sort((a, b) => byDate(a.prazo, b.prazo));
-
-        setTarefasHoje(hoje);
-        setTarefasProximas(proximas);
-        setTarefasAtrasadas(atrasadas);
-        setTarefasSemPrazo(semPrazo);
-        setProjetosComPrazo([...projetos].sort((a, b) => (a.prazo || '').localeCompare(b.prazo || '')));
-        setAprovacoesPendentes(aprovacoes);
-        setFeedbacksAbertos(feedbacks);
+        setItens(lista);
       } catch (e: any) {
-        setError(e?.message ?? 'Não foi possível carregar os prazos.');
+        if (vivo) setErro(e?.message ?? 'Não foi possível carregar os prazos.');
       } finally {
-        setLoading(false);
+        if (vivo) setLoading(false);
       }
     })();
-  }, [user]);
 
-  const filtered = useMemo(() => {
-    if (!query) return { tarefasHoje, tarefasProximas, tarefasAtrasadas };
-    const q = query.toLowerCase();
-    const match = (t: Tarefa) =>
-      t.titulo.toLowerCase().includes(q) ||
-      (t.projeto?.nome?.toLowerCase().includes(q) ?? false);
-
-    return {
-      tarefasHoje: tarefasHoje.filter(match),
-      tarefasProximas: tarefasProximas.filter(match),
-      tarefasAtrasadas: tarefasAtrasadas.filter(match),
+    return () => {
+      vivo = false;
     };
-  }, [query, tarefasHoje, tarefasProximas, tarefasAtrasadas]);
+  }, [usuarioId, ehDesigner]);
 
-  const filteredProximasByDay = useMemo(() => {
-    if (!selectedDate) return filtered.tarefasProximas;
-    const key = selectedDate.toISOString().slice(0, 10);
-    return filtered.tarefasProximas.filter((t) => (t.prazo ? t.prazo.slice(0, 10) === key : false));
-  }, [selectedDate, filtered.tarefasProximas]);
+  /** Os dias que têm alguma coisa — é o que o calendário marca. */
+  const diasComItem = useMemo(
+    () => itens.map((i) => meiaNoite(new Date(i.quando))),
+    [itens],
+  );
 
-  const projetosByDay = useMemo(() => {
-    if (!selectedDate) return projetosComPrazo;
-    const key = selectedDate.toISOString().slice(0, 10);
-    return projetosComPrazo.filter((p) => (p.prazo ? p.prazo.slice(0, 10) === key : false));
-  }, [selectedDate, projetosComPrazo]);
+  const visiveis = useMemo(
+    () =>
+      diaEscolhido
+        ? itens.filter((i) => mesmoDia(new Date(i.quando), diaEscolhido))
+        : itens,
+    [itens, diaEscolhido],
+  );
 
-  useEffect(() => {
-    if (!selectedDate || !timelineRef.current) return;
-    const key = selectedDate.toISOString().slice(0, 10);
-    const el = timelineRef.current.querySelector<HTMLDivElement>(`[data-day="${key}"]`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [selectedDate, filteredProximasByDay.length]);
-
-  if (!user) {
-    return (
-      <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-center">
-        <p className="text-sm text-muted-foreground">Você precisa estar autenticado para ver os prazos.</p>
-        <Button asChild><Link href="/login">Fazer login</Link></Button>
-      </div>
-    );
-  }
+  const faixas = useMemo(() => agrupar(visiveis), [visiveis]);
 
   if (loading) {
     return (
-      <div className="h-[60vh] flex items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Carregando prazos...
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+        <span className="sr-only">Carregando prazos…</span>
       </div>
     );
   }
 
-  if (error) {
-    return <div className="h-[60vh] flex items-center justify-center text-destructive">{error}</div>;
+  if (erro) {
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm text-muted-foreground">{erro}</p>
+        <Button onClick={() => location.reload()}>Recarregar</Button>
+      </div>
+    );
   }
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <CalendarIcon className="h-7 w-7" /> Prazos
-          </h1>
-          <p className="text-sm text-muted-foreground">Veja o que vence hoje, o que está atrasado e o que vem por aí.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por tarefa ou projeto"
-            className="w-72"
-          />
-          <Button asChild variant="outline">
-            <Link href="/projetos">Ver projetos</Link>
-          </Button>
-        </div>
+    <FadeIn className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Prazos ✦</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{recadoDaAgenda(itens)}</p>
       </div>
 
-      {/* Grid principal */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Coluna principal */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Hoje */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" /> Vence hoje
-              </CardTitle>
-              <CardDescription>Tarefas cuja data é hoje.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {filtered.tarefasHoje.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nada para hoje. Ufa! 🎉</p>
-              ) : (
-                <div className="space-y-3">
-                  {filtered.tarefasHoje.map((t) => (
-                    <RowTarefa key={t.id} t={t} />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Atrasadas */}
-          <Card className="border-destructive/30">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <AlertTriangle className="h-5 w-5" /> Atrasadas
-              </CardTitle>
-              <CardDescription>Priorize estas tarefas.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {filtered.tarefasAtrasadas.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sem atrasos por aqui ✅</p>
-              ) : (
-                <div className="space-y-3">
-                  {filtered.tarefasAtrasadas.map((t) => (
-                    <RowTarefa key={t.id} t={t} overdue />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Próximos 30 dias */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5" /> Próximos 30 dias
-              </CardTitle>
-              <CardDescription>Tarefas e marcos de projeto que chegam em breve.</CardDescription>
-            </CardHeader>
-            <CardContent className="overflow-hidden">
-              <ScrollArea className="max-h-[48vh] pr-4" ref={timelineRef}>
-                <Timeline
-                  tarefas={filteredProximasByDay}
-                  projetos={projetosByDay}
-                  enableDayAnchors={!selectedDate}
-                />
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lateral */}
-        <div className="space-y-6">
-          {/* Mini Calendário */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5" /> Calendário
-              </CardTitle>
-              <CardDescription>Selecione um dia para filtrar</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                className="rounded-md border"
-              />
-              <div className="mt-3 flex items-center justify-between">
-                <Button variant="outline" size="sm" onClick={() => setSelectedDate(undefined)}>
-                  Limpar
-                </Button>
-                {selectedDate && <Badge variant="outline">{formatDate(selectedDate.toISOString())}</Badge>}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* A agenda */}
+        <div className="flex flex-col gap-4">
+          {faixas.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-xl border border-dashed bg-pastel-menta/15 p-5">
+              <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-pastel-menta text-base">
+                ✓
+              </span>
+              <div>
+                <p className="text-sm font-medium">
+                  {diaEscolhido ? 'Nada neste dia' : 'Nenhuma data marcada'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {diaEscolhido
+                    ? 'Escolha outro dia no calendário, ou limpe o filtro.'
+                    : 'Prazo de projeto, tarefa com data e fatura a vencer aparecem aqui.'}
+                </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          ) : (
+            faixas.map((faixa) => (
+              <section key={faixa.chave} className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+                <h2 className="flex items-baseline justify-between gap-2 font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+                  <span className={faixa.chave === 'atrasado' ? 'text-destructive' : undefined}>
+                    {faixa.titulo}
+                  </span>
+                  <span className="tabular-nums">{faixa.itens.length}</span>
+                </h2>
 
-          {/* Resumo */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Resumo</CardTitle>
-              <CardDescription>Visão rápida do status</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
-              <Stat label="Hoje" value={String(tarefasHoje.length)} />
-              <Stat label="Atrasadas" value={String(tarefasAtrasadas.length)} />
-              <Stat label="Próx. 30d" value={String(tarefasProximas.length)} />
-              <Stat label="Sem prazo" value={String(tarefasSemPrazo.length)} />
-            </CardContent>
-          </Card>
-
-          {/* Aprovações pendentes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserCheck className="h-5 w-5" /> Aprovações pendentes
-              </CardTitle>
-              <CardDescription>Itens aguardando decisão</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {aprovacoesPendentes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma aprovação pendente</p>
-              ) : (
-                aprovacoesPendentes.slice(0, 5).map((a) => (
-                  <div key={a.id} className="text-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium">{a.arte?.nome ?? 'Arte'}</p>
-                      <Badge variant="outline">{new Date(a.criadoEm).toLocaleDateString('pt-BR')}</Badge>
-                    </div>
-                    {a.comentario && <p className="text-muted-foreground line-clamp-2">{a.comentario}</p>}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Feedbacks a tratar */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" /> Feedbacks abertos
-              </CardTitle>
-              <CardDescription>Feedbacks que aguardam ação</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {feedbacksAbertos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum feedback aberto</p>
-              ) : (
-                feedbacksAbertos.slice(0, 5).map((f) => (
-                  <div key={f.id} className="text-sm">
-                    <p className="font-medium">{f.arte?.nome ?? 'Arte'}</p>
-                    <p className="text-muted-foreground line-clamp-2">{f.conteudo}</p>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Sem prazo */}
-          {tarefasSemPrazo.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5" /> Itens sem prazo
-                </CardTitle>
-                <CardDescription>Defina uma data para organizar o fluxo</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {tarefasSemPrazo.slice(0, 8).map((t) => (
-                  <div key={t.id} className="text-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium">{t.titulo}</p>
-                      <Badge variant="secondary">{prioridadeLabel[t.prioridade] ?? t.prioridade}</Badge>
-                    </div>
-                    <p className="text-muted-foreground">{t.projeto?.nome ?? '—'}</p>
-                  </div>
-                ))}
-                {/* "Ver todas" levava à tela global de Tarefas, que agora
-                    redireciona. Sem destino equivalente, o rodapé diz quantas
-                    ficaram de fora em vez de prometer uma tela que não existe. */}
-                {tarefasSemPrazo.length > 8 && (
-                  <p className="text-xs text-muted-foreground">
-                    e mais {tarefasSemPrazo.length - 8}{' '}
-                    {tarefasSemPrazo.length - 8 === 1 ? 'tarefa sem prazo' : 'tarefas sem prazo'}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                <ul className="flex flex-col">
+                  {faixa.itens.map((item) => (
+                    <li key={item.id} className="border-b last:border-b-0">
+                      <Link
+                        href={item.href}
+                        className="flex items-stretch gap-3 rounded-md py-2.5 transition-colors hover:bg-muted/50"
+                      >
+                        <span aria-hidden className={`w-[3px] shrink-0 rounded-full ${PINO[item.tipo]}`} />
+                        {/*
+                          `flex-wrap` com base de 13rem no título: no desktop a
+                          data fica à direita, e no celular ela desce para a
+                          própria linha em vez de espremer o nome do projeto
+                          até virar "Site Institucionа…".
+                        */}
+                        <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+                          <span className="min-w-0 flex-1 basis-52">
+                            <span className="block truncate text-sm font-medium">{item.titulo}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {ROTULO[item.tipo]}
+                              {item.apoio ? ` · ${item.apoio}` : ''}
+                            </span>
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                            {quandoPorExtenso(item.quando)}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))
           )}
         </div>
+
+        {/* O calendário: dá a forma do mês e filtra um dia */}
+        <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+            Calendário
+          </h2>
+          <Calendar
+            mode="single"
+            selected={diaEscolhido}
+            onSelect={setDiaEscolhido}
+            // Marca os dias que têm compromisso: sem isto o calendário é um
+            // seletor às cegas, e quem clica descobre o vazio depois.
+            modifiers={{ temItem: diasComItem }}
+            modifiersClassNames={{ temItem: 'font-semibold underline decoration-primary decoration-2 underline-offset-4' }}
+            className="w-full p-0"
+          />
+          {diaEscolhido && (
+            <Button variant="outline" size="sm" onClick={() => setDiaEscolhido(undefined)}>
+              Limpar filtro
+            </Button>
+          )}
+        </section>
       </div>
     </FadeIn>
-  );
-}
-
-/* ===========================
-   Subcomponentes
-   =========================== */
-
-function RowTarefa({ t, overdue }: { t: Tarefa; overdue?: boolean }) {
-  return (
-    <div className={`p-3 border rounded-lg ${overdue ? 'border-destructive/40' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="font-medium text-sm">{t.titulo}</p>
-          <p className="text-xs text-muted-foreground">{t.projeto?.nome || '—'}</p>
-          {t.descricao && <p className="text-xs text-muted-foreground line-clamp-2">{t.descricao}</p>}
-        </div>
-        <div className="text-right space-y-1 min-w-[130px]">
-          <div className="flex items-center justify-end gap-2">
-            {getPriorityBadge(t.prioridade)}
-            <Badge variant="outline">{statusLabel[t.status] ?? t.status}</Badge>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {formatWeekday(t.prazo)} • {formatDate(t.prazo)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-3 border rounded-lg text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function Timeline({
-  tarefas,
-  projetos,
-  enableDayAnchors = true,
-}: {
-  tarefas: Tarefa[];
-  projetos: Projeto[];
-  enableDayAnchors?: boolean;
-}) {
-  type Item = { kind: 'tarefa'; data: Tarefa } | { kind: 'marco'; data: Projeto };
-  const map = new Map<string, Item[]>();
-
-  tarefas.forEach((t) => {
-    if (!t.prazo) return;
-    const key = new Date(t.prazo).toISOString().slice(0, 10);
-    const arr = map.get(key) || [];
-    arr.push({ kind: 'tarefa', data: t });
-    map.set(key, arr);
-  });
-
-  projetos.forEach((p) => {
-    if (!p.prazo) return;
-    const key = new Date(p.prazo).toISOString().slice(0, 10);
-    const arr = map.get(key) || [];
-    arr.push({ kind: 'marco', data: p });
-    map.set(key, arr);
-  });
-
-  const days = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  if (days.length === 0) return <p className="text-sm text-muted-foreground">Nada previsto nos próximos 30 dias.</p>;
-
-  return (
-    <div className="space-y-6">
-      {days.map(([iso, items]) => (
-        <div
-          key={iso}
-          className="pl-4 border-l border-border"
-          {...(enableDayAnchors ? { 'data-day': iso } : {})}
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-            <p className="text-sm font-medium">
-              {formatDate(iso)} <span className="text-xs text-muted-foreground">{formatWeekday(iso)}</span>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            {items
-              .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'marco' ? -1 : 1))
-              .map((it, idx) => {
-                if (it.kind === 'marco') {
-                  const p = it.data as Projeto;
-                  return (
-                    <div key={idx} className="ml-2 flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        <span className="text-sm font-medium">Marco: {p.nome}</span>
-                      </div>
-                      <Button asChild variant="link" className="px-0 text-sm">
-                        <Link href={`/projetos/${p.id}`}>
-                          abrir <ChevronRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                    </div>
-                  );
-                }
-                const t = it.data as Tarefa;
-                return (
-                  <div key={idx} className="ml-2">
-                    <RowTarefa t={t} />
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
