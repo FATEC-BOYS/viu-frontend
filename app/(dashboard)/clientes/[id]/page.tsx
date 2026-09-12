@@ -12,28 +12,12 @@ import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
-import {
-  ArrowLeft,
-  AtSign,
-  Calendar,
-  CheckCircle2,
-  Circle,
-  Clock,
-  DollarSign,
-  FolderOpen,
-  Mail,
-  MoreHorizontal,
-  Phone,
-  User,
-  Users,
-  Plus,
-  ArrowUpRight,
-  Filter,
-} from 'lucide-react';
+import EmptyState from '@/components/layout/EmptyState';
+import { FadeIn } from '@/components/layout/Motion';
+import { PINO, ROTULO, recadoDoCliente } from '@/lib/clientes';
+import { quandoPorExtenso } from '@/lib/prazos';
+import { ArrowLeft, ArrowUpRight, Mail, Phone, Plus, Search, Users } from 'lucide-react';
 
 /* =========================
    Tipos
@@ -75,19 +59,8 @@ type Cliente = {
    Helpers
    ========================= */
 const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
-const formatDateTime = (d?: string | null) =>
-  d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const formatBRLFromCents = (v?: number | null) =>
   typeof v === 'number' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100) : '—';
-
-const statusPill = (s: Projeto['status']) =>
-  s === 'EM_ANDAMENTO' ? (
-    <Badge className="gap-1"><Circle className="h-3 w-3" /> Em andamento</Badge>
-  ) : s === 'CONCLUIDO' ? (
-    <Badge variant="secondary" className="gap-1"><CheckCircle2 className="h-3 w-3" /> Concluído</Badge>
-  ) : (
-    <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" /> Pausado</Badge>
-  );
 
 /* =========================
    Página
@@ -105,8 +78,7 @@ export default function ClienteDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   // ===== Filtros locais para lista de projetos =====
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'todos' | ProjetoStatus>('todos');
+  const [busca, setBusca] = useState('');
 
   // ===== Fallback seguro para não quebrar ordem de hooks =====
   const clienteSafe: Cliente = cliente ?? {
@@ -188,44 +160,33 @@ export default function ClienteDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId, user]);
 
-  // ===== Derivados (sempre fora de condicionais) =====
-  const projetosFiltrados = useMemo(() => {
-    let arr = clienteSafe.projetos ?? [];
-    if (statusFilter !== 'todos') arr = arr.filter((p) => p.status === statusFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      arr = arr.filter(
-        (p) =>
-          p.nome.toLowerCase().includes(q) ||
-          (p.descricao ?? '').toLowerCase().includes(q)
-      );
-    }
+  /*
+   * A busca só existe quando há lista para buscar. Um campo de busca e quatro
+   * abas de filtro acima de UM projeto era o que empurrava a tela para fora da
+   * largura do celular.
+   */
+  const projetos = clienteSafe.projetos;
+  const temBusca = projetos.length > 4;
+
+  const visiveis = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const arr = q
+      ? projetos.filter(
+          (p) => p.nome.toLowerCase().includes(q) || (p.descricao ?? '').toLowerCase().includes(q),
+        )
+      : projetos;
+
+    /*
+     * Quem tem prazo vem primeiro, do mais urgente para o menos — é a ordem em
+     * que o trabalho cobra. Sem prazo desce, e aí vale o mais recente.
+     */
     return [...arr].sort((a, b) => {
-      const tA = new Date(a.criado_em).getTime();
-      const tB = new Date(b.criado_em).getTime();
-      if (tB !== tA) return tB - tA;
       const pa = a.prazo ? new Date(a.prazo).getTime() : Number.POSITIVE_INFINITY;
       const pb = b.prazo ? new Date(b.prazo).getTime() : Number.POSITIVE_INFINITY;
-      return pa - pb;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
     });
-  }, [clienteSafe.projetos, statusFilter, search]);
-
-  const estatisticas = useMemo(() => {
-    const total = clienteSafe.projetos.length;
-    const ativos = clienteSafe.projetos.filter((p) => p.status === 'EM_ANDAMENTO').length;
-    const concluidos = clienteSafe.projetos.filter((p) => p.status === 'CONCLUIDO').length;
-    const orcamentoTotal = clienteSafe.projetos.reduce((acc, p) => acc + (p.orcamento || 0), 0);
-    const totalArtes = clienteSafe.projetos.reduce((acc, p) => acc + (p.artes?.length || 0), 0);
-    const aprovadas = clienteSafe.projetos.reduce(
-      (acc, p) => acc + (p.artes?.filter((a) => a.status === 'APROVADO').length || 0),
-      0
-    );
-    const proxPrazo = clienteSafe.projetos
-      .filter((p) => p.prazo && p.status === 'EM_ANDAMENTO')
-      .sort((a, b) => new Date(a.prazo!).getTime() - new Date(b.prazo!).getTime())[0];
-
-    return { total, ativos, concluidos, orcamentoTotal, totalArtes, aprovadas, proxPrazo };
-  }, [clienteSafe.projetos]);
+  }, [projetos, busca]);
 
   // ===== Ações =====
   /**
@@ -291,284 +252,172 @@ export default function ClienteDetailPage() {
   /* =========================
      UI
      ========================= */
+  const telefoneLimpo = (clienteSafe.telefone ?? '').replace(/\D/g, '');
+
   return (
-    <div className="space-y-6 p-6">
-      {/* Topbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/clientes"><ArrowLeft className="h-4 w-4 mr-1" /> Voltar</Link>
-          </Button>
-          <Avatar className="h-12 w-12 shrink-0">
-            <AvatarImage src={clienteSafe.avatar || undefined} alt={clienteSafe.nome} className="object-cover" />
-            <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-              {iniciais(clienteSafe.nome)}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{clienteSafe.nome}</h1>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" /> {clienteSafe.email}</span>
-              {clienteSafe.telefone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" /> {clienteSafe.telefone}</span>}
-              <Badge variant={clienteSafe.vinculado ? 'secondary' : 'destructive'} className="ml-1">
-                {clienteSafe.vinculado ? 'Vínculo ativo' : 'Vínculo rompido'}
-              </Badge>
+    <FadeIn className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Link href="/clientes">
+          <ArrowLeft className="mr-1 h-4 w-4" /> Clientes
+        </Link>
+      </Button>
+
+      {/* Quem é a pessoa, como falar com ela, e como está o trabalho. */}
+      <header className="flex flex-wrap items-start gap-4">
+        <Avatar className="size-12 shrink-0">
+          <AvatarImage src={clienteSafe.avatar || undefined} alt={clienteSafe.nome} className="object-cover" />
+          <AvatarFallback className="bg-primary/10 font-semibold text-primary">
+            {iniciais(clienteSafe.nome)}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="min-w-0 flex-1 basis-64">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">{clienteSafe.nome}</h1>
+            {/* O selo só aparece quando diz algo: "Vínculo ativo" em toda tela
+                é ruído — o normal não precisa de etiqueta. */}
+            {!clienteSafe.vinculado && <Badge variant="destructive">Vínculo rompido</Badge>}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">{recadoDoCliente(projetos)}</p>
+        </div>
+
+        <Button onClick={criarProjetoRápido} disabled={busy} className="shrink-0">
+          <Plus className="mr-1 h-4 w-4" /> Novo projeto
+        </Button>
+      </header>
+
+      {/* Projetos */}
+      <section className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-baseline gap-2 font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+            Projetos <span className="tabular-nums">{projetos.length}</span>
+          </h2>
+          {temBusca && (
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar projeto…"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="h-8 pl-8 text-sm"
+              />
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={toggleVinculo} disabled={busy}>
-            {clienteSafe.vinculado ? 'Romper vínculo' : 'Restaurar vínculo'}
-          </Button>
-          <Button onClick={criarProjetoRápido} disabled={busy}>
-            <Plus className="h-4 w-4 mr-1" /> Novo projeto
-          </Button>
-          <Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold">{estatisticas.total}</div><p className="text-sm text-muted-foreground">Projetos</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{estatisticas.ativos}</div><p className="text-sm text-muted-foreground">Em andamento</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{estatisticas.concluidos}</div><p className="text-sm text-muted-foreground">Concluídos</p></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-2xl font-bold">{formatBRLFromCents(estatisticas.orcamentoTotal)}</div><p className="text-sm text-muted-foreground">Orçamento total</p></CardContent></Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{formatDate(estatisticas.proxPrazo?.prazo ?? null)}</div>
-            <p className="text-sm text-muted-foreground">Próximo prazo</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Split view principal */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Coluna esquerda: Projetos */}
-        <div className="lg:col-span-8 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FolderOpen className="h-4 w-4" /> Projetos
-                  </CardTitle>
-                  <CardDescription>Trabalhos vinculados a este cliente</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:block">
-                    <Input
-                      placeholder="Buscar projetos…"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="h-8 w-[220px]"
-                    />
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setSearch('')}>
-                    <Filter className="h-4 w-4 mr-1" /> Limpar
-                  </Button>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={statusFilter === 'todos' ? 'default' : 'outline'}
-                  onClick={() => setStatusFilter('todos')}
+        {visiveis.length === 0 ? (
+          projetos.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              tom="menta"
+              title="Nenhum projeto com este cliente"
+              description="Criar o projeto é o primeiro passo — depois vem a arte, e o link que leva a arte até ele."
+              actionLabel="Criar projeto"
+              onAction={criarProjetoRápido}
+              className="border-0"
+            />
+          ) : (
+            <EmptyState
+              variante="filtro"
+              title="Nada com esse termo"
+              actionLabel="Limpar busca"
+              onAction={() => setBusca('')}
+            />
+          )
+        ) : (
+          <ul className="flex flex-col">
+            {visiveis.map((p) => (
+              <li key={p.id} className="border-b last:border-b-0">
+                <Link
+                  href={`/projetos/${p.id}`}
+                  className="flex items-stretch gap-3 rounded-md py-2.5 transition-colors hover:bg-muted/50"
                 >
-                  Todos
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === 'EM_ANDAMENTO' ? 'default' : 'outline'}
-                  onClick={() => setStatusFilter('EM_ANDAMENTO')}
-                >
-                  Em andamento
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === 'CONCLUIDO' ? 'default' : 'outline'}
-                  onClick={() => setStatusFilter('CONCLUIDO')}
-                >
-                  Concluídos
-                </Button>
-                <Button
-                  size="sm"
-                  variant={statusFilter === 'PAUSADO' ? 'default' : 'outline'}
-                  onClick={() => setStatusFilter('PAUSADO')}
-                >
-                  Pausados
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {projetosFiltrados.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Nada por aqui. Que tal <button className="underline" onClick={criarProjetoRápido}>criar um projeto</button>?
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {projetosFiltrados.map((p) => {
-                    const totalArtes = p.artes?.length || 0;
-                    const aprovadas = p.artes?.filter((a) => a.status === 'APROVADO').length || 0;
-                    return (
-                      <div key={p.id} className="rounded-lg border p-4 card-interativo">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-medium truncate">{p.nome}</h4>
-                          <div className="shrink-0">{statusPill(p.status)}</div>
-                        </div>
-                        {p.descricao && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.descricao}</p>}
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Prazo</span>
-                            <span className="font-medium">{formatDate(p.prazo ?? null)}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Orçamento</span>
-                            <span className="font-semibold">{formatBRLFromCents(p.orcamento)}</span>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex justify-end">
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={`/projetos/${p.id}`}>Abrir <ArrowUpRight className="h-3.5 w-3.5 ml-1" /></Link>
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Coluna direita: Ações e infos rápidas */}
-        <div className="lg:col-span-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Ações rápidas</CardTitle>
-              <CardDescription>Atalhos úteis com este cliente</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button onClick={criarProjetoRápido} size="sm"><Plus className="h-4 w-4 mr-1" /> Projeto</Button>
-              {/* Havia aqui um "Gerar link" apontando para `/links?cliente=<id>`.
-                  A tela de Links não lê esse parâmetro e não gera nada — o link
-                  nasce no envio da arte, que é o botão ao lado. */}
-              <Button asChild size="sm" variant="outline">{/* `/artes/nova` não existe — a página de artes abre o fluxo com
-                  `?novo=1`, como /clientes e /projetos. */}
-              <Link href="/artes?novo=1">Enviar arte</Link></Button>
-              <Button asChild size="sm" variant="ghost"><Link href={`/feedbacks?cliente=${clienteSafe.id}`}>Ver feedbacks</Link></Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Informações</CardTitle>
-              <CardDescription>Contato e registro</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground inline-flex items-center gap-1"><AtSign className="h-3 w-3" /> E-mail</span>
-                <span className="font-medium">{clienteSafe.email || '—'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground inline-flex items-center gap-1"><Phone className="h-3 w-3" /> Telefone</span>
-                <span className="font-medium">{clienteSafe.telefone || '—'}</span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground inline-flex items-center gap-1"><Calendar className="h-3 w-3" /> Criado em</span>
-                <span className="font-medium">{formatDateTime(clienteSafe.criado_em)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground inline-flex items-center gap-1"><Clock className="h-3 w-3" /> Atualizado em</span>
-                <span className="font-medium">{formatDateTime(clienteSafe.atualizado_em)}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Bandeiras & riscos</CardTitle>
-              <CardDescription>Sinais rápidos de atenção</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Sem projeto ativo</span>
-                <Badge variant={estatisticas.ativos === 0 ? 'destructive' : 'outline'}>
-                  {estatisticas.ativos === 0 ? 'Alerta' : 'Ok'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Prazo em 7 dias</span>
-                <Badge variant={clienteSafe.projetos.some((p) => p.prazo && new Date(p.prazo).getTime() <= Date.now() + 7 * 864e5) ? 'default' : 'outline'}>
-                  {clienteSafe.projetos.some((p) => p.prazo && new Date(p.prazo).getTime() <= Date.now() + 7 * 864e5) ? 'Atenção' : '—'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Artes aprovadas</span>
-                <Badge variant="outline">{estatisticas.aprovadas}/{estatisticas.totalArtes}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Abas */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Resumo</TabsTrigger>
-          <TabsTrigger value="projetos">Projetos</TabsTrigger>
-          <TabsTrigger value="timeline" disabled>Timeline</TabsTrigger>
-          <TabsTrigger value="arquivos" disabled>Arquivos</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Resumo do relacionamento</CardTitle>
-              <CardDescription>Últimas atividades e status geral</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {estatisticas.total === 0 ? (
-                <>Nenhum projeto ainda. Que tal criar o primeiro? 🙂</>
-              ) : (
-                <>Você tem {estatisticas.ativos} projeto(s) em andamento, {estatisticas.concluidos} concluído(s). Próximo prazo: {formatDate(estatisticas.proxPrazo?.prazo ?? null)}.</>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="projetos" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {clienteSafe.projetos.map((p) => (
-              <Card key={p.id}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base truncate">{p.nome}</CardTitle>
-                  <CardDescription className="flex items-center gap-2">{statusPill(p.status)}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Prazo</span>
-                    <span className="font-medium">{formatDate(p.prazo ?? null)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Orçamento</span>
-                    <span className="font-semibold">{formatBRLFromCents(p.orcamento)}</span>
-                  </div>
-                  <div className="pt-2">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`/projetos/${p.id}`}>Abrir <ArrowUpRight className="h-3.5 w-3.5 ml-1" /></Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  <span aria-hidden className={`w-[3px] shrink-0 rounded-full ${PINO[p.status]}`} />
+                  {/* Mesmo arranjo da agenda de Prazos: no desktop o prazo fica
+                      à direita; no celular ele desce para a própria linha em vez
+                      de espremer o nome do projeto. */}
+                  <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="min-w-0 flex-1 basis-52">
+                      <span className="block truncate text-sm font-medium">{p.nome}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {ROTULO[p.status]}
+                        {p.orcamento ? ` · ${formatBRLFromCents(p.orcamento)}` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                      {p.prazo ? quandoPorExtenso(p.prazo) : 'sem prazo'}
+                    </span>
+                  </span>
+                </Link>
+              </li>
             ))}
-            {clienteSafe.projetos.length === 0 && (
-              <Card className="p-10 text-center text-sm text-muted-foreground">Sem projetos.</Card>
-            )}
+          </ul>
+        )}
+
+        {/* Os dois caminhos que continuam o trabalho, sem virar um cartão de
+            "Ações rápidas" com um botão fantasma. */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-xs">
+          <Link href="/artes?novo=1" className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            Enviar uma arte
+          </Link>
+          <Link href={`/feedbacks?cliente=${clienteSafe.id}`} className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            Ver os comentários dele
+          </Link>
+        </div>
+      </section>
+
+      {/* Contato */}
+      <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+          Contato
+        </h2>
+
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <Mail className="size-3.5 shrink-0 text-muted-foreground" />
+          <a href={`mailto:${clienteSafe.email}`} className="min-w-0 break-all hover:underline">
+            {clienteSafe.email}
+          </a>
+        </div>
+
+        {clienteSafe.telefone && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <Phone className="size-3.5 shrink-0 text-muted-foreground" />
+            <span>{clienteSafe.telefone}</span>
+            {/* O telefone existe para ser usado: abrir a conversa é o que se
+                faz com ele, e o designer já manda link de revisão por ali. */}
+            <a
+              href={`https://wa.me/55${telefoneLimpo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              WhatsApp <ArrowUpRight className="size-3" />
+            </a>
           </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+        )}
+
+        {clienteSafe.criado_em && (
+          <p className="text-xs text-muted-foreground">
+            Cliente desde {formatDate(clienteSafe.criado_em)}
+          </p>
+        )}
+      </section>
+
+      {/*
+        Romper vínculo fica no fim e discreto: é a única ação desta tela que
+        tira algo de lugar. Ela não apaga nada — os projetos continuam aqui — e
+        o texto do botão precisa dizer isso, já que "romper" soa definitivo.
+      */}
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <Button variant="outline" size="sm" onClick={toggleVinculo} disabled={busy}>
+          {clienteSafe.vinculado ? 'Romper vínculo' : 'Restaurar vínculo'}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          {clienteSafe.vinculado
+            ? 'Tira o cliente da sua carteira. Os projetos e o histórico continuam.'
+            : 'Traz o cliente de volta para a sua carteira.'}
+        </p>
+      </div>
+    </FadeIn>
   );
 }

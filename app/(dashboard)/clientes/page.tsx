@@ -179,7 +179,14 @@ export default function ClientesPage() {
   const [filtered, setFiltered] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [loaderLine, setLoaderLine] = useState<(typeof LOADER_LINES)[number]>(LOADER_LINES[0]);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * O erro guarda `status` junto da mensagem porque as causas pedem respostas
+   * diferentes: `0` é "não cheguei no servidor" (conexão sua, ou a API fora do
+   * ar) e não adianta recarregar na hora; 5xx é nosso e recarregar às vezes
+   * resolve. A tela mostrava "Deu ruim por aqui" para tudo — tinha a mensagem
+   * na mão e escondia, que é o que torna este erro caro de diagnosticar.
+   */
+  const [error, setError] = useState<{ mensagem: string; status: number } | null>(null);
 
   // ui
   const [mode, setMode] = useState<Mode>("cards");
@@ -271,7 +278,7 @@ export default function ClientesPage() {
       setRows([...porCliente.values()]);
       setError(null);
     } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar clientes");
+      setError({ mensagem: e?.message ?? "Erro ao carregar clientes", status: e?.status ?? -1 });
     } finally {
       setLoading(false);
     }
@@ -367,12 +374,28 @@ export default function ClientesPage() {
     );
   }
   if (error) {
+    const semServidor = error.status === 0;
     return (
-      <div className="flex items-center justify-center h-[50vh] text-center">
-        <div>
-          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
-          <p className="text-muted-foreground mb-6">Que tal recarregar? (e se persistir, me chama).</p>
-          <Button onClick={reload}>Recarregar</Button>
+      <div className="flex h-[50vh] items-center justify-center px-6 text-center">
+        <div className="max-w-md space-y-2">
+          <p className="text-lg font-medium">
+            {semServidor ? "Não consegui falar com o servidor" : "Não consegui carregar seus clientes"}
+          </p>
+          <p className="text-sm text-muted-foreground">{error.mensagem}</p>
+          {semServidor && (
+            <p className="text-sm text-muted-foreground">
+              Pode ser a sua conexão — ou a nossa API fora do ar. Se outras telas também
+              estiverem assim, o problema é nosso.
+            </p>
+          )}
+          <div className="pt-3">
+            <Button onClick={reload}>Tentar de novo</Button>
+          </div>
+          {/* A lista sai dos projetos do designer: GET /usuarios é só para
+              ADMIN. Dizer de onde veio a falha poupa a próxima investigação. */}
+          <p className="pt-1 font-mono text-[11px] text-muted-foreground">
+            GET /projetos{error.status > 0 ? ` — ${error.status}` : ""}
+          </p>
         </div>
       </div>
     );
