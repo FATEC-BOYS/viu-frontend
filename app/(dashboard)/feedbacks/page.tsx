@@ -3,10 +3,11 @@
 import Thumb from "@/components/layout/Thumb";
 import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { api, getAll } from '@/lib/api';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -489,7 +490,11 @@ function FeedbackTimelineView({ items, onOpen }: { items: FeedbackRow[]; onOpen:
 /* =========================
    Página
    ========================= */
-export default function FeedbacksPage() {
+/*
+ * `useSearchParams` obriga o Suspense na página inteira — mesmo arranjo de
+ * `artes/page.tsx`.
+ */
+function TelaFeedbacks() {
   const PAGE_SIZE = 24;
 
   // data/ui
@@ -510,7 +515,43 @@ export default function FeedbacksPage() {
   const [tipoFilter, setTipoFilter] = useState<FilterTipo>('todos');
   const [autorFilter, setAutorFilter] = useState<FilterAutor>('todos');
   const [projetoFilter, setProjetoFilter] = useState<'todos' | string>('todos');
+  /*
+   * A tela de Cliente manda para cá com `?cliente=<id>` no "Ver feedbacks".
+   * O parâmetro era lido por ninguém: o botão abria a lista inteira, e quem
+   * clicou achava que aquele cliente tinha comentado em tudo. Os feedbacks já
+   * carregam `cliente_id`, então filtrar é só usar o que veio.
+   */
+  const clienteFiltrado = useSearchParams().get('cliente');
+  const router = useRouter();
+  /*
+   * O nome do cliente normalmente vem de graça: toda linha carrega
+   * `cliente_nome`. Só que o recorte mais confuso é justamente o do cliente
+   * que não comentou nada — aí não há linha, e a tarja ficaria dizendo "um
+   * cliente" bem na hora em que o nome mais importa.
+   *
+   * `GET /usuarios/:id` não serve: `requireOwnership('usuario')` recusa o
+   * designer pedindo o registro do cliente. A fonte que o app tem para isso é
+   * a mesma que a tela de Clientes usa — os projetos do designer trazem o
+   * cliente junto. A chamada só acontece nesse caso, e falhar nela não quebra
+   * nada: a frase tem saída sem nome.
+   */
+  const [nomeBuscado, setNomeBuscado] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'criado_em' | 'arte' | 'projeto' | 'autor'>('criado_em');
+
+  // Só busca quando o recorte existe e nenhuma linha carregada trouxe o nome.
+  useEffect(() => {
+    if (!clienteFiltrado) { setNomeBuscado(null); return; }
+    if (rows.some((f) => f.cliente_id === clienteFiltrado)) return;
+    let vivo = true;
+    getAll<{ cliente?: { id?: string; nome?: string } }>('/projetos')
+      .then((projetos) => {
+        if (!vivo) return;
+        const achado = projetos.find((pj) => pj.cliente?.id === clienteFiltrado);
+        if (achado?.cliente?.nome) setNomeBuscado(achado.cliente.nome);
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [clienteFiltrado, rows]);
 
   // debounce
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -606,6 +647,7 @@ export default function FeedbacksPage() {
     if (tipoFilter !== 'todos') arr = arr.filter((f) => (tipoFilter === 'AUDIO' ? ehAudio(f) : !ehAudio(f)));
     if (autorFilter !== 'todos') arr = arr.filter((f) => f.autor_tipo === autorFilter);
     if (projetoFilter !== 'todos') arr = arr.filter((f) => f.projeto_nome === projetoFilter);
+    if (clienteFiltrado) arr = arr.filter((f) => f.cliente_id === clienteFiltrado);
     arr.sort((a, b) => {
       switch (sortBy) {
         case 'criado_em': return +new Date(b.criado_em) - +new Date(a.criado_em);
@@ -616,7 +658,7 @@ export default function FeedbacksPage() {
       }
     });
     return arr;
-  }, [rows, searchTerm, tipoFilter, autorFilter, projetoFilter, sortBy]);
+  }, [rows, searchTerm, tipoFilter, autorFilter, projetoFilter, clienteFiltrado, sortBy]);
 
   /* ----------- ações ----------- */
   const handleVerNaArte = (fb: FeedbackRow) => {
@@ -691,14 +733,18 @@ export default function FeedbacksPage() {
   const empty = filteredOrdered.length === 0;
   const temFiltroFeedback =
     !!searchTerm || statusFilter !== 'todos' || tipoFilter !== 'todos' ||
-    autorFilter !== 'todos' || projetoFilter !== 'todos';
+    autorFilter !== 'todos' || projetoFilter !== 'todos' || !!clienteFiltrado;
   const limparFiltrosFeedback = () => {
     setSearchTerm('');
     setStatusFilter('todos');
     setTipoFilter('todos');
     setAutorFilter('todos');
     setProjetoFilter('todos');
+    if (clienteFiltrado) router.replace('/feedbacks');
   };
+  const nomeDoClienteFiltrado = clienteFiltrado
+    ? rows.find((f) => f.cliente_id === clienteFiltrado)?.cliente_nome ?? nomeBuscado
+    : null;
   const selected = selectedId ? filteredOrdered.find(f => f.id === selectedId) || rows.find(f => f.id === selectedId) : null;
 
   return (
@@ -722,6 +768,23 @@ export default function FeedbacksPage() {
           </TabsList>
         </Tabs>
       </div>
+
+      {/*
+        Sem esta tarja a lista recortada se lê como "este cliente comentou
+        pouco" — o mesmo engano que a tela cometia ao ignorar o parâmetro, só
+        que ao contrário.
+      */}
+      {clienteFiltrado && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-pastel-lavanda/15 px-3 py-2 text-sm">
+          <span>
+            Mostrando só os feedbacks de{' '}
+            <b className="font-semibold">{nomeDoClienteFiltrado ?? 'um cliente'}</b>.
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => router.replace('/feedbacks')}>
+            Ver todos
+          </Button>
+        </div>
+      )}
 
       {/*
         Cinco seletores lado a lado, e três deles fechados escreviam só "Todos",
@@ -871,5 +934,21 @@ export default function FeedbacksPage() {
         </TabsContent>
       </Tabs>
     </FadeIn>
+  );
+}
+
+/* ===================== Export default ===================== */
+export default function FeedbacksPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[60vh] items-center justify-center">
+          <div className="size-7 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+          <span className="sr-only">Carregando feedbacks…</span>
+        </div>
+      }
+    >
+      <TelaFeedbacks />
+    </Suspense>
   );
 }
