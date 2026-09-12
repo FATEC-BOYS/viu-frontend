@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { pagamentosApi, Fatura, PixPaymentResult } from '@/lib/pagamentos'
+import { useAuth } from '@/contexts/AuthContext'
 
 type Step = 'detail' | 'cpf' | 'qr' | 'success'
 
@@ -187,6 +188,7 @@ function SuccessAnimation() {
 export default function FaturaDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { user } = useAuth()
   const [fatura, setFatura] = useState<Fatura | null>(null)
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState<Step>('detail')
@@ -264,6 +266,15 @@ export default function FaturaDetailPage() {
     )
   }
 
+  /*
+   * Comparando ids, não o tipo da conta: a regra do backend é
+   * `fatura.clienteId !== usuarioId → Acesso negado`, e é ela que decide se
+   * existe o que pagar aqui. Um ADMIN abrindo a fatura também não é o pagador.
+   */
+  const usuarioId = (user as { id?: string } | null)?.id
+  const ehCliente = !!usuarioId && fatura.cliente.id === usuarioId
+  const ehDesigner = !!usuarioId && fatura.designer.id === usuarioId
+
   return (
     <div className="p-6 max-w-lg space-y-6">
       {/* Back + steps */}
@@ -276,7 +287,9 @@ export default function FaturaDetailPage() {
           <ArrowLeft className="h-4 w-4" />
           Faturas
         </Button>
-        <StepIndicator current={step} />
+        {/* O indicador 1-2-3-4 é do fluxo de pagamento. Para quem não paga
+            esta fatura não há fluxo nenhum — a tela é um recibo. */}
+        {ehCliente && <StepIndicator current={step} />}
       </motion.div>
 
       <AnimatePresence mode="wait">
@@ -324,7 +337,15 @@ export default function FaturaDetailPage() {
               </div>
             </div>
 
-            {fatura.status === 'PENDENTE' && (
+            {/*
+              "Pagar com PIX" aparecia para qualquer um que abrisse a fatura —
+              esta tela nunca perguntou quem estava olhando. Para o designer,
+              que é quem RECEBE, era um botão com 403 garantido:
+              `faturaService.pagarFaturaComPix` recusa quem não é o cliente da
+              fatura. A condição aqui é a mesma do backend, comparando ids e
+              não o tipo da conta: quem paga é o cliente daquela fatura.
+            */}
+            {fatura.status === 'PENDENTE' && ehCliente && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -335,6 +356,17 @@ export default function FaturaDetailPage() {
                   Pagar com PIX
                 </Button>
               </motion.div>
+            )}
+
+            {fatura.status === 'PENDENTE' && !ehCliente && (
+              <div className="flex items-start gap-2 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  {ehDesigner
+                    ? `Aguardando o pagamento de ${fatura.cliente.nome}. Você recebe ${fatura.valorLiquidoDesignerFormatado} assim que a fatura for paga.`
+                    : `Aguardando o pagamento de ${fatura.cliente.nome}.`}
+                </p>
+              </div>
             )}
             {fatura.status !== 'PENDENTE' && (
               <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${
