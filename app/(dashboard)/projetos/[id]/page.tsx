@@ -666,7 +666,7 @@ export default function ProjetoPage() {
           )
         )}
 
-        {tab === "billing" && <FaturaTab projetoId={id} />}
+        {tab === "billing" && <FaturaTab projetoId={id} designerId={projeto?.designer?.id ?? null} />}
       </div>
 
       {arteVersao && (

@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
 import { api } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -20,7 +21,35 @@ const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType;
   ESTORNADA: { label: 'Estornada', icon: AlertCircle, cls: 'text-purple-400 bg-purple-400/10' },
 }
 
-export default function FaturaTab({ projetoId }: { projetoId: string }) {
+/**
+ * As faturas de um projeto.
+ *
+ * Esta aba oferecia os dois botões a qualquer um que a abrisse, e os dois são
+ * 403 garantidos para metade das pessoas — a regra está no backend:
+ *
+ *   gerar  `faturaService.ts:49`   projeto.designerId !== requesterId → nega
+ *   pagar  `faturaService.ts:105`  fatura.clienteId !== usuarioId     → nega
+ *
+ * Pior que o 403 era a contradição: a linha dizia "Aguardando pagamento do
+ * cliente" e, ao lado, um botão mandando você pagar. Para o designer, que é
+ * quem RECEBE, as duas metades da mesma linha se desmentiam.
+ *
+ * A condição aqui compara ids, não o tipo da conta — igual à tela da fatura
+ * individual. Um ADMIN abrindo o projeto também não é o pagador.
+ */
+export default function FaturaTab({
+  projetoId,
+  designerId,
+}: {
+  projetoId: string;
+  /** Dono do projeto. Só ele (ou um admin) pode gerar fatura. */
+  designerId?: string | null;
+}) {
+  const { user } = useAuth()
+  const usuarioId = (user as { id?: string } | null)?.id
+  const ehAdmin = (user as { tipo?: string } | null)?.tipo === 'ADMIN'
+  const podeGerar = ehAdmin || (!!usuarioId && !!designerId && usuarioId === designerId)
+
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -74,6 +103,9 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
     }
   }
 
+  const ehPagador = (f: Fatura) => !!usuarioId && f.cliente.id === usuarioId
+  const ehRecebedor = (f: Fatura) => !!usuarioId && f.designer.id === usuarioId
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -84,18 +116,20 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
 
   return (
     <div className="space-y-5 max-w-lg">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Faturas do projeto</h3>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5 rounded-xl"
-          onClick={handleGerarFatura}
-          disabled={generating}
-        >
-          {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-          Gerar fatura
-        </Button>
+        {podeGerar && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 rounded-xl"
+            onClick={handleGerarFatura}
+            disabled={generating}
+          >
+            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Gerar fatura
+          </Button>
+        )}
       </div>
 
       <AnimatePresence>
@@ -151,14 +185,23 @@ export default function FaturaTab({ projetoId }: { projetoId: string }) {
                 {fatura.status === 'PENDENTE' && (
                   <>
                     <Separator />
-                    <div className="flex items-center justify-between px-4 py-2 bg-amber-500/5">
-                      <p className="text-xs text-amber-400">Aguardando pagamento do cliente</p>
-                      <Button asChild size="sm" className="h-7 rounded-xl gap-1">
-                        <Link href={`/faturas/${fatura.id}`}>
-                          <Zap className="h-3 w-3" />
-                          Pagar com PIX
-                        </Link>
-                      </Button>
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500/5 px-4 py-2">
+                      {ehPagador(fatura) ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">Vence quando você quiser pagar</p>
+                          <Button asChild size="sm" className="h-7 gap-1 rounded-xl">
+                            <Link href={`/faturas/${fatura.id}`}>
+                              <Zap className="h-3 w-3" />
+                              Pagar com PIX
+                            </Link>
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Aguardando o pagamento de {fatura.cliente.nome}
+                          {ehRecebedor(fatura) && `. Você recebe ${fatura.valorLiquidoDesignerFormatado} quando cair.`}
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
