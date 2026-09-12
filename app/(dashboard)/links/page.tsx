@@ -1,238 +1,198 @@
 'use client';
 
-import EmptyState from "@/components/layout/EmptyState";
-import { FadeIn } from "@/components/layout/Motion";
+import { FadeIn } from '@/components/layout/Motion';
+import EmptyState from '@/components/layout/EmptyState';
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import EnviarLinkDialog from '@/components/compartilhar/EnviarLinkDialog';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import {
-  Share2, Search, Copy, ExternalLink, Loader2, EyeOff, Plus, MoreVertical,
-  Trash2, RefreshCw, FileImage, FolderOpen, Clock, CheckCircle2, AlertTriangle,
-  MessageCircle, Download, Shield, CalendarPlus, CalendarClock,
+  Copy, ExternalLink, Link2, Loader2, MoreHorizontal, Search, Trash2, Ban,
+  CalendarPlus, Infinity as InfinityIcon,
 } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 
-/* ===================== Tipos ===================== */
+/**
+ * Quem abriu, quem ainda não abriu, e o que já não vale mais.
+ *
+ * `LinkCompartilhado` tem dez campos. A tela antiga mostrava quatro, inventava
+ * dois que não existem em lugar nenhum do schema — "Pode comentar" e "Pode
+ * baixar", ambos com o `onChange` vazio — e ignorava os três que decidem se o
+ * link serve para alguma coisa:
+ *
+ *   revogado          um link revogado aparecia como "Permanente ✓", e o
+ *                     designer copiava e mandava ao cliente um 404
+ *   acessos           a única prova de que o link chegou do outro lado
+ *   limiteTentativas  um quarto jeito de o link morrer, invisível na tela
+ *
+ * Havia também dois interruptores para o mesmo campo. No banco,
+ * `somenteLeitura = true` significa que o cliente NÃO pode comentar — é o que
+ * `linkService.resolveArteIdFromToken` recusa. A tela oferecia "Somente
+ * leitura" (que funcionava) e "Pode comentar" (que não fazia nada), e dava
+ * para ligar os dois ao mesmo tempo. Sobrou um: o que o cliente pode fazer.
+ *
+ * E metade da tela era para um tipo que não existe: `createSharedLink` grava
+ * `tipo: 'ARTE'` fixo, mas havia filtro de Projeto, pílula de Projeto,
+ * ordenação por tipo e um campo `projeto` que o mapper preenchia com `null`.
+ *
+ * O agrupamento carrega o que os filtros faziam à mão. Esperando abrir é a
+ * faixa que pede ação — é ela que responde "mandei e sumiu?".
+ *
+ * Sobre a linha não ser clicável: não existe rota de arte individual no app
+ * (`/artes` é só a lista). Um link que não leva a lugar nenhum é pior do que
+ * nenhum; as ações à direita são o que esta tela tem para oferecer.
+ */
 
-interface LinkCompartilhado {
-  id: string;
-  token: string;
-  tipo: 'ARTE' | 'PROJETO' | string;
-  expira_em: string | null;
-  somente_leitura: boolean;
-  can_comment?: boolean;
-  can_download?: boolean;
-  criado_em: string;
-  arte: {
-    nome: string;
-    projeto: { nome: string; cliente: { nome: string; telefone: string | null } };
-  } | null;
-  projeto: {
-    nome: string;
-    cliente: { nome: string; telefone: string | null };
-  } | null;
-}
-type SortKey = 'criado_em' | 'expira_em' | 'tipo';
-
-/* ===================== UI helpers ===================== */
-
-const LOADER_LINES = [
-  'Afiando os lápis…',
-  'Abrindo pastas…',
-  'Buscando inspirações…',
-  'Alinhando pixels…',
-] as const;
-
-function TipoPill({ tipo }: { tipo: string }) {
-  const map = {
-    ARTE: { label: 'Arte', icon: FileImage, cls: 'bg-blue-100 text-blue-800 border-blue-200' },
-    PROJETO: { label: 'Projeto', icon: FolderOpen, cls: 'bg-purple-100 text-purple-800 border-purple-200' },
-  } as const;
-  const cfg = (map as any)[tipo] ?? { label: tipo, icon: Share2, cls: 'bg-muted text-muted-foreground border-border' };
-  const Icon = cfg.icon;
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${cfg.cls}`}>
-      <Icon className="h-3 w-3" />
-      {cfg.label}
-    </span>
-  );
-}
-
-function StatusBadge({ expira_em }: { expira_em: string | null }) {
-  if (!expira_em) {
-    return (
-      <Badge variant="default" className="h-5 text-[11px] flex items-center gap-1">
-        <CheckCircle2 className="h-3 w-3" />
-        Permanente
-      </Badge>
-    );
-  }
-  const exp = new Date(expira_em);
-  const now = new Date();
-  const expired = exp < now;
-  const soon = !expired && (exp.getTime() - now.getTime() < 24 * 60 * 60 * 1000);
-
-  if (expired) {
-    return (
-      <Badge variant="destructive" className="h-5 text-[11px] flex items-center gap-1">
-        <AlertTriangle className="h-3 w-3" /> Expirado
-      </Badge>
-    );
-  }
-  if (soon) {
-    return (
-      <Badge variant="secondary" className="h-5 text-[11px] flex items-center gap-1">
-        <Clock className="h-3 w-3" /> Expira em breve
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="h-5 text-[11px] flex items-center gap-1">
-      <Clock className="h-3 w-3" /> Ativo
-    </Badge>
-  );
-}
-
-function formatDate(dt: string | null) {
-  if (!dt) return 'Nunca';
-  return new Date(dt).toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
+import {
+  PINO,
+  TITULO,
+  agrupar,
+  avisoDeValidade,
+  estadoDoLink,
+  recadoDosLinks,
+  type Faixa,
+  type LinkCompartilhado,
+} from '@/lib/links';
 
 /* ===================== Linha ===================== */
 
-function LinkRow({
+function LinhaLink({
   link,
-  onCopy,
-  onDelete,
-  onRegenerate,
-  onToggleReadOnly,
-  onToggleComment,
-  onToggleDownload,
-  onExtendDays,
-  onRemoveExpiration,
+  faixa,
+  rotulo,
+  aoCopiar,
+  aoAlternarComentario,
+  aoEstender,
+  aoTornarPermanente,
+  aoRevogar,
+  aoExcluir,
 }: {
   link: LinkCompartilhado;
-  onCopy: (url: string) => void;
-  onDelete: (id: string) => void;
-  onRegenerate: (id: string) => void;
-  onToggleReadOnly: (id: string, v: boolean) => void;
-  onToggleComment: (id: string, v: boolean) => void;
-  onToggleDownload: (id: string, v: boolean) => void;
-  onExtendDays: (id: string, days: number) => void;
-  onRemoveExpiration: (id: string) => void;
+  faixa: Faixa;
+  rotulo: string;
+  aoCopiar: (url: string) => void;
+  aoAlternarComentario: (id: string, podeComentar: boolean) => void;
+  aoEstender: (id: string, dias: number) => void;
+  aoTornarPermanente: (id: string) => void;
+  aoRevogar: (id: string) => void;
+  aoExcluir: (id: string) => void;
 }) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const url = `${origin}/l/${link.token}`;
-  const expired = !!(link.expira_em && new Date(link.expira_em) < new Date());
+  const morto = faixa === 'morto';
 
-  const title =
-    link.tipo === 'ARTE' && link.arte ? link.arte.nome :
-    link.tipo === 'PROJETO' && link.projeto ? link.projeto.nome : 'Link Compartilhado';
-
-  const subtitle =
-    link.tipo === 'ARTE' && link.arte
-      ? `${link.arte.projeto.nome} • ${link.arte.projeto.cliente.nome}`
-      : link.tipo === 'PROJETO' && link.projeto
-      ? link.projeto.cliente.nome
-      : '';
-
-  // O nome que vai na mensagem do WhatsApp é o do PROJETO, não o do link:
-  // "a arte Capa está pronta" diz menos ao cliente do que o nome do trabalho.
-  const nomeProjeto =
-    link.tipo === 'ARTE' && link.arte
-      ? link.arte.projeto.nome
-      : link.tipo === 'PROJETO' && link.projeto
-      ? link.projeto.nome
-      : title;
-
-  const nomeCliente =
-    link.tipo === 'ARTE' && link.arte
-      ? link.arte.projeto.cliente.nome
-      : link.tipo === 'PROJETO' && link.projeto
-      ? link.projeto.cliente.nome
-      : null;
-
-  // Vem do cadastro feito no ClienteWizard. Quando existe, o dialog abre com o
-  // campo preenchido; quando não, ele pede o número.
-  const telefoneCliente =
-    link.tipo === 'ARTE' && link.arte
-      ? link.arte.projeto.cliente.telefone
-      : link.tipo === 'PROJETO' && link.projeto
-      ? link.projeto.cliente.telefone
-      : null;
-
-  const leftStripe =
-    link.tipo === 'ARTE' ? 'before:bg-blue-500' :
-    link.tipo === 'PROJETO' ? 'before:bg-purple-500' : 'before:bg-border';
+  const titulo = link.arte?.nome ?? 'Arte removida';
+  const projeto = link.arte?.projeto.nome ?? '';
+  const cliente = link.arte?.projeto.cliente.nome ?? '';
+  const apoio = [projeto, cliente].filter(Boolean).join(' · ');
+  const aviso = avisoDeValidade(link);
 
   return (
-    <div
-      className={`relative rounded-md border bg-card p-3 card-interativo ${expired ? 'opacity-70' : ''} ${leftStripe}
-      before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:rounded-l-md`}
-    >
-      {/* Top row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <TipoPill tipo={link.tipo} />
-            <StatusBadge expira_em={link.expira_em} />
-            {link.somente_leitura && (
-              <Badge variant="outline" className="h-5 text-[11px] flex items-center gap-1">
-                <EyeOff className="h-3 w-3" /> Somente leitura
-              </Badge>
-            )}
+    <li className="border-b last:border-b-0">
+      <div className={`flex items-stretch gap-3 py-2.5 ${morto ? 'opacity-60' : ''}`}>
+        <span aria-hidden className={`w-[3px] shrink-0 rounded-full ${PINO[faixa]}`} />
+
+        {/*
+          Mesmo arranjo da agenda de Prazos: com `flex-wrap` e base de 13rem,
+          no desktop o estado fica à direita e no celular ele desce para a
+          própria linha, em vez de espremer o nome da arte até o reticências.
+        */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+          <div className="min-w-0 flex-1 basis-52">
+            <p className="truncate text-sm font-medium">{titulo}</p>
+            {apoio && <p className="truncate text-xs text-muted-foreground">{apoio}</p>}
           </div>
-          <div className="truncate font-medium">{title}</div>
-          {!!subtitle && <div className="text-xs text-muted-foreground truncate">{subtitle}</div>}
+          <p className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+            {rotulo}
+            {aviso && <span className="text-foreground"> · {aviso}</span>}
+          </p>
         </div>
 
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onCopy(url)} disabled={expired} title="Copiar link">
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => window.open(url, '_blank')} disabled={expired} title="Abrir link">
-            <ExternalLink className="h-4 w-4" />
-          </Button>
+        <div className="flex shrink-0 items-start gap-1">
+          {!morto && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => aoCopiar(url)}
+              aria-label={`Copiar link de ${titulo}`}
+            >
+              <Copy className="size-4" />
+            </Button>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <MoreVertical className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="size-8" aria-label={`Ações do link de ${titulo}`}>
+                <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onRegenerate(link.id)}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Regenerar token
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onExtendDays(link.id, 7)}>
-                <CalendarPlus className="h-4 w-4 mr-2" />
-                +7 dias
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onExtendDays(link.id, 30)}>
-                <CalendarClock className="h-4 w-4 mr-2" />
-                +30 dias
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onRemoveExpiration(link.id)}>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Tornar permanente
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(link.id)} className="text-red-600 dark:text-red-400">
-                <Trash2 className="h-4 w-4 mr-2" />
+            <DropdownMenuContent align="end" className="w-56">
+              {!morto && (
+                <>
+                  <DropdownMenuItem onClick={() => window.open(url, '_blank', 'noopener')}>
+                    <ExternalLink className="mr-2 size-4" />
+                    Abrir como o cliente vê
+                  </DropdownMenuItem>
+
+                  {/*
+                    Um interruptor só, e com o nome do que o cliente ganha.
+                    `somenteLeitura` é o campo, e ele é o avesso disto.
+                  */}
+                  <DropdownMenuCheckboxItem
+                    checked={!link.somenteLeitura}
+                    onCheckedChange={(v) => aoAlternarComentario(link.id, v)}
+                  >
+                    Cliente pode comentar
+                  </DropdownMenuCheckboxItem>
+
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {!link.revogado && (
+                <>
+                  <DropdownMenuItem onClick={() => aoEstender(link.id, 7)}>
+                    <CalendarPlus className="mr-2 size-4" />
+                    Adiar 7 dias
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => aoEstender(link.id, 30)}>
+                    <CalendarPlus className="mr-2 size-4" />
+                    Adiar 30 dias
+                  </DropdownMenuItem>
+                  {link.expiraEm && (
+                    <DropdownMenuItem onClick={() => aoTornarPermanente(link.id)}>
+                      <InfinityIcon className="mr-2 size-4" />
+                      Tirar a validade
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  {/*
+                    Revogar mata o link e mantém o registro — o histórico de
+                    acessos continua contando a história. Excluir apaga os dois.
+                  */}
+                  <DropdownMenuItem onClick={() => aoRevogar(link.id)}>
+                    <Ban className="mr-2 size-4" />
+                    Revogar
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              <DropdownMenuItem
+                onClick={() => aoExcluir(link.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 size-4" />
                 Excluir
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -240,348 +200,242 @@ function LinkRow({
         </div>
       </div>
 
-      {/* URL */}
-      <div className="mt-2">
-        <Label className="text-[11px] text-muted-foreground">URL</Label>
-        <div className="flex items-center gap-2">
-          <Input value={url} readOnly className="font-mono text-xs" />
-          <Button size="sm" variant="outline" onClick={() => onCopy(url)} disabled={expired}>
-            <Copy className="h-3 w-3" />
-          </Button>
-          {/*
-            Copiar o link ainda exige o designer sair daqui para colar em algum
-            lugar. Este dialog fecha o caminho sem trocar de aba.
-          */}
-          {!expired && (
-            <EnviarLinkDialog
-              token={link.token}
-              reviewUrl={url}
-              projectName={nomeProjeto}
-              clientName={nomeCliente}
-              clientPhone={telefoneCliente}
-            />
-          )}
+      {/* O envio fica fora do menu porque é o que se faz com um link que
+          ninguém abriu ainda — esconder num "…" é enterrar a ação principal. */}
+      {faixa === 'esperando' && (
+        <div className="pb-2.5 pl-[15px]">
+          <EnviarLinkDialog
+            token={link.token}
+            reviewUrl={url}
+            projectName={projeto || titulo}
+            clientName={cliente || null}
+            clientPhone={link.arte?.projeto.cliente.telefone ?? null}
+          />
         </div>
-      </div>
-
-      {/* Permissões + Datas */}
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Somente leitura</span>
-            <Switch
-              checked={!!link.somente_leitura}
-              onCheckedChange={(v) => onToggleReadOnly(link.id, v)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Pode comentar</span>
-            <Switch
-              checked={!!link.can_comment}
-              onCheckedChange={(v) => onToggleComment(link.id, v)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Download className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Pode baixar</span>
-            <Switch
-              checked={!!link.can_download}
-              onCheckedChange={(v) => onToggleDownload(link.id, v)}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <span className="text-muted-foreground">Criado</span>
-            <div className="font-medium">{formatDate(link.criado_em)}</div>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Expira</span>
-            <div className="font-medium">{formatDate(link.expira_em)}</div>
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </li>
   );
 }
 
 /* ===================== Página ===================== */
 
 export default function LinksPage() {
-  const router = useRouter();
   const [links, setLinks] = useState<LinkCompartilhado[]>([]);
-  const [filtered, setFiltered] = useState<LinkCompartilhado[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loaderLine, setLoaderLine] = useState<(typeof LOADER_LINES)[number]>(LOADER_LINES[0]);
-  const [error, setError] = useState<string | null>(null);
-
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [tipoFilter, setTipoFilter] = useState<string>('todos');
-  const [statusFilter, setStatusFilter] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<SortKey>('criado_em');
-
-  // loader frases
-  useEffect(() => {
-    if (!loading) return;
-    const id = setInterval(() => {
-      setLoaderLine((prev) => LOADER_LINES[(LOADER_LINES.indexOf(prev) + 1) % LOADER_LINES.length]);
-    }, 1500);
-    return () => clearInterval(id);
-  }, [loading]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
+    let vivo = true;
     (async () => {
-      setLoading(true);
-      setError(null);
       try {
-        const res = await api.get<{ data: any[] }>('/links');
-        const rows: LinkCompartilhado[] = (res.data ?? []).map((r: any) => ({
-          id: String(r.id),
-          token: String(r.token),
-          tipo: String(r.tipo) as LinkCompartilhado['tipo'],
-          expira_em: r.expiraEm ?? r.expira_em ?? null,
-          somente_leitura: Boolean(r.somenteLeitura ?? r.somente_leitura),
-          can_comment: false,
-          can_download: false,
-          criado_em: r.criadoEm ?? r.criado_em ?? '',
-          arte: r.arte ? {
-            nome: String(r.arte.nome ?? ''),
-            projeto: {
-              nome: String(r.arte.projeto?.nome ?? ''),
-              cliente: {
-                nome: String(r.arte.projeto?.cliente?.nome ?? ''),
-                telefone: r.arte.projeto?.cliente?.telefone ?? null,
-              },
-            },
-          } : null,
-          projeto: null,
-        }));
-        setLinks(rows);
-      } catch (e: any) {
-        setError(e?.message ?? 'Não foi possível carregar os links compartilhados.');
+        const res = await api.get<{ data: unknown[] }>('/links');
+        if (!vivo) return;
+        // Os nomes vêm do Prisma em camelCase; não há segunda convenção a
+        // acomodar, e o `?? snake_case` de antes só escondia isso.
+        setLinks(((res.data ?? []) as LinkCompartilhado[]).map((r) => ({
+          ...r,
+          acessos: r.acessos ?? 0,
+          revogado: Boolean(r.revogado),
+          somenteLeitura: Boolean(r.somenteLeitura),
+          limiteTentativas: r.limiteTentativas ?? null,
+        })));
+      } catch {
+        if (vivo) setErro('Não foi possível carregar os links.');
       } finally {
-        setLoading(false);
+        if (vivo) setCarregando(false);
       }
     })();
+    return () => {
+      vivo = false;
+    };
   }, []);
 
-  // filtros + ordenação
-  useEffect(() => {
-    let arr = [...links];
-
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      arr = arr.filter((l) => {
-        const t = l.tipo === 'ARTE' ? l.arte?.nome ?? '' : l.projeto?.nome ?? '';
-        const p = l.tipo === 'ARTE' ? l.arte?.projeto.nome ?? '' : l.projeto?.nome ?? '';
-        const c = l.tipo === 'ARTE' ? l.arte?.projeto.cliente.nome ?? '' : l.projeto?.cliente.nome ?? '';
-        return (
-          t.toLowerCase().includes(q) ||
-          p.toLowerCase().includes(q) ||
-          c.toLowerCase().includes(q) ||
-          l.token.toLowerCase().includes(q)
-        );
-      });
-    }
-
-    if (tipoFilter !== 'todos') arr = arr.filter((l) => l.tipo === tipoFilter);
-
-    if (statusFilter !== 'todos') {
-      const now = new Date();
-      arr = arr.filter((l) => {
-        const expired = !!(l.expira_em && new Date(l.expira_em) < now);
-        if (statusFilter === 'ativo') return !expired;
-        if (statusFilter === 'expirado') return expired;
-        if (statusFilter === 'permanente') return !l.expira_em;
-        return true;
-      });
-    }
-
-    arr.sort((a, b) => {
-      switch (sortBy) {
-        case 'criado_em': return +new Date(b.criado_em) - +new Date(a.criado_em);
-        case 'expira_em': {
-          const ax = a.expira_em ? +new Date(a.expira_em) : Number.POSITIVE_INFINITY;
-          const bx = b.expira_em ? +new Date(b.expira_em) : Number.POSITIVE_INFINITY;
-          return ax - bx;
-        }
-        case 'tipo': return a.tipo.localeCompare(b.tipo);
-        default: return 0;
-      }
+  const visiveis = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return links;
+    return links.filter((l) => {
+      const campos = [
+        l.arte?.nome,
+        l.arte?.projeto.nome,
+        l.arte?.projeto.cliente.nome,
+        l.token,
+      ];
+      return campos.some((c) => c?.toLowerCase().includes(q));
     });
+  }, [links, busca]);
 
-    setFiltered(arr);
-  }, [links, searchTerm, tipoFilter, statusFilter, sortBy]);
+  const grupos = useMemo(() => agrupar(visiveis), [visiveis]);
 
-  // ===== Ações =====
+  /* ===== Ações ===== */
 
-  const handleCopy = async (url: string) => {
-    try { await navigator.clipboard.writeText(url); } catch {}
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await api.delete(`/links/${id}`);
-      setLinks((prev) => prev.filter((l) => l.id !== id));
-    } catch {}
-  };
-
-  const handleRegenerate = (_id: string) => {
-    // Regenerar token não tem endpoint dedicado no backend — no-op
-  };
-
-  const patchLink = (id: string, patch: Partial<LinkCompartilhado>) =>
+  const remendar = (id: string, patch: Partial<LinkCompartilhado>) =>
     setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
-  const onToggleReadOnly = async (id: string, v: boolean) => {
-    patchLink(id, { somente_leitura: v });
-    try { await api.put(`/links/${id}`, { somenteLeitura: v }); }
-    catch { patchLink(id, { somente_leitura: !v }); }
-  };
-  const onToggleComment = (_id: string, _v: boolean) => { /* can_comment não existe no backend */ };
-  const onToggleDownload = (_id: string, _v: boolean) => { /* can_download não existe no backend */ };
+  async function aoCopiar(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link copiado.');
+    } catch {
+      toast.error('Não foi possível copiar o link.');
+    }
+  }
 
-  const onExtendDays = async (id: string, days: number) => {
+  async function aoAlternarComentario(id: string, podeComentar: boolean) {
+    const antes = links.find((l) => l.id === id)?.somenteLeitura ?? true;
+    remendar(id, { somenteLeitura: !podeComentar });
+    try {
+      await api.put(`/links/${id}`, { somenteLeitura: !podeComentar });
+    } catch {
+      remendar(id, { somenteLeitura: antes });
+      toast.error('Não foi possível mudar a permissão.');
+    }
+  }
+
+  async function aoEstender(id: string, dias: number) {
     const item = links.find((l) => l.id === id);
-    const base = item?.expira_em ? new Date(item.expira_em) : new Date();
-    const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-    patchLink(id, { expira_em: next });
-    try { await api.put(`/links/${id}`, { expiraEm: next }); }
-    catch { patchLink(id, { expira_em: item?.expira_em ?? null }); }
-  };
+    if (!item) return;
+    // Adiar a partir de hoje quando o link já venceu: somar sobre uma data
+    // passada devolveria um prazo que nasce vencido.
+    const agora = Date.now();
+    const base = item.expiraEm ? Math.max(new Date(item.expiraEm).getTime(), agora) : agora;
+    const novo = new Date(base + dias * 86400000).toISOString();
+    remendar(id, { expiraEm: novo });
+    try {
+      await api.put(`/links/${id}`, { expiraEm: novo });
+    } catch {
+      remendar(id, { expiraEm: item.expiraEm });
+      toast.error('Não foi possível adiar a validade.');
+    }
+  }
 
-  const onRemoveExpiration = async (id: string) => {
-    const old = links.find((l) => l.id === id)?.expira_em ?? null;
-    patchLink(id, { expira_em: null });
-    try { await api.put(`/links/${id}`, { expiraEm: null }); }
-    catch { patchLink(id, { expira_em: old }); }
-  };
+  async function aoTornarPermanente(id: string) {
+    const antes = links.find((l) => l.id === id)?.expiraEm ?? null;
+    remendar(id, { expiraEm: null });
+    try {
+      await api.put(`/links/${id}`, { expiraEm: null });
+    } catch {
+      remendar(id, { expiraEm: antes });
+      toast.error('Não foi possível tirar a validade.');
+    }
+  }
 
-  // ===== Render =====
+  async function aoRevogar(id: string) {
+    remendar(id, { revogado: true });
+    try {
+      await api.put(`/links/${id}/revogar`, {});
+      toast.success('Link revogado. Quem tiver o endereço não abre mais.');
+    } catch {
+      remendar(id, { revogado: false });
+      toast.error('Não foi possível revogar o link.');
+    }
+  }
 
-  if (loading) {
+  async function aoExcluir(id: string) {
+    const antes = links;
+    setLinks((prev) => prev.filter((l) => l.id !== id));
+    try {
+      await api.delete(`/links/${id}`);
+    } catch {
+      setLinks(antes);
+      toast.error('Não foi possível excluir o link.');
+    }
+  }
+
+  /* ===== Render ===== */
+
+  if (carregando) {
     return (
-      <div className="flex flex-col gap-3 items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">{loaderLine}</p>
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="size-7 animate-spin text-muted-foreground" />
+        <span className="sr-only">Carregando links…</span>
       </div>
     );
   }
 
-  if (error) {
+  if (erro) {
     return (
-      <div className="flex items-center justify-center h-[50vh] text-center">
-        <div>
-          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
-          <p className="text-muted-foreground mb-6">Tenta recarregar? (se persistir, me chama).</p>
-        </div>
+      <div className="flex h-[50vh] flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm text-muted-foreground">{erro}</p>
+        <Button onClick={() => location.reload()}>Recarregar</Button>
       </div>
     );
   }
-
-  const empty = filtered.length === 0;
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Links Compartilhados ✦ </h1>
-          <p className="text-sm text-muted-foreground">Gerencie os links públicos de Artes e Projetos</p>
-        </div>
-        {/* O link nasce no envio da arte (passo 3 do wizard), não aqui. Esta
-            página lista e gerencia; o botão leva para onde a criação existe,
-            em vez de ficar escondido prometendo uma tela que não há. */}
-        <Button asChild>
-          <Link href="/artes">
-            <Plus className="h-4 w-4 mr-2" /> Gerar link em uma arte
-          </Link>
-        </Button>
+    <FadeIn className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Links compartilhados ✦</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{recadoDosLinks(links)}</p>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-col lg:flex-row gap-3">
-        <div className="relative flex-1 min-w-[260px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      {links.length > 0 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, projeto, cliente ou token…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por arte, projeto, cliente ou token…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
             className="pl-10"
           />
         </div>
+      )}
 
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="ARTE">Arte</SelectItem>
-            <SelectItem value="PROJETO">Projeto</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="ativo">Ativos</SelectItem>
-            <SelectItem value="expirado">Expirados</SelectItem>
-            <SelectItem value="permanente">Permanentes</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Ordenar" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="criado_em">Mais recente</SelectItem>
-            <SelectItem value="expira_em">Data de expiração</SelectItem>
-            <SelectItem value="tipo">Tipo</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Lista */}
-      {empty ? (
+      {links.length === 0 ? (
         <EmptyState
-          icon={Share2}
-          title="Nenhum link encontrado"
-          description={
-            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
-              ? 'Tente ajustar os filtros de busca.'
-              : 'Links de review são gerados ao enviar uma arte. Assim que criar o primeiro, ele aparece aqui.'
-          }
-          actionLabel={
-            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
-              ? undefined
-              : 'Ir para Artes'
-          }
-          onAction={
-            searchTerm || tipoFilter !== 'todos' || statusFilter !== 'todos'
-              ? undefined
-              : () => router.push('/artes')
-          }
+          icon={Link2}
+          tom="pessego"
+          title="Nenhum link ainda"
+          description="O link de revisão nasce no envio da arte. Assim que você mandar o primeiro, ele aparece aqui — e esta tela passa a dizer quem abriu."
+          acaoSecundaria={{ label: 'Ir para Artes', href: '/artes' }}
+        />
+      ) : grupos.length === 0 ? (
+        <EmptyState
+          variante="filtro"
+          title="Nada com esse termo"
+          description="A busca olha o nome da arte, do projeto, do cliente e o token."
+          actionLabel="Limpar busca"
+          onAction={() => setBusca('')}
         />
       ) : (
-        <div className="space-y-3">
-          {filtered.map((l) => (
-            <LinkRow
-              key={l.id}
-              link={l}
-              onCopy={handleCopy}
-              onDelete={handleDelete}
-              onRegenerate={handleRegenerate}
-              onToggleReadOnly={onToggleReadOnly}
-              onToggleComment={onToggleComment}
-              onToggleDownload={onToggleDownload}
-              onExtendDays={onExtendDays}
-              onRemoveExpiration={onRemoveExpiration}
-            />
+        <div className="flex flex-col gap-4">
+          {grupos.map((grupo) => (
+            <section key={grupo.faixa} className="flex flex-col gap-1 rounded-xl border bg-card p-4">
+              <h2 className="flex items-baseline justify-between gap-2 font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
+                <span>{TITULO[grupo.faixa]}</span>
+                <span className="tabular-nums">{grupo.itens.length}</span>
+              </h2>
+
+              <ul className="flex flex-col">
+                {grupo.itens.map((link) => (
+                  <LinhaLink
+                    key={link.id}
+                    link={link}
+                    faixa={grupo.faixa}
+                    rotulo={estadoDoLink(link).rotulo}
+                    aoCopiar={aoCopiar}
+                    aoAlternarComentario={aoAlternarComentario}
+                    aoEstender={aoEstender}
+                    aoTornarPermanente={aoTornarPermanente}
+                    aoRevogar={aoRevogar}
+                    aoExcluir={aoExcluir}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
         </div>
+      )}
+
+      {/* O link nasce no passo 3 do wizard de envio da arte — não aqui. O rodapé
+          diz onde ele nasce em vez de um botão prometendo uma tela que não há. */}
+      {links.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Links novos nascem ao enviar uma arte.{' '}
+          <NextLink href="/artes" className="underline underline-offset-2 hover:text-foreground">
+            Ir para Artes
+          </NextLink>
+        </p>
       )}
     </FadeIn>
   );

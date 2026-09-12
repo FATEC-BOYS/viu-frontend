@@ -450,7 +450,9 @@ export default function ClienteDetailPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button onClick={criarProjetoRápido} size="sm"><Plus className="h-4 w-4 mr-1" /> Projeto</Button>
-              <Button asChild size="sm" variant="outline"><Link href={`/links?cliente=${clienteSafe.id}`}>Gerar link</Link></Button>
+              {/* Havia aqui um "Gerar link" apontando para `/links?cliente=<id>`.
+                  A tela de Links não lê esse parâmetro e não gera nada — o link
+                  nasce no envio da arte, que é o botão ao lado. */}
               <Button asChild size="sm" variant="outline">{/* `/artes/nova` não existe — a página de artes abre o fluxo com
                   `?novo=1`, como /clientes e /projetos. */}
               <Link href="/artes?novo=1">Enviar arte</Link></Button>
