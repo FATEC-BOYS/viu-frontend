@@ -17,6 +17,7 @@ export default function AsyncUserSingleSelect({
   onChange,
   route,
   placeholder,
+  label,
   resolveRoute = "/api/contacts/resolve",
 }: {
   tipo: "CLIENTE" | "DESIGNER";
@@ -24,13 +25,20 @@ export default function AsyncUserSingleSelect({
   onChange: (val: string | null) => void;
   route: string;                        // ex: "/api/contacts/search"
   placeholder?: string;
+  /**
+   * Nome já conhecido de quem está selecionado. Quem abre este campo quase
+   * sempre acabou de listar as pessoas e tem o nome na mão — sem isto o
+   * componente devolvia o id à rede só para receber o nome de volta, e quando
+   * essa volta falhava mostrava o id cru.
+   */
+  label?: string | null;
   resolveRoute?: string;                // ex: "/api/contacts/resolve"
 }) {
   const [query, setQuery] = React.useState("");
   const [options, setOptions] = React.useState<Option[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [resolving, setResolving] = React.useState(false);
-  const [displayLabel, setDisplayLabel] = React.useState<string>("");
+  const [displayLabel, setDisplayLabel] = React.useState<string>(label ?? "");
 
   // 1) Sempre que o value mudar (ex.: veio do form ao editar), resolvemos o label se necessário
   React.useEffect(() => {
@@ -38,6 +46,11 @@ export default function AsyncUserSingleSelect({
     async function run() {
       if (!value) {
         setDisplayLabel("");
+        return;
+      }
+      // O nome veio de fora: não há o que resolver.
+      if (label) {
+        setDisplayLabel(label);
         return;
       }
       // Se já temos a opção correspondente no cache atual, usa ela
@@ -52,14 +65,15 @@ export default function AsyncUserSingleSelect({
         const res = await fetch(`${resolveRoute}?id=${encodeURIComponent(value)}&tipo=${tipo}`, {
         });
         if (!active) return;
-        if (res.ok) {
-          const data = await res.json();
-          setDisplayLabel(data?.label || String(value));
-        } else {
-          setDisplayLabel(String(value));
-        }
+        /*
+         * Sem nome, o campo fica vazio e o placeholder volta a aparecer. Um id
+         * no lugar do nome não é um rótulo pior — é informação errada: a pessoa
+         * lê "c09e853bcf…" e não tem como saber de quem é o projeto.
+         */
+        const data = res.ok ? await res.json() : null;
+        setDisplayLabel(data?.label ?? "");
       } catch {
-        setDisplayLabel(String(value));
+        setDisplayLabel("");
       } finally {
         if (active) setResolving(false);
       }
@@ -67,7 +81,7 @@ export default function AsyncUserSingleSelect({
     run();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, tipo, resolveRoute]);
+  }, [value, label, tipo, resolveRoute]);
 
   // 2) Buscar sugestões conforme digita
   React.useEffect(() => {

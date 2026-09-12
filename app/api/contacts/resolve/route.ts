@@ -9,6 +9,12 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
  * GET /usuarios/:id exige ownership, então um designer não consegue ler o
  * cadastro do próprio cliente por ali. O fallback procura a pessoa entre os
  * participantes dos projetos do usuário, que é o escopo que ele já enxerga.
+ *
+ * Quando nem isso acha, devolve `label: null` — e não o id. Devolver o id como
+ * se fosse rótulo punha "c09e853bcfdce8af1a54d9534" no campo "Cliente
+ * principal" do modal de novo projeto, e é justamente no primeiro projeto de um
+ * cliente que o fallback não tem como funcionar: ele procura entre os projetos
+ * existentes, e ainda não há nenhum. Sem nome, quem chama decide o que mostrar.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -47,8 +53,8 @@ export async function GET(req: Request) {
       if (achado) return NextResponse.json({ ok: true, label: rotulo(achado) });
     }
 
-    return NextResponse.json({ ok: true, label: id });
+    return NextResponse.json({ ok: true, label: null });
   } catch {
-    return NextResponse.json({ ok: true, label: id });
+    return NextResponse.json({ ok: true, label: null });
   }
 }

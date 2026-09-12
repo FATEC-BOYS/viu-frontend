@@ -13,12 +13,16 @@ import EquipeSelect from "../EquipeSelect";
  * aria-describedby para leitores de tela.
  */
 export default function StepBasic({
-  values, setValues, souCliente, erros = {},
+  values, setValues, souCliente, erros = {}, aoTocar, clientes = [],
 }: {
   values: ProjetoFormValues;
   setValues: (v: ProjetoFormValues) => void;
   souCliente: boolean;
   erros?: Record<string, string>;
+  /** Chamado quando a pessoa sai de um campo — é daí que as cobranças passam a valer. */
+  aoTocar?: () => void;
+  /** Clientes já carregados pelo modal, com nome. Evita o id virar rótulo. */
+  clientes?: { id: string; nome: string }[];
 }) {
   const mensagem = (campo: string) =>
     erros[campo] ? (
@@ -30,6 +34,7 @@ export default function StepBasic({
   const acessibilidade = (campo: string) => ({
     "aria-invalid": erros[campo] ? true : undefined,
     "aria-describedby": erros[campo] ? `${campo}-erro` : undefined,
+    onBlur: aoTocar,
   });
 
   return (
@@ -104,6 +109,9 @@ export default function StepBasic({
             <AsyncUserSingleSelect
               tipo="CLIENTE"
               value={values.cliente_id}
+              // O modal já listou os clientes com nome; passar o rótulo evita
+              // devolver o id à rede só para recebê-lo de volta.
+              label={clientes.find((c) => c.id === values.cliente_id)?.nome ?? null}
               onChange={(id) => setValues({ ...values, cliente_id: id })}
               placeholder="Buscar ou adicionar por e-mail…"
               route="/api/contacts/search"
