@@ -10,13 +10,20 @@ import ViewerShell from '../ViewerShell'
  * Mesmo assim o visitante anônimo levava um modal pedindo e-mail e nome (que
  * o backend nunca usa) e uma aba de Aprovações inteira que sempre respondia
  * 401. Este arquivo trava a regra: sem sessão, o viewer é leitura e diz isso.
+ *
+ * Havia também `FeedbackPanel` montado ao lado do viewer, com outra lista dos
+ * mesmos feedbacks. Ele saiu, e por isso não há mais o que verificar sobre
+ * ele aqui — o que ele tinha de próprio (ouvir o comentário) o viewer já faz.
+ *
+ * As aprovações agora entram no viewer como conteúdo da trilha lateral, então
+ * o dublê precisa renderizar a prop: sem isso o teste diria "não há painel de
+ * aprovações" pelo motivo errado.
  */
 
 vi.mock('@/components/viewer/FeedbackViewer', () => ({
-  default: () => <div data-testid="feedback-viewer" />,
-}))
-vi.mock('@/components/viewer/FeedbackPanel', () => ({
-  default: () => <div data-testid="feedback-panel" />,
+  default: ({ aprovacoes }: { aprovacoes?: React.ReactNode }) => (
+    <div data-testid="feedback-viewer">{aprovacoes}</div>
+  ),
 }))
 vi.mock('@/components/viewer/ApprovalsPanel', () => ({
   default: () => <div data-testid="approvals-panel" />,
@@ -26,11 +33,12 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 const ARTE = {
   id: 'arte1',
   nome: 'Capa',
-  arquivo_url: 'https://r2.example.com/a.png?assinado',
+  arquivo: 'https://r2.example.com/a.png?assinado',
+  versao: 1,
   status: 'EM_ANALISE',
 } as any
 
-function renderViewer() {
+function renderViewer(props: Partial<React.ComponentProps<typeof ViewerShell>> = {}) {
   return render(
     <ViewerShell
       arte={ARTE}
@@ -39,13 +47,21 @@ function renderViewer() {
       aprovacoesByVersao={{}}
       readOnly={false}
       token="tok123"
+      {...props}
     />,
   )
 }
 
-/** Sessão é sinalizada pelo perfil em cache — é o que `temSessao()` lê. */
+/*
+ * `temSessao()` só olha se a chave existe — é o cookie que manda no acesso.
+ * Já `perfilEmCache()` exige `id`, e é ele que alimenta a etiqueta de quem
+ * está comentando; sem o id a tela cai no genérico "com sua conta".
+ */
 function comSessao() {
-  localStorage.setItem('viu_user', JSON.stringify({ nome: 'Cliente', email: 'c@t.com' }))
+  localStorage.setItem(
+    'viu_user',
+    JSON.stringify({ id: 'cliente1', nome: 'Cliente', email: 'c@t.com' }),
+  )
 }
 
 beforeEach(() => {
@@ -63,38 +79,61 @@ describe('visitante anônimo (sem sessão)', () => {
     expect(screen.queryByText(/informe.*e-mail|identifique/i)).not.toBeInTheDocument()
   })
 
-  it('não vê a aba de aprovações', () => {
+  it('não vê as aprovações', () => {
     renderViewer()
     // Aprovar exige sessão E ser o cliente do projeto; o painel respondia 401.
     expect(screen.queryByTestId('approvals-panel')).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /aprova/i })).not.toBeInTheDocument()
   })
 
-  it('continua vendo a arte e os feedbacks — ler pelo link é público', () => {
+  it('continua vendo a arte — ler pelo link é público', () => {
     renderViewer()
     expect(screen.getByTestId('feedback-viewer')).toBeInTheDocument()
-    expect(screen.getByTestId('feedback-panel')).toBeInTheDocument()
   })
 
   it('diz que precisa entrar para comentar, em vez de deixar tentar', () => {
     renderViewer()
-    expect(screen.getByText(/entre.*conta|somente leitura/i)).toBeInTheDocument()
+    expect(screen.getByText('Entre na sua conta para comentar')).toBeInTheDocument()
   })
 })
 
 describe('usuário com sessão', () => {
-  it('vê a aba de aprovações', () => {
+  it('vê as aprovações', () => {
     comSessao()
     renderViewer()
     expect(screen.getByTestId('approvals-panel')).toBeInTheDocument()
   })
 
-  it('mantém o viewer e a aba de feedbacks disponível', () => {
+  it('mantém a arte disponível', () => {
     comSessao()
     renderViewer()
     expect(screen.getByTestId('feedback-viewer')).toBeInTheDocument()
-    // Com sessão a aba ativa é Aprovações, e Tabs só monta o painel ativo —
-    // o que se verifica aqui é que a aba de feedbacks continua alcançável.
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeInTheDocument()
+  })
+
+  /*
+   * A frase de situação vivia em dois lugares — a faixa do topo e, de novo,
+   * acima do campo de texto dentro do viewer. Agora é só aqui.
+   */
+  it('diz com qual conta o comentário vai sair', () => {
+    comSessao()
+    renderViewer()
+    expect(screen.getByText('Comentando como c@t.com')).toBeInTheDocument()
+  })
+})
+
+describe('link somente leitura', () => {
+  it('avisa antes de a pessoa tentar comentar', () => {
+    comSessao()
+    renderViewer({ readOnly: true })
+    expect(screen.getByText('Somente leitura')).toBeInTheDocument()
+  })
+})
+
+describe('o que identifica a arte', () => {
+  it('mostra nome, versão e situação numa linha só', () => {
+    renderViewer()
+    expect(screen.getByRole('heading', { name: /Capa/ })).toBeInTheDocument()
+    expect(screen.getByText('v1')).toBeInTheDocument()
+    // O cliente lia "EM_ANALISE" em caixa alta — o enum é do banco, não da tela.
+    expect(screen.queryByText('EM_ANALISE')).not.toBeInTheDocument()
   })
 })

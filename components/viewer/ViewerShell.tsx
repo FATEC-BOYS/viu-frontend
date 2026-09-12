@@ -4,15 +4,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { perfilEmCache, temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
-import FeedbackPanel from "@/components/viewer/FeedbackPanel";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
-import { toast } from "sonner";
 import { rotuloArte } from "@/lib/rotulos";
 
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+/**
+ * A mesa onde o cliente olha a arte.
+ *
+ * Isto era uma página: faixa laranja de 80px que não dizia nada, dois cartões
+ * arredondados lado a lado, e a arte — o assunto — espremida num `max-h-[70vh]`
+ * dentro de uma caixa dentro de um `max-w-7xl`. No celular sobrava uma imagem
+ * do tamanho de uma linha e três telas de formulário embaixo.
+ *
+ * Pior: a lista de feedback aparecia duas vezes. `FeedbackViewer` já trazia o
+ * campo de texto, o "Gravar áudio" e a lista abaixo da imagem, e a coluna da
+ * direita montava `FeedbackPanel`, que é outra lista da mesma coisa — alimentada
+ * com `versoes` sintética de um item só e `aprovacoesByVersao` vazio. Sobrou uma
+ * superfície só; o que o painel tinha de próprio (ouvir o comentário) o viewer
+ * já fazia.
+ *
+ * Agora a arte ocupa o que sobra da altura, flutuando sobre cinza neutro, e a
+ * moldura encolheu ao que precisa existir: uma faixa fina em cima dizendo o que
+ * é e quem está falando, e a trilha de comentários ao lado.
+ */
 
 type Arte = {
   id: string;
@@ -26,15 +39,6 @@ type Arte = {
   projeto_id: string | null;
 };
 
-type PrincipalInfo = {
-  id: string;
-  nome: string | null;
-  email: string | null;
-  avatarUrl?: string | null;
-};
-
-// Se você já tiver esse dado vindo do server, passe por props.
-// Aqui mantive opcional — se vier null não renderizamos avatar grande.
 type Props = {
   arte: Arte;
   initialFeedbacks: any[];
@@ -42,156 +46,79 @@ type Props = {
   aprovacoesByVersao: Record<string, any[]>;
   readOnly: boolean;
   token: string;
-
-  // opcional: quem é o aprovador principal para exibir no header
-  principal?: PrincipalInfo | null;
-
-  // opcional: flags de permissão resolvidas no server
 };
 
-export default function ViewerShell({
-  arte,
-  initialFeedbacks,
-  versoes,
-  aprovacoesByVersao,
-  readOnly,
-  token,
-  principal = null,
-}: Props) {
+export default function ViewerShell({ arte, initialFeedbacks, readOnly, token }: Props) {
   /**
    * Sessão decide o que a interface pode prometer.
    *
    * Ler pelo link é público, mas comentar exige conta (Feedback.autorId é
-   * obrigatório com FK) e aprovar exige ainda ser o cliente do projeto. Sem
-   * sessão, o visitante levava um modal pedindo e-mail — que o backend nunca
-   * lê — e uma aba de Aprovações que só sabia responder 401.
+   * obrigatório com FK) e aprovar exige ainda ser o cliente do projeto.
    *
    * Começa `false` e só sobe no efeito: no servidor não há localStorage, e
    * decidir na primeira renderização daria divergência de hidratação.
    */
   const [temConta, setTemConta] = useState(false);
-
-  /**
-   * Quem esta comentando e quem esta logado — ponto.
-   *
-   * Havia um modal (IdentityGate) que pedia e-mail e nome a quem JA tinha
-   * sessao, dizendo que usaria isso "para associar seus feedbacks e
-   * aprovacoes". O dado ate seguia no corpo do POST, mas a rota BFF
-   * (app/api/feedbacks) o descartava, e o backend grava `autorId` da sessao
-   * (linkController.ts). Servia so para esta etiqueta — um bloqueio de tela
-   * para preencher o que o app ja sabia.
-   */
   const [viewer, setViewer] = useState<{ email: string; nome: string | null } | null>(null);
-  const [activeTab, setActiveTab] = useState<"aprovacoes" | "feedbacks">("feedbacks");
-  // O cliente lia "EM_ANALISE" em caixa alta. O enum e do banco, nao da tela.
+
   const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
 
   useEffect(() => {
-    // `temSessao` e nao `perfilEmCache`: ter sessao nao pode depender de o
-    // perfil em cache trazer id. Quem decide o acesso e o cookie; o perfil so
-    // alimenta a etiqueta de quem esta comentando.
-    const logado = temSessao();
-    setTemConta(logado);
-    if (logado) setActiveTab("aprovacoes");
-
-    // Também só depois de montar: `perfilEmCache` lê localStorage, que no
-    // servidor não existe. Derivar isto na primeira renderização fazia o
-    // servidor escrever "Entre na sua conta" e o cliente "Comentando como" —
-    // exatamente a divergência que o comentário acima previa.
+    // `temSessao` e não `perfilEmCache`: ter sessão não pode depender de o
+    // perfil em cache trazer id. Quem decide o acesso é o cookie; o perfil só
+    // alimenta a etiqueta de quem está comentando.
+    setTemConta(temSessao());
     const perfil = perfilEmCache();
     setViewer(perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null);
   }, []);
 
-  return (
-    <main className="mx-auto max-w-7xl p-4 md:p-8">
-      <header className="rounded-2xl overflow-hidden border mb-4">
-        <div className="bg-gradient-to-r from-primary/70 to-primary/25 h-20" />
-        <div className="p-4 bg-background">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {principal && (
-                <Avatar className="h-12 w-12">
-                  {/* se tiver avatar real, coloque <AvatarImage src={principal.avatarUrl ?? undefined} /> */}
-                  <AvatarFallback>
-                    {principal.nome?.slice(0, 2).toUpperCase() ||
-                      principal.email?.slice(0, 2).toUpperCase() ||
-                      "AP"}
-                  </AvatarFallback>
-                </Avatar>
-              )}
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-                  {arte.nome}
-                  <span className="text-muted-foreground">— v{arte.versao}</span>
-                  <Badge variant="secondary">{statusLabel}</Badge>
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  {readOnly
-                    ? "Modo leitura"
-                    : !temConta
-                    ? "Somente leitura — entre na sua conta para comentar."
-                    : viewer?.email
-                    ? `Comentando como ${viewer.email}`
-                    : "Comentando com sua conta"}
-                </p>
-                {principal && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Aprovador principal:{" "}
-                    <span className="font-medium">
-                      {principal.nome || principal.email || "Não definido"}
-                    </span>
-                  </p>
-                )}
-              </div>
-            </div>
+  const situacao = readOnly
+    ? "Somente leitura"
+    : !temConta
+      ? "Entre na sua conta para comentar"
+      : viewer?.email
+        ? `Comentando como ${viewer.email}`
+        : "Comentando com sua conta";
 
-          </div>
-        </div>
+  return (
+    /*
+     * `100dvh` e não `100vh`: no navegador do celular a barra de endereço
+     * entra e sai, e com `vh` a arte ficava cortada por baixo justamente no
+     * aparelho em que o cliente abre o link.
+     */
+    <main className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+      {/* A faixa de cima: uma linha, não um banner. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5">
+        <h1 className="flex min-w-0 items-baseline gap-2 text-sm font-semibold tracking-tight">
+          <span className="truncate">{arte.nome}</span>
+          <span className="shrink-0 font-mono text-xs font-normal text-muted-foreground">
+            v{arte.versao}
+          </span>
+        </h1>
+
+        {statusLabel && (
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+            {statusLabel}
+          </span>
+        )}
+
+        <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4">
-        <section className="rounded-2xl border overflow-hidden">
-          <FeedbackViewer
-            arte={arte}
-            initialFeedbacks={initialFeedbacks}
-            viewer={viewer}
-            readOnly={readOnly}
-            token={token}
-          />
-        </section>
-
-        <aside className="rounded-2xl border overflow-hidden">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-            <div className="flex items-center justify-between p-3 border-b bg-background">
-              <TabsList>
-                {/* Aprovar exige sessão e ser o cliente do projeto. Sem conta a
-                    aba inteira sai, em vez de existir para devolver 401. */}
-                {temConta && <TabsTrigger value="aprovacoes">Aprovações</TabsTrigger>}
-                <TabsTrigger value="feedbacks">Feedbacks</TabsTrigger>
-              </TabsList>
-            </div>
-
-            {temConta && (
-              <TabsContent value="aprovacoes" className="m-0">
-                <ApprovalsPanel arteId={arte.id} token={token} />
-              </TabsContent>
-            )}
-
-            <TabsContent value="feedbacks" className="m-0">
-              <FeedbackPanel
-                arteId={arte.id}
-                versoes={versoes}
-                aprovacoesByVersao={aprovacoesByVersao}
-                readOnly={readOnly}
-                viewer={viewer}
-                token={token}
-                initialFeedbacks={initialFeedbacks}
-              />
-            </TabsContent>
-          </Tabs>
-        </aside>
+      {/* `min-h-0` deixa o filho encolher dentro do flex — sem isto a área da
+          arte cresce com o conteúdo e empurra a página para fora da tela. */}
+      <div className="min-h-0 flex-1">
+        <FeedbackViewer
+          arte={arte}
+          initialFeedbacks={initialFeedbacks}
+          viewer={viewer}
+          readOnly={readOnly}
+          token={token}
+          /* Aprovar exige sessão e ser o cliente do projeto. Sem conta a aba
+             inteira sai, em vez de existir para devolver 401. */
+          aprovacoes={temConta ? <ApprovalsPanel arteId={arte.id} token={token} /> : null}
+        />
       </div>
-
     </main>
   );
 }

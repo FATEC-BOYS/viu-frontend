@@ -22,6 +22,7 @@
   --color-pastel-menta: var(--pastel-menta);
   --color-pastel-pessego: var(--pastel-pessego);
   --color-pastel-algodao: var(--pastel-algodao);
+  --color-canvas: var(--canvas);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
@@ -134,6 +135,21 @@
   --pastel-menta:   oklch(0.88 0.055 165);
   --pastel-pessego: oklch(0.89 0.055 55);
   --pastel-algodao: oklch(0.87 0.055 5);
+
+  /*
+   * O fundo onde a arte do cliente é julgada.
+   *
+   * Croma ZERO, e é o ponto todo: qualquer cor no fundo contamina a percepção
+   * da cor em cima dele. O creme do resto do VIU (`--background`, croma 0.005
+   * em 95°) joga calor sobre a peça do designer, e um vermelho parece mais
+   * alaranjado do que é. É por isso que Figma, Photoshop e prova de cor usam
+   * cinza neutro — não é estilo, é para o olho não ser enganado.
+   *
+   * A claridade fica no meio de propósito: arte com fundo branco precisa de um
+   * cinza escuro o bastante para ler como peça, e não como continuação da
+   * página.
+   */
+  --canvas: oklch(0.72 0 0);
 }
 
 .dark {
@@ -172,6 +188,7 @@
   --chart-5: oklch(0.40 0.03 270);
 
   /* Sidebar */
+  --canvas: oklch(0.26 0 0);
   --sidebar: oklch(0.19 0.012 270);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
