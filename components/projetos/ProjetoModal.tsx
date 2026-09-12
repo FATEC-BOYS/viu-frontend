@@ -168,6 +168,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       setLoading(true);
       setEvalResult(null);
       setAceiteTermos(false);
+      setMostrarErros(false);
       try {
         const isCli = user?.tipo === "CLIENTE";
         setSouCliente(isCli);
@@ -179,9 +180,13 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         setClientes(cliList);
         setDesigners(desList);
 
-        if (!isCli && !formData.cliente_id && cliList.length > 0) {
-          setFormData((prev) => ({ ...prev, cliente_id: cliList[0].id }));
-        }
+        /*
+         * O cliente não vem escolhido. Havia aqui um `cliList[0].id`, que
+         * chutava o primeiro da lista: num modal de criação isso significa
+         * abrir já com um cliente que ninguém escolheu, e o projeto sair no
+         * nome de quem calhou de vir primeiro. O campo fica vazio, o
+         * placeholder pede, e a cobrança aparece ao tentar avançar.
+         */
 
         setStep(0);
       } catch (e) {
@@ -239,6 +244,16 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   }, [formData, souCliente, user?.id]);
 
   const invalidBasic = Object.keys(errosBasic).length > 0;
+
+  /*
+   * Um formulário que abre já vermelho acusa a pessoa de um erro que ela ainda
+   * não teve chance de cometer: o campo "Nome do Projeto" nascia com borda
+   * vermelha e "deve ter pelo menos 2 caracteres" embaixo, sem ninguém ter
+   * digitado nada. As mensagens só aparecem depois que a pessoa mexe no campo,
+   * ou quando ela tenta avançar — que é quando a cobrança faz sentido.
+   */
+  const [mostrarErros, setMostrarErros] = useState(false);
+  const errosVisiveis = mostrarErros ? errosBasic : {};
 
   const handleSubmitFinal = async (skipBriefingEval = false) => {
     setSalvando(true);
@@ -304,12 +319,17 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px]">
+      {/*
+        `max-h` + rolagem só no miolo: sem isto, num passo alto o modal cresce
+        além da tela do celular e leva "Voltar/Próximo" junto — a pessoa vê o
+        formulário e não alcança o botão que o conclui.
+      */}
+      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar Projeto" : "Novo Projeto"}</DialogTitle>
         </DialogHeader>
 
-        <div className="mb-4">
+        <div className="min-w-0 shrink-0 overflow-x-auto pb-1">
           <Stepper
             steps={[
               { key: "basic", label: "Básico" },
@@ -321,7 +341,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
           />
         </div>
 
-        <div className="min-h-[260px]">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           {evalResult ? (
             <BriefingEvalPanel
               evalResult={evalResult}
@@ -336,7 +356,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
                   values={formData}
                   setValues={setFormData}
                   souCliente={souCliente}
-                  erros={errosBasic}
+                  erros={errosVisiveis}
+                  aoTocar={() => setMostrarErros(true)}
+                  clientes={clientes}
                 />
               )}
               {step === 1 && <StepParticipants values={formData} setValues={setFormData} souCliente={souCliente} />}
@@ -348,7 +370,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
         {/* Aceite de termos – apenas na etapa de revisão ao criar um novo projeto */}
         {!evalResult && isLastStep && !initial && (
-          <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+          <div className="flex shrink-0 items-start gap-3 rounded-lg border bg-muted/40 p-3">
             <Checkbox
               id="aceite-termos"
               checked={aceiteTermos}
@@ -370,16 +392,26 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         )}
 
         {!evalResult && (
-          <div className="flex justify-between pt-2">
+          <div className="flex shrink-0 justify-between gap-2 border-t pt-4">
             <Button variant="outline" onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
               {step > 0 ? "Voltar" : "Cancelar"}
             </Button>
 
             {!isLastStep ? (
               <Button
-                onClick={() => setStep(step + 1)}
-                disabled={step === 0 && (loading || invalidBasic)}
-                title={step === 0 && invalidBasic ? Object.values(errosBasic)[0] : undefined}
+                /*
+                 * Antes o botão ficava cinza e o motivo vivia num `title`, que
+                 * no celular não existe — dava para travar sem saber por quê.
+                 * Agora ele clica, e o clique revela o que falta.
+                 */
+                onClick={() => {
+                  if (step === 0 && invalidBasic) {
+                    setMostrarErros(true);
+                    return;
+                  }
+                  setStep(step + 1);
+                }}
+                disabled={loading}
               >
                 Próximo
               </Button>
