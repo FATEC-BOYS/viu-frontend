@@ -67,6 +67,12 @@ export type FeedbackItem = {
   autor_nome?: string | null;
   autor_email?: string | null;
   arte_versao_id?: string | null;
+  /**
+   * A versão da arte em que este comentário foi feito — cláusula 3.2 do anexo,
+   * que define rodada como o conjunto de feedbacks sobre uma mesma versão.
+   * `null` em comentário anterior ao campo; a tela diz isso em vez de chutar.
+   */
+  versao_numero?: number | null;
   posicao_x?: number | null;
   posicao_y?: number | null;
 };
@@ -799,6 +805,16 @@ export default function FeedbackViewer({
                             </TooltipContent>
                           </Tooltip>
                         )}
+                        <span
+                          className="text-[10px] text-muted-foreground"
+                          title={
+                            fb.versao_numero == null
+                              ? "Comentário anterior ao registro de versão"
+                              : `Feito sobre a versão ${fb.versao_numero}`
+                          }
+                        >
+                          {fb.versao_numero == null ? "sem versão" : `v${fb.versao_numero}`}
+                        </span>
                         <span suppressHydrationWarning className="text-[10px] text-muted-foreground">
                           {new Date(fb.criado_em).toLocaleString()}
                         </span>

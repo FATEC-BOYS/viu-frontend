@@ -50,6 +50,10 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
     arte_versao_id: null,
     autor_nome: f.autor?.nome ?? f.guestNome ?? null,
     autor_email: f.autor?.email ?? f.guestEmail ?? null,
+    // Sobre qual versão o comentário foi feito (cláusula 3.2). Nulo em
+    // comentário anterior ao campo — e nulo fica nulo: preencher por dedução
+    // produziria um palpite indistinguível de um registro.
+    versao_numero: f.versaoNumero ?? null,
   }))
 
   // `canComment` nunca existiu: GET /preview/:token devolve
@@ -114,6 +118,10 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
       aprovacoesByVersao={{}}
       readOnly={readOnly}
       token={token}
+      /* Cláusula 7.1 do anexo: quem abre o link é quem vai usar a peça, e o
+         uso só é licenciado depois da quitação. Vem calculado do backend a
+         partir das faturas do projeto. */
+      licenca={d.licenca ?? null}
     />
   )
 }

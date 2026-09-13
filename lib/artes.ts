@@ -51,6 +51,12 @@ export type ArteDetail = {
   altura_px?: number | null
   projeto?: { id: string; nome: string; cliente?: { id: string; nome: string } | null } | null
   autor?: { id: string; nome: string; avatar?: string | null } | null
+  /**
+   * Estado da licença de uso, vindo das faturas do projeto (cláusula 7.1 do
+   * anexo de revisão). `null` quando o projeto não tem fatura — sem cobrança
+   * não há o que afirmar sobre licença.
+   */
+  licenca?: { estado: 'QUITADO' | 'EM_ABERTO' | 'ESTORNADO' | 'NAO_FATURADO'; quitadoEm: string | null } | null
   feedbacks?: Array<any>
   tarefas?: Array<any>
   aprovacoes?: Array<any>
@@ -151,6 +157,7 @@ export async function getArteDetail(arteId: string): Promise<ArteDetail | null> 
     altura_px: a.alturaPx ?? a.altura_px ?? null,
     projeto: a.projeto ?? null,
     autor: a.autor ?? null,
+    licenca: a.licenca ?? null,
     feedbacks: a.feedbacks ?? [],
     tarefas: a.tarefas ?? [],
     aprovacoes: a.aprovacoes ?? [],

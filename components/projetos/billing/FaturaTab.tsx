@@ -18,6 +18,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import TermosProjetoCard from '@/components/projetos/termos/TermosProjetoCard'
+import ContratoProjetoCard from '@/components/projetos/contrato/ContratoProjetoCard'
+import { frasedeQuemFalta, type PapelContrato } from '@/lib/contrato'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -55,6 +57,15 @@ export default function FaturaTab({
   const usuarioId = (user as { id?: string } | null)?.id
   const ehAdmin = (user as { tipo?: string } | null)?.tipo === 'ADMIN'
   const podeGerar = ehAdmin || (!!usuarioId && !!designerId && usuarioId === designerId)
+
+  /*
+   * Estado do contrato, reportado pelo card acima. A aba não consulta de novo:
+   * duas leituras da mesma coisa podem discordar, e discordar aqui significa o
+   * aviso dizer "pode cobrar" enquanto o backend recusa.
+   */
+  const [contratoPendente, setContratoPendente] = useState<
+    { temContrato: boolean; faltam: PapelContrato[] } | null
+  >(null)
 
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [loading, setLoading] = useState(true)
@@ -185,6 +196,32 @@ export default function FaturaTab({
         combinou sob quais condições — em vez de descobrir depois, numa recusa.
       */}
       <TermosProjetoCard projetoId={projetoId} podeEditar={podeGerar} />
+
+      {/* Depois dos termos porque é deles que o contrato nasce: a ordem na tela
+          é a ordem do que acontece — combinar, gerar, as duas partes aceitarem. */}
+      <ContratoProjetoCard
+        projetoId={projetoId}
+        podeGerar={podeGerar}
+        aoMudarEstado={({ pronto, temContrato, faltam }) =>
+          setContratoPendente(pronto ? null : { temContrato, faltam })
+        }
+      />
+
+      {/*
+        O aviso fica junto do botão, não só no card acima: é aqui que a pessoa
+        vai cobrar. Hoje ele só informa — `EXIGIR_CONTRATO_PROJETO` nasce
+        desligado, e ligar o bloqueio com os projetos existentes sem contrato
+        deixaria todo mundo sem conseguir faturar.
+      */}
+      {podeGerar && contratoPendente !== null && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+          {!contratoPendente.temContrato
+            ? 'Este projeto ainda não tem contrato gerado.'
+            : frasedeQuemFalta(contratoPendente.faltam)}{' '}
+          Dá para cobrar assim mesmo, mas sem contrato aceito não há registro do que foi combinado
+          se a cobrança virar discussão.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Faturas do projeto</h3>
