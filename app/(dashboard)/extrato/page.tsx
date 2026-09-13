@@ -9,6 +9,7 @@ import EmptyState from '@/components/layout/EmptyState'
 import { FadeIn } from '@/components/layout/Motion'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Selecionado } from '@/components/ui/Selecionado'
 import ChipFilter from '@/components/commom/ChipFilter'
 import { pagamentosApi, formatReais, type LedgerEntry, type SaldoInfo } from '@/lib/pagamentos'
 
@@ -156,7 +157,10 @@ function ResumoCard({
     <Card className="space-y-1 p-4">
       <p className="text-xs text-muted-foreground">{titulo}</p>
       <p className={`tabular-nums ${destaque ? 'text-2xl font-semibold' : 'text-lg font-medium'}`}>
-        {valor ?? '—'}
+        {/* Só o card em destaque ganha a caixa de seleção. Se todos ganhassem,
+            nenhum estaria em destaque — e o saldo disponível é o número que a
+            pessoa abre esta tela para ver. */}
+        {destaque ? <Selecionado>{valor ?? '—'}</Selecionado> : (valor ?? '—')}
       </p>
     </Card>
   )

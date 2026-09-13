@@ -189,6 +189,9 @@ export default function AdminDisputasPage() {
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Travado agora em disputa
           </p>
+          {/* Sem a caixa de seleção aqui de propósito: este card já é um
+              alerta com fundo próprio, e moldura dentro de moldura vira ruído
+              — além de a tinta do card engolir a da caixa. */}
           <p className="text-2xl font-semibold tabular-nums">{formatSaldoBloqueado(travado)}</p>
           <p className="text-sm text-muted-foreground">
             Dinheiro de designer parado esperando uma decisão desta tela.
