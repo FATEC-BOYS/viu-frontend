@@ -13,7 +13,7 @@ import {
   Home, FolderOpen, FileImage, Users, Users2, MessageSquare, Bell,
   BarChart3, Clock, Settings, User, Link as LinkIcon, ChevronDown, ChevronRight,
   ChevronLeft, PanelRightClose, PanelLeftOpen, Monitor,
-  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock,
+  CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock, Layers,
   Palette, UserRound
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -332,6 +332,9 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
               // como chegar nela clicando.
               { title: 'Visão geral', href: '/admin', icon: Gauge },
               { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
+              // Sem plano cadastrado ninguém assina, e cadastrar só existia
+              // pela API — esta é a porta que faltava.
+              { title: 'Planos (cadastro)', href: '/admin/planos', icon: Layers },
               { title: 'Saques (moderação)', href: '/admin/saques', icon: ArrowDownToLine },
               { title: 'Status do sistema', href: '/status', icon: BarChart3 },
             ],
