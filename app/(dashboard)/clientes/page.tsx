@@ -23,7 +23,7 @@ import EmptyState from "@/components/layout/EmptyState";
 import ClienteWizard from "@/components/clientes/ClienteWizard";
 
 /* ============================== Tipos ============================== */
-type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO" | "REVISAO";
+type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO";
 type ProjetoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
 
 type Arte = { id: string; status: ArteStatus };

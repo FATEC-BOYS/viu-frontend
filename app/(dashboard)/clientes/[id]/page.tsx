@@ -22,7 +22,7 @@ import { ArrowLeft, ArrowUpRight, Mail, Phone, Plus, Search, Users } from 'lucid
 /* =========================
    Tipos
    ========================= */
-type ArteStatus = 'EM_ANALISE' | 'APROVADO' | 'REJEITADO' | 'REVISAO';
+type ArteStatus = 'EM_ANALISE' | 'APROVADO' | 'REJEITADO';
 type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
 
 type Arte = {

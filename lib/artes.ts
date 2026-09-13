@@ -1,7 +1,9 @@
 // lib/artes.ts — usa a API REST do backend
 import { api, apiUpload } from '@/lib/api'
 
-// O backend só emite EM_ANALISE | APROVADO | REJEITADO | REVISAO
+// O backend emite EM_ANALISE | APROVADO | REJEITADO. `REVISAO` continua no
+// tipo porque linha antiga em produção ainda pode trazê-lo até a migração
+// de dados rodar — o produto não oferece mais esse status em lugar nenhum.
 // (src/types/enums.ts). PENDENTE e RASCUNHO nunca existiram: filtravam nada e
 // deixavam a arte em revisão sem rótulo.
 export type ArteStatus =
