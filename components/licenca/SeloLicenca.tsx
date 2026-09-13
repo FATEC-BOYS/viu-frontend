@@ -16,7 +16,19 @@ import { cn } from '@/lib/utils'
  *
  * Sem fatura, o selo não aparece. Rotular toda peça sem cobrança como "não
  * licenciada" seria editorializar onde não há fato.
+ *
+ * `contexto` decide o quanto a frase conta. No link público ela responde só
+ * "dá para usar esta peça?": mencionar a fatura ali é contar a terceiros que o
+ * cliente não pagou, e link é encaminhado. Para as partes do projeto — que já
+ * veem a fatura na aba ao lado — a frase diz o motivo, que é o que torna o
+ * aviso acionável.
+ *
+ * O servidor já reduz o que sai na rota pública (`licencaPublica`): data de
+ * quitação e estorno nem chegam ao navegador. Isto aqui é a outra metade — a
+ * redação — e não substitui aquilo.
  */
+
+export type ContextoSelo = 'publico' | 'partes'
 
 export type EstadoLicenca = 'QUITADO' | 'EM_ABERTO' | 'ESTORNADO' | 'NAO_FATURADO'
 
@@ -32,15 +44,21 @@ type Aparencia = {
   classe: string
 }
 
-function aparencia(licenca: Licenca): Aparencia | null {
+function aparencia(licenca: Licenca, contexto: ContextoSelo): Aparencia | null {
+  const publico = contexto === 'publico'
+
   switch (licenca.estado) {
     case 'QUITADO':
       return {
         icone: CircleCheck,
         rotulo: 'Uso licenciado',
-        detalhe: licenca.quitadoEm
-          ? `Quitado em ${new Date(licenca.quitadoEm).toLocaleDateString('pt-BR')}.`
-          : 'Fatura quitada.',
+        // A data é transação, não licença: para quem só quer usar a peça, ela
+        // não muda a resposta e conta quando o cliente pagou.
+        detalhe: publico
+          ? 'A peça pode ser usada nos termos combinados no projeto.'
+          : licenca.quitadoEm
+            ? `Quitado em ${new Date(licenca.quitadoEm).toLocaleDateString('pt-BR')}.`
+            : 'Fatura quitada.',
         classe: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
       }
 
@@ -48,8 +66,12 @@ function aparencia(licenca: Licenca): Aparencia | null {
       return {
         icone: CircleDashed,
         rotulo: 'Uso ainda não licenciado',
-        // Fato sobre a peça, com a regra explicada. Nada de "pague agora".
-        detalhe: 'A licença de uso começa com a quitação da fatura do projeto.',
+        // Fato sobre a peça, com a regra explicada. Nada de "pague agora" — e,
+        // fora do projeto, nem sequer a palavra fatura: quem recebeu o link
+        // encaminhado não precisa saber por que ainda não está licenciado.
+        detalhe: publico
+          ? 'Confirme com o designer antes de publicar ou imprimir.'
+          : 'A licença de uso começa com a quitação da fatura do projeto.',
         classe: 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400',
       }
 
@@ -72,11 +94,13 @@ function aparencia(licenca: Licenca): Aparencia | null {
 export default function SeloLicenca({
   licenca,
   className,
+  contexto = 'partes',
 }: {
   licenca: Licenca | null | undefined
   className?: string
+  contexto?: ContextoSelo
 }) {
-  const a = licenca ? aparencia(licenca) : null
+  const a = licenca ? aparencia(licenca, contexto) : null
   if (!a) return null
 
   const Icone = a.icone
@@ -104,11 +128,13 @@ export default function SeloLicenca({
 export function SeloLicencaCompacto({
   licenca,
   className,
+  contexto = 'partes',
 }: {
   licenca: Licenca | null | undefined
   className?: string
+  contexto?: ContextoSelo
 }) {
-  const a = licenca ? aparencia(licenca) : null
+  const a = licenca ? aparencia(licenca, contexto) : null
   if (!a) return null
 
   const Icone = a.icone

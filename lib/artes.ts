@@ -57,9 +57,60 @@ export type ArteDetail = {
    * não há o que afirmar sobre licença.
    */
   licenca?: { estado: 'QUITADO' | 'EM_ABERTO' | 'ESTORNADO' | 'NAO_FATURADO'; quitadoEm: string | null } | null
+  /**
+   * As rodadas de revisão já usadas NESTA peça — cláusula 3.2 do anexo.
+   *
+   * Por peça e não por projeto, como manda a 3.1: um projeto com três artes
+   * tem o número acordado de rodadas para cada uma, não somado entre elas.
+   *
+   * A conta vem do servidor. Refazê-la aqui, a partir da lista de feedbacks
+   * que a tela já tem, daria um segundo número — e o número que a outra parte
+   * contesta numa disputa não pode depender de qual tela abriu.
+   */
+  rodadas?: Rodadas | null
   feedbacks?: Array<any>
   tarefas?: Array<any>
   aprovacoes?: Array<any>
+}
+
+/** O que o servidor responde sobre as rodadas de uma peça. */
+export interface Rodadas {
+  usadas: number
+  /** O combinado. Nulo quando ninguém combinou ainda. */
+  incluidas: number | null
+  /** Comentários do cliente anteriores ao carimbo de versão. Fora da conta. */
+  semVersao: number
+  versoes: number[]
+}
+
+/**
+ * "2 de 3 rodadas usadas" — ou "2 rodadas usadas", quando nada foi combinado.
+ *
+ * Inventar um teto onde não houve acordo seria o VIU decidindo uma cláusula no
+ * lugar das partes; e dizer "2 de 0" quando o acordo foi "nenhuma revisão
+ * inclusa" é correto, não erro — a primeira rodada já é extra, pela 3.3.
+ */
+export function fraseDeRodadas(r: Rodadas): string {
+  /*
+   * Substantivo e particípio concordam com O MESMO número, senão sai "1 de 0
+   * rodadas usada" — a primeira versão disto pluralizava "rodada" pelo total e
+   * "usada" pelo usado, e os dois discordavam sempre que um era 1 e o outro
+   * não. Com teto, quem manda é o teto ("1 de 3 rodadas usadas"); sem teto, o
+   * usado ("1 rodada usada").
+   */
+  const concordar = (n: number) => (n === 1 ? ['rodada', 'usada'] : ['rodadas', 'usadas'])
+
+  if (r.incluidas === null) {
+    const [subst, part] = concordar(r.usadas)
+    return `${r.usadas} ${subst} ${part}`
+  }
+  const [subst, part] = concordar(r.incluidas)
+  return `${r.usadas} de ${r.incluidas} ${subst} ${part}`
+}
+
+/** Passou do combinado — a 3.3 manda orçar à parte, então a tela avisa. */
+export function passouDoCombinado(r: Rodadas): boolean {
+  return r.incluidas !== null && r.usadas > r.incluidas
 }
 
 export type VersaoGroup = {
@@ -158,6 +209,7 @@ export async function getArteDetail(arteId: string): Promise<ArteDetail | null> 
     projeto: a.projeto ?? null,
     autor: a.autor ?? null,
     licenca: a.licenca ?? null,
+    rodadas: a.rodadas ?? null,
     feedbacks: a.feedbacks ?? [],
     tarefas: a.tarefas ?? [],
     aprovacoes: a.aprovacoes ?? [],
