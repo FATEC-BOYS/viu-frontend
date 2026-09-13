@@ -33,6 +33,28 @@ export interface Disputa {
   fatura?: { id: string; valor: number; status: string }
 }
 
+/**
+ * O que aconteceu com o dinheiro ao resolver a favor do cliente.
+ *
+ * Viaja junto da disputa porque a tela precisa dizer o que foi feito, e não
+ * "encerrada" genérico. `viaGateway: false` é o caso que mais importa: a fatura
+ * foi marcada paga sem passar pelo Mercado Pago, então os livros acertaram mas
+ * o dinheiro não se moveu — e quem arbitrou é quem precisa saber disso.
+ */
+export interface ResultadoEstorno {
+  /** Falso quando a fatura já estava estornada. Repetir não é erro. */
+  aplicado: boolean
+  viaGateway: boolean
+  /** O valor cheio da fatura, em centavos — é o que o cliente recebe de volta. */
+  valorDevolvido: number
+}
+
+export interface DisputaResolvida extends Disputa {
+  /** Nulo quando não havia o que estornar: decisão pelo designer, escalada,
+   *  ou disputa sem fatura associada. */
+  estorno: ResultadoEstorno | null
+}
+
 export interface AbrirDisputaInput {
   tipo: DisputaTipo
   descricao: string
@@ -84,8 +106,8 @@ export const protecaoApi = {
   async resolverDisputa(
     id: string,
     input: { status: DisputaResolucao; resolucao: string },
-  ): Promise<Disputa> {
-    const res = await api.put<{ data: Disputa }>(`/disputas/${id}/resolver`, input)
+  ): Promise<DisputaResolvida> {
+    const res = await api.put<{ data: DisputaResolvida }>(`/disputas/${id}/resolver`, input)
     return res.data
   },
 }
@@ -129,7 +151,7 @@ export const EFEITO_DA_RESOLUCAO: Record<DisputaResolucao, string> = {
   RESOLVIDA_DESIGNER:
     'Libera o valor travado para o saldo do designer, que passa a poder sacar.',
   RESOLVIDA_CLIENTE:
-    'Encerra a disputa e destrava o valor. Atenção: o produto ainda não tem estorno, então o reembolso ao cliente precisa ser feito por fora.',
+    'Estorna a fatura no Mercado Pago e devolve ao cliente o valor cheio que ele pagou. O que já tinha entrado para o designer sai do saldo dele. Não dá para desfazer.',
   ESCALADA:
     'Mantém o valor travado e marca que o caso subiu. A disputa continua aberta e pode ser resolvida depois.',
 }
@@ -157,4 +179,36 @@ export function formatDisputaStatus(status: DisputaStatus): string {
 
 export function formatSaldoBloqueado(centavos: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(centavos / 100)
+}
+
+
+/**
+ * O que dizer depois de resolver, com base no que realmente aconteceu com o
+ * dinheiro.
+ *
+ * A tela dizia "o valor foi destravado" nos dois desfechos. Para o designer
+ * estava certo; para o cliente era o contrário do que passou a acontecer — e
+ * mesmo antes já era falso, porque destravar devolvia a parcela ao saldo do
+ * designer justamente quando a arbitragem tinha decidido contra ele.
+ */
+export function frasedoDesfecho(
+  destino: DisputaResolucao,
+  estorno: ResultadoEstorno | null,
+): string {
+  if (destino === 'ESCALADA') return 'Disputa escalada. O valor segue travado.'
+  if (destino === 'RESOLVIDA_DESIGNER') {
+    return 'Disputa encerrada. O valor foi liberado para o saldo do designer.'
+  }
+  if (!estorno) {
+    // Sem fatura associada não havia o que devolver — dizer "estornado" seria
+    // inventar um movimento que não houve.
+    return 'Disputa encerrada a favor do cliente. Não havia fatura paga para estornar.'
+  }
+  if (!estorno.aplicado) {
+    return 'Disputa encerrada. A fatura já estava estornada.'
+  }
+  const valor = formatSaldoBloqueado(estorno.valorDevolvido)
+  return estorno.viaGateway
+    ? `Disputa encerrada e ${valor} estornados ao cliente pelo Mercado Pago.`
+    : `Disputa encerrada. ${valor} baixados nos registros, mas esta fatura não passou pelo Mercado Pago — a devolução ao cliente precisa ser feita por fora.`
 }
