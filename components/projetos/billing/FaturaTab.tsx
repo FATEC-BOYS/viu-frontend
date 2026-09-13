@@ -18,6 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import TermosProjetoCard from '@/components/projetos/termos/TermosProjetoCard'
+import ContratoProjetoCard from '@/components/projetos/contrato/ContratoProjetoCard'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -185,6 +186,10 @@ export default function FaturaTab({
         combinou sob quais condições — em vez de descobrir depois, numa recusa.
       */}
       <TermosProjetoCard projetoId={projetoId} podeEditar={podeGerar} />
+
+      {/* Depois dos termos porque é deles que o contrato nasce: a ordem na tela
+          é a ordem do que acontece — combinar, gerar, as duas partes aceitarem. */}
+      <ContratoProjetoCard projetoId={projetoId} podeGerar={podeGerar} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Faturas do projeto</h3>
