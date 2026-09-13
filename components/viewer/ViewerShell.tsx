@@ -6,6 +6,7 @@ import { perfilEmCache, temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
 import { rotuloArte } from "@/lib/rotulos";
+import { SeloLicencaCompacto, type Licenca } from "@/components/licenca/SeloLicenca";
 
 /**
  * A mesa onde o cliente olha a arte.
@@ -46,9 +47,14 @@ type Props = {
   aprovacoesByVersao: Record<string, any[]>;
   readOnly: boolean;
   token: string;
+  /**
+   * Estado da licença de uso, da cláusula 7.1 do anexo. `null` quando o projeto
+   * não tem fatura: sem cobrança não há o que afirmar sobre licença.
+   */
+  licenca?: Licenca | null;
 };
 
-export default function ViewerShell({ arte, initialFeedbacks, readOnly, token }: Props) {
+export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, licenca }: Props) {
   /**
    * Sessão decide o que a interface pode prometer.
    *
@@ -101,6 +107,10 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token }:
             {statusLabel}
           </span>
         )}
+
+        {/* Na faixa e não sobre a arte: o selo informa quem for usar a peça,
+            sem tapar o que a pessoa veio ver. */}
+        <SeloLicencaCompacto licenca={licenca} />
 
         <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
       </header>

@@ -114,6 +114,10 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
       aprovacoesByVersao={{}}
       readOnly={readOnly}
       token={token}
+      /* Cláusula 7.1 do anexo: quem abre o link é quem vai usar a peça, e o
+         uso só é licenciado depois da quitação. Vem calculado do backend a
+         partir das faturas do projeto. */
+      licenca={d.licenca ?? null}
     />
   )
 }

@@ -22,6 +22,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import SeloLicenca from "@/components/licenca/SeloLicenca";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Trash2, PlusCircle } from "lucide-react";
@@ -263,6 +264,10 @@ export function ArteQuickLookSheet({
                     {statusBadge(detail?.status)}
                     <Badge variant="secondary">v{detail?.versao ?? 1}</Badge>
                   </div>
+
+                  {/* Cláusula 7.1: a peça carrega o próprio estado de licença.
+                      Some sozinho quando o projeto não tem fatura. */}
+                  <SeloLicenca licenca={detail?.licenca} />
 
                   {detail?.descricao ? (
                     <p className="text-sm text-muted-foreground">{detail.descricao}</p>
