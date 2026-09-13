@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import SeloLicenca from "@/components/licenca/SeloLicenca";
+import { fraseDeRodadas, passouDoCombinado } from "@/lib/artes";
+import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Trash2, PlusCircle } from "lucide-react";
@@ -268,6 +270,49 @@ export function ArteQuickLookSheet({
                   {/* Cláusula 7.1: a peça carrega o próprio estado de licença.
                       Some sozinho quando o projeto não tem fatura. */}
                   <SeloLicenca licenca={detail?.licenca} />
+
+                  {/*
+                    Cláusula 3.2, na peça. O número existia no banco desde que
+                    `versaoNumero` passou a ser carimbado, e nenhuma tela o
+                    somava: as duas partes combinavam "3 rodadas" e nenhuma
+                    conseguia dizer em qual estava.
+
+                    Passar do combinado não é erro — a 3.3 manda orçar à parte.
+                    Por isso o aviso informa em vez de bloquear: quem decide
+                    cobrar a rodada extra é o designer, não a tela.
+                  */}
+                  {detail?.rodadas ? (
+                    <div
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-sm',
+                        passouDoCombinado(detail.rodadas)
+                          ? 'border-amber-500/30 bg-amber-500/5'
+                          : 'border-border',
+                      )}
+                    >
+                      <span className="font-medium">{fraseDeRodadas(detail.rodadas)}</span>
+                      {passouDoCombinado(detail.rodadas) ? (
+                        <span className="text-muted-foreground">
+                          {' '}
+                          — as excedentes são orçadas à parte.
+                        </span>
+                      ) : null}
+                      {detail.rodadas.semVersao > 0 ? (
+                        /*
+                          Comentários anteriores ao carimbo de versão. Ficam
+                          fora da conta e são declarados: atribuí-los por data
+                          daria um palpite indistinguível de um registro, e este
+                          número vira argumento em disputa.
+                        */
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {detail.rodadas.semVersao}{' '}
+                          {detail.rodadas.semVersao === 1
+                            ? 'comentário antigo sem versão registrada não entra na conta.'
+                            : 'comentários antigos sem versão registrada não entram na conta.'}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {detail?.descricao ? (
                     <p className="text-sm text-muted-foreground">{detail.descricao}</p>

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Check, X, Mail, User, Shield } from "lucide-react";
 import { CaptchaTurnstile, captchaAtivo } from "@/components/auth/CaptchaTurnstile";
@@ -207,6 +208,7 @@ function StrengthBar({ score }: { score: 0 | 1 | 2 | 3 | 4 }) {
 
 function PasswordInputs({
   email, password, setPassword, confirm, setConfirm, disabled, onStrongChange,
+  aceitou, setAceitou,
 }: {
   email: string;
   password: string;
@@ -215,6 +217,8 @@ function PasswordInputs({
   setConfirm: (v: string) => void;
   disabled?: boolean;
   onStrongChange?: (ok: boolean) => void;
+  aceitou: boolean;
+  setAceitou: (v: boolean) => void;
 }) {
   const [show, setShow] = useState(false);
   const [show2, setShow2] = useState(false);
@@ -318,6 +322,40 @@ function PasswordInputs({
           <p className="text-[11px] text-destructive">As senhas não coincidem.</p>
         )}
       </div>
+
+      {/*
+        O aceite dos termos, no último passo — é o clique que cria a conta.
+
+        Antes disto o produto gravava um aceite na CRIAÇÃO DO PROJETO, com uma
+        versão "1.0" que não apontava para documento nenhum. Provava que alguém
+        clicou, não o que leu, e no momento errado: os termos regem a conta, não
+        o projeto.
+
+        O link abre em outra aba de propósito. Mandar a pessoa embora do
+        formulário meio preenchido para ler o que está aceitando é como se
+        escondesse o texto.
+      */}
+      <div className="flex items-start gap-2 rounded-lg border p-3">
+        <Checkbox
+          id="aceite-termos"
+          checked={aceitou}
+          onCheckedChange={(v) => setAceitou(v === true)}
+          disabled={disabled}
+          className="mt-0.5"
+        />
+        <Label htmlFor="aceite-termos" className="text-sm font-normal leading-snug">
+          Li e aceito os{" "}
+          <a
+            href="/termos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2"
+          >
+            termos de uso e o aviso de privacidade
+          </a>
+          .
+        </Label>
+      </div>
     </div>
   );
 }
@@ -354,6 +392,14 @@ export default function CadastroPage() {
   const [password, setPassword] = useState("");
   const [passwordStrong, setPasswordStrong] = useState(false);
   const [confirm, setConfirm] = useState("");
+  /*
+   * O aceite dos termos da plataforma.
+   *
+   * Começa desmarcado e é o usuário quem marca. Nasce marcado é aceite que
+   * ninguém deu — e o registro que o servidor grava (versão, hash, IP) só vale
+   * se o clique for real.
+   */
+  const [aceitou, setAceitou] = useState(false);
 
   const sendingRef = useRef(false);
   const [sending, setSending] = useState(false);
@@ -365,10 +411,12 @@ export default function CadastroPage() {
     if (step === STEPS.PASSWORD) {
       const minRule = password.length >= 12;
       const match = confirm.length > 0 && confirm === password;
-      return (passwordStrong || minRule) && match;
+      // Sem o aceite o servidor devolve 400: travar aqui evita mandar a pessoa
+      // bater numa porta que já se sabe fechada.
+      return (passwordStrong || minRule) && match && aceitou;
     }
     return false;
-  }, [step, tipo, emailValid, nome, password, passwordStrong, confirm]);
+  }, [step, tipo, emailValid, nome, password, passwordStrong, confirm, aceitou]);
 
   const isLast = step === STEPS.PASSWORD;
 
@@ -395,6 +443,9 @@ export default function CadastroPage() {
         email,
         senha: password,
         tipo: tipo ?? 'DESIGNER',
+        // O servidor grava versão, hash do texto, IP e user-agent a partir
+        // disto. Sem o campo, `POST /auth/register` recusa com 400.
+        aceiteTermos: true,
         // Ignorado pelo servidor quando o captcha está desligado.
         ...(captchaToken ? { captchaToken } : {}),
       });
@@ -453,6 +504,8 @@ export default function CadastroPage() {
                 setConfirm={setConfirm}
                 disabled={sending}
                 onStrongChange={setPasswordStrong}
+                aceitou={aceitou}
+                setAceitou={setAceitou}
               />
             )}
 

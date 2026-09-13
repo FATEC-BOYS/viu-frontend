@@ -109,8 +109,13 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
         )}
 
         {/* Na faixa e não sobre a arte: o selo informa quem for usar a peça,
-            sem tapar o que a pessoa veio ver. */}
-        <SeloLicencaCompacto licenca={licenca} />
+            sem tapar o que a pessoa veio ver.
+
+            `contexto="publico"` porque esta tela É o link compartilhado, e
+            link é encaminhado. A frase aqui responde "dá para usar?" e para
+            aí — sem data de quitação e sem dizer que houve estorno, que é
+            conversa entre designer e cliente. */}
+        <SeloLicencaCompacto licenca={licenca} contexto="publico" />
 
         <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
       </header>

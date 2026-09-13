@@ -91,7 +91,7 @@ export default function ContratoProjetoCard({
         faltam: res.aceite.faltam,
       })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Não foi possível carregar o contrato.')
+      toast.error(err instanceof Error ? err.message : 'Não foi possível carregar o resumo.')
     } finally {
       setCarregando(false)
     }
@@ -105,12 +105,12 @@ export default function ContratoProjetoCard({
     setGerando(true)
     try {
       await contratoApi.gerar(projetoId)
-      toast.success('Contrato gerado. Agora as duas partes precisam aceitar.')
+      toast.success('Resumo gerado. Agora as duas partes precisam aceitar.')
       setVersoes(null) // o histórico mudou
       await carregar()
     } catch (err) {
       // Termos incompletos voltam como 409 com a frase pronta.
-      toast.error(err instanceof Error ? err.message : 'Não foi possível gerar o contrato.')
+      toast.error(err instanceof Error ? err.message : 'Não foi possível gerar o resumo.')
     } finally {
       setGerando(false)
     }
@@ -158,7 +158,18 @@ export default function ContratoProjetoCard({
     <section className="rounded-xl border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <FileSignature className="h-4 w-4" /> Contrato do projeto
+          {/*
+            "Resumo do combinado" e não "Contrato".
+
+            O documento tem texto congelado, hash e aceite por parte — o valor
+            de prova não vem da palavra. Mas o texto ainda não passou por
+            advogado, e chamá-lo de contrato convida a pessoa a confiar nele
+            como peça oponível justamente por estar escrito no app. O nome volta
+            a ser "contrato" na versão em que `revisadoJuridicamente` virar
+            true; os identificadores no código seguem `ContratoProjeto`, que é o
+            que a coisa é, e renomeá-los aqui só produziria churn.
+          */}
+          <FileSignature className="h-4 w-4" /> Resumo do combinado
         </h3>
 
         {contrato && (
@@ -172,7 +183,7 @@ export default function ContratoProjetoCard({
       {!contrato ? (
         <>
           <p className="text-sm text-muted-foreground">
-            Nenhum contrato gerado. É ele que registra o que foi combinado e a quem pertence a peça
+            Nenhum resumo gerado. É ele que registra o que foi combinado e a quem pertence a peça
             se a conta não for paga.
           </p>
 
@@ -186,7 +197,7 @@ export default function ContratoProjetoCard({
           {podeGerar && (
             <Button size="sm" onClick={() => void gerar()} disabled={gerando || !termosProntos}>
               {gerando && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Gerar contrato
+              Gerar resumo
             </Button>
           )}
         </>
@@ -286,7 +297,7 @@ export default function ContratoProjetoCard({
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              Contrato do projeto {contrato ? `— v${contrato.versao}` : ''}
+              Resumo do combinado {contrato ? `— v${contrato.versao}` : ''}
             </DialogTitle>
             <DialogDescription>
               Este é o texto exato registrado no aceite. Ele não muda depois de gerado.

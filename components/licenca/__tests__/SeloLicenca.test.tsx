@@ -99,3 +99,46 @@ describe('a versão compacta', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+/**
+ * O selo no link público.
+ *
+ * Ele nasceu certo na intenção — fala da licença, não da dívida — e errado no
+ * alcance: contava a data da quitação e dizia que o pagamento tinha sido
+ * estornado, para qualquer pessoa com o link. Link é encaminhado.
+ */
+describe('o que o selo conta fora do projeto', () => {
+  it('não menciona fatura para quem abriu o link', () => {
+    render(<SeloLicenca licenca={{ estado: 'EM_ABERTO', quitadoEm: null }} contexto="publico" />)
+    expect(screen.getByText(/Uso ainda não licenciado/i)).toBeInTheDocument()
+    expect(screen.queryByText(/fatura/i)).not.toBeInTheDocument()
+  })
+
+  it('para as partes do projeto, diz o motivo — lá o aviso é acionável', () => {
+    render(<SeloLicenca licenca={{ estado: 'EM_ABERTO', quitadoEm: null }} contexto="partes" />)
+    expect(screen.getByText(/quitação da fatura/i)).toBeInTheDocument()
+  })
+
+  it('não mostra a data de quitação no link público', () => {
+    render(
+      <SeloLicenca
+        licenca={{ estado: 'QUITADO', quitadoEm: '2026-09-13T10:00:00.000Z' }}
+        contexto="publico"
+      />,
+    )
+    expect(screen.getByText(/Uso licenciado/i)).toBeInTheDocument()
+    expect(screen.queryByText(/13\/09\/2026/)).not.toBeInTheDocument()
+  })
+
+  it('o padrão é a versão das partes — o público é escolha explícita', () => {
+    // Errar para o lado de contar demais é o defeito que se está consertando;
+    // o componente exige que a tela pública se declare.
+    render(<SeloLicenca licenca={{ estado: 'QUITADO', quitadoEm: '2026-09-13T10:00:00.000Z' }} />)
+    expect(screen.getByText(/13\/09\/2026/)).toBeInTheDocument()
+  })
+
+  it('licenciado continua legível no link — a resposta útil não se perde', () => {
+    render(<SeloLicenca licenca={{ estado: 'QUITADO', quitadoEm: null }} contexto="publico" />)
+    expect(screen.getByText(/pode ser usada/i)).toBeInTheDocument()
+  })
+})

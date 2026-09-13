@@ -216,9 +216,9 @@ export default function FaturaTab({
       {podeGerar && contratoPendente !== null && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
           {!contratoPendente.temContrato
-            ? 'Este projeto ainda não tem contrato gerado.'
+            ? 'Este projeto ainda não tem o resumo do combinado gerado.'
             : frasedeQuemFalta(contratoPendente.faltam)}{' '}
-          Dá para cobrar assim mesmo, mas sem contrato aceito não há registro do que foi combinado
+          Dá para cobrar assim mesmo, mas sem o resumo aceito não há registro do que foi combinado
           se a cobrança virar discussão.
         </p>
       )}
