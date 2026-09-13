@@ -26,6 +26,7 @@ import {
   podeMoverParaAnalise,
   TRANSICOES_DISPUTA,
   EFEITO_DA_RESOLUCAO,
+  frasedoDesfecho,
   type Disputa,
   type DisputaStatus,
   type DisputaResolucao,
@@ -146,15 +147,17 @@ export default function AdminDisputasPage() {
 
     setSalvando(decisao.disputa.id)
     try {
-      await protecaoApi.resolverDisputa(decisao.disputa.id, {
+      const resolvida = await protecaoApi.resolverDisputa(decisao.disputa.id, {
         status: decisao.destino,
         resolucao,
       })
-      toast.success(
-        decisao.destino === 'ESCALADA'
-          ? 'Disputa escalada. O valor segue travado.'
-          : 'Disputa encerrada e o valor foi destravado.',
-      )
+      /*
+       * O aviso sai do que o backend respondeu, não do botão que foi clicado.
+       * "O valor foi destravado" era verdade para o designer e o contrário do
+       * que acontece para o cliente — e o caso que mais importa, uma fatura que
+       * nunca passou pelo gateway, não tinha como aparecer numa frase fixa.
+       */
+      toast.success(frasedoDesfecho(decisao.destino, resolvida.estorno))
       setDecisao(null)
       setTexto('')
       await carregar()
@@ -172,7 +175,7 @@ export default function AdminDisputasPage() {
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <PageHeader
         title="Disputas"
-        description="Enquanto uma disputa está de pé, o valor da fatura fica travado e o designer não saca. Decidir aqui é o que destrava."
+        description="Enquanto uma disputa está de pé, o valor da fatura fica travado e o designer não saca. Decidir aqui libera o valor para o designer — ou estorna a fatura ao cliente."
         actions={
           <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
             <RefreshCw className={`h-4 w-4 mr-2 ${carregando ? 'animate-spin' : ''}`} />
@@ -332,6 +335,26 @@ export default function AdminDisputasPage() {
                       {formatSaldoBloqueado(decisao.disputa.saldoBloqueado)}
                     </span>{' '}
                     continuam travados.
+                  </>
+                ) : decisao.destino === 'RESOLVIDA_CLIENTE' ? (
+                  /*
+                   * Três desfechos, três frases. Antes eram duas: escalar, e
+                   * "volta para o saldo do designer" para os OUTROS DOIS —
+                   * incluindo a decisão contra ele. O valor aqui é o cheio da
+                   * fatura, não `saldoBloqueado`: o cliente recebe de volta o
+                   * que pagou, taxa da plataforma inclusa.
+                   */
+                  <>
+                    <span className="font-medium">
+                      {formatSaldoBloqueado(
+                        decisao.disputa.fatura?.valor ?? decisao.disputa.saldoBloqueado,
+                      )}
+                    </span>{' '}
+                    voltam para o cliente, e{' '}
+                    <span className="font-medium">
+                      {formatSaldoBloqueado(decisao.disputa.saldoBloqueado)}
+                    </span>{' '}
+                    saem do saldo do designer. O estorno é definitivo.
                   </>
                 ) : (
                   <>
