@@ -20,6 +20,7 @@ import {
   ROTULO_PAPEL,
   type Contrato,
   type EstadoAceite,
+  type PapelContrato,
   type VersaoContrato,
 } from '@/lib/contrato'
 import { frasedoQueFalta, type CampoTermo } from '@/lib/termos'
@@ -45,10 +46,28 @@ function dataCurta(iso: string): string {
 export default function ContratoProjetoCard({
   projetoId,
   podeGerar,
+  aoMudarEstado,
 }: {
   projetoId: string
   /** Designer do projeto ou admin. */
   podeGerar: boolean
+  /**
+   * Reporta para a aba se o contrato está pronto e quem falta.
+   *
+   * Existe para o aviso junto do botão de gerar fatura não precisar buscar a
+   * mesma coisa de novo — e, mais importante, para as duas partes da tela não
+   * responderem coisas diferentes sobre o mesmo estado.
+   */
+  aoMudarEstado?: (estado: {
+    pronto: boolean
+    /**
+     * Se existe contrato gerado. Separado de `faltam` porque sem contrato o
+     * estado já vem com os dois papéis pendentes — e dizer "faltam aceitarem"
+     * sobre um documento que não existe manda a pessoa procurar o que aceitar.
+     */
+    temContrato: boolean
+    faltam: PapelContrato[]
+  }) => void
 }) {
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [aceite, setAceite] = useState<EstadoAceite | null>(null)
@@ -66,12 +85,17 @@ export default function ContratoProjetoCard({
       setContrato(res.data)
       setAceite(res.aceite)
       setTermosFaltantes(res.termosFaltantes)
+      aoMudarEstado?.({
+        pronto: !!res.data && res.aceite.faltam.length === 0,
+        temContrato: !!res.data,
+        faltam: res.aceite.faltam,
+      })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível carregar o contrato.')
     } finally {
       setCarregando(false)
     }
-  }, [projetoId])
+  }, [projetoId, aoMudarEstado])
 
   useEffect(() => {
     void carregar()
