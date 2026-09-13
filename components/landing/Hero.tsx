@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import Reveal from './Reveal'
 import ProductFrame from './ProductFrame'
+import { Selecionado } from '@/components/ui/Selecionado'
 
 /**
  * `ctaHref` vem de cima porque só a página sabe se há sessão: quem já entrou
@@ -30,8 +31,17 @@ export default function Hero({ ctaHref }: { ctaHref: string }) {
         <Reveal>
           <p className="text-sm font-medium text-primary">Para quem vive de entregar design</p>
 
+          {/*
+            A caixa de seleção vai em UMA palavra, e em "flui" porque é ela que
+            nomeia a transformação — o resto da frase é sujeito e consequência.
+
+            Na segunda linha não: ela já é destacada por cor, e somar moldura a
+            um tratamento que existe faria dois mecanismos de ênfase brigando na
+            mesma frase. Pelo mesmo motivo nenhuma outra seção da landing ganha
+            caixa: o efeito funciona porque é raro.
+          */}
           <h1 className="mt-4 text-balance font-display text-[2.75rem] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl">
-            O feedback flui.
+            O feedback <Selecionado>flui</Selecionado>.
             <br />
             <span className="text-muted-foreground">O trabalho brilha.</span>
           </h1>
