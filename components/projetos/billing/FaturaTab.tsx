@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import {
@@ -11,8 +11,12 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
-import { api } from '@/lib/api'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -45,6 +49,7 @@ export default function FaturaTab({
   /** Dono do projeto. Só ele (ou um admin) pode gerar fatura. */
   designerId?: string | null;
 }) {
+  const router = useRouter()
   const { user } = useAuth()
   const usuarioId = (user as { id?: string } | null)?.id
   const ehAdmin = (user as { tipo?: string } | null)?.tipo === 'ADMIN'
@@ -53,43 +58,60 @@ export default function FaturaTab({
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [alertaAberto, setAlertaAberto] = useState(false)
 
-  useEffect(() => {
-    // load all faturas and filter by project
-    Promise.allSettled([
+  /*
+   * As duas listas porque a fatura tem dois lados e cada chamada traz um: o
+   * designer não aparece em `?tipo=cliente` e vice-versa. A mesma fatura pode
+   * vir nas duas quando alguém é os dois papéis, daí a deduplicação por id.
+   */
+  const carregar = useCallback(async () => {
+    const [c, d] = await Promise.allSettled([
       pagamentosApi.getFaturas('cliente'),
       pagamentosApi.getFaturas('designer'),
-    ]).then(([clienteRes, designerRes]) => {
-      const all: Fatura[] = []
-      if (clienteRes.status === 'fulfilled') all.push(...(clienteRes.value.data ?? []))
-      if (designerRes.status === 'fulfilled') all.push(...(designerRes.value.data ?? []))
-      // dedup by id
-      const seen = new Set<string>()
-      const unique = all.filter(f => { if (seen.has(f.id)) return false; seen.add(f.id); return true })
-      setFaturas(unique.filter(f => f.projeto?.id === projetoId))
-    }).catch(console.error)
-      .finally(() => setLoading(false))
+    ])
+    const todas: Fatura[] = []
+    if (c.status === 'fulfilled') todas.push(...(c.value.data ?? []))
+    if (d.status === 'fulfilled') todas.push(...(d.value.data ?? []))
+    const vistas = new Set<string>()
+    setFaturas(
+      todas.filter((f) => {
+        if (vistas.has(f.id) || f.projeto?.id !== projetoId) return false
+        vistas.add(f.id)
+        return true
+      }),
+    )
   }, [projetoId])
 
-  async function handleGerarFatura() {
+  useEffect(() => {
+    carregar().catch(console.error).finally(() => setLoading(false))
+  }, [carregar])
+
+  /*
+   * A fatura que impede outra de nascer.
+   *
+   * A regra é do backend — `faturaService.criarFatura` recusa quando já existe
+   * PENDENTE ou PAGA no projeto, e desde a migração do índice parcial quem
+   * garante é o banco. Aqui a mesma regra só decide se a pessoa vê um alerta
+   * explicando, em vez de levar um 409 depois do clique.
+   */
+  const faturaAtiva = faturas.find((f) => f.status === 'PENDENTE' || f.status === 'PAGA') ?? null
+
+  function aoClicarGerar() {
+    if (faturaAtiva) {
+      setAlertaAberto(true)
+      return
+    }
+    void gerar()
+  }
+
+  async function gerar() {
     setGenerating(true)
     try {
-      await api.post(`/projetos/${projetoId}/fatura`, {})
-      toast.success('Fatura gerada com sucesso!')
-      // reload
-      const [c, d] = await Promise.allSettled([
-        pagamentosApi.getFaturas('cliente'),
-        pagamentosApi.getFaturas('designer'),
-      ])
-      const all: Fatura[] = []
-      if (c.status === 'fulfilled') all.push(...(c.value.data ?? []))
-      if (d.status === 'fulfilled') all.push(...(d.value.data ?? []))
-      const seen = new Set<string>()
-      setFaturas(all.filter(f => {
-        if (seen.has(f.id)) return false
-        seen.add(f.id)
-        return f.projeto?.id === projetoId
-      }))
+      const nova = await pagamentosApi.gerarFaturaDoProjeto(projetoId)
+      await carregar()
+      toast.success('Fatura gerada.')
+      return nova.data
     } catch (e: any) {
       /**
        * O servidor já diz o que faltou — "Projeto não possui orçamento
@@ -98,9 +120,49 @@ export default function FaturaTab({
        * o problema dela.
        */
       toast.error(e?.message || 'Erro ao gerar fatura.')
+      return null
     } finally {
       setGenerating(false)
     }
+  }
+
+  async function cancelarAtiva() {
+    if (!faturaAtiva) return false
+    try {
+      await pagamentosApi.cancelarFatura(faturaAtiva.id)
+      await carregar()
+      return true
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível cancelar a fatura.')
+      return false
+    }
+  }
+
+  async function apenasCancelar() {
+    setGenerating(true)
+    const ok = await cancelarAtiva()
+    setGenerating(false)
+    if (ok) {
+      setAlertaAberto(false)
+      toast.success('Fatura cancelada. O projeto voltou a ficar sem cobrança.')
+    }
+  }
+
+  /*
+   * Cancela e gera num passo só, e sai do caminho: fecha o alerta e leva para
+   * a fatura nova. Abrir outro diálogo por cima deste seria empilhar decisão
+   * sobre decisão — a pessoa já decidiu aqui.
+   */
+  async function substituir() {
+    setGenerating(true)
+    const cancelou = await cancelarAtiva()
+    if (!cancelou) {
+      setGenerating(false)
+      return
+    }
+    const nova = await gerar()
+    setAlertaAberto(false)
+    if (nova?.id) router.push(`/faturas/${nova.id}`)
   }
 
   const ehPagador = (f: Fatura) => !!usuarioId && f.cliente.id === usuarioId
@@ -123,7 +185,7 @@ export default function FaturaTab({
             size="sm"
             variant="outline"
             className="gap-1.5 rounded-xl"
-            onClick={handleGerarFatura}
+            onClick={aoClicarGerar}
             disabled={generating}
           >
             {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
@@ -228,6 +290,85 @@ export default function FaturaTab({
           })
         )}
       </AnimatePresence>
+
+      {/*
+        O alerta existe porque a recusa chegava como um toast vermelho depois
+        do clique, sem dizer o que fazer a seguir. Aqui a pessoa lê a regra
+        antes de tentar, vê qual é a fatura que está no caminho, e escolhe.
+      */}
+      <AlertDialog open={alertaAberto} onOpenChange={setAlertaAberto}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {faturaAtiva?.status === 'PAGA'
+                ? 'Este projeto já foi pago'
+                : 'Já existe uma fatura neste projeto'}
+            </AlertDialogTitle>
+
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                {faturaAtiva?.status === 'PAGA' ? (
+                  <>
+                    <p>
+                      A fatura de <b className="text-foreground">{faturaAtiva.valorFormatado}</b> foi
+                      paga
+                      {faturaAtiva.dataPagamento
+                        ? ` em ${new Date(faturaAtiva.dataPagamento).toLocaleDateString('pt-BR')}`
+                        : ''}
+                      . Um projeto não pode ter duas cobranças.
+                    </p>
+                    <p>Para cobrar outro trabalho deste cliente, crie um novo projeto.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Há uma fatura de <b className="text-foreground">{faturaAtiva?.valorFormatado}</b>{' '}
+                      aguardando pagamento. Um projeto só pode ter uma cobrança ativa por vez.
+                    </p>
+                    {/*
+                      O aviso que não pode ser sutil: gerar outra apaga a cobrança
+                      que o cliente já tem na mão. Se ele guardou o QR code, ele
+                      para de funcionar.
+                    */}
+                    <p className="rounded-lg bg-amber-500/10 p-3 text-amber-700 dark:text-amber-400">
+                      Gerar uma nova <b>cancela a atual</b>. O QR code que o cliente já recebeu deixa
+                      de valer, e ele precisará do link novo para pagar.
+                    </p>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel disabled={generating} className="mt-0">
+              Fechar
+            </AlertDialogCancel>
+
+            {faturaAtiva?.status === 'PAGA' ? (
+              <AlertDialogAction asChild>
+                <Link href={`/faturas/${faturaAtiva.id}`}>Ver a fatura paga</Link>
+              </AlertDialogAction>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={apenasCancelar}
+                  disabled={generating}
+                  className="gap-1.5"
+                >
+                  {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Cancelar fatura ativa
+                </Button>
+                <Button onClick={substituir} disabled={generating} className="gap-1.5">
+                  {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Gerar nova fatura
+                </Button>
+              </>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

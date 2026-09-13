@@ -19,6 +19,20 @@ export type Plano = {
   ativo: boolean
 }
 
+/** O que o formulário de plano envia. Dinheiro em centavos, taxa em fração. */
+export type PlanoEntrada = {
+  nome: string
+  tipo: 'DESIGNER' | 'CLIENTE'
+  precoMensal: number
+  precoAnual?: number | null
+  taxaPlataforma?: number
+  limitesProjetos?: number | null
+  limitesArtes?: number | null
+  limitesStorageMb?: number | null
+  descricao?: string | null
+  ativo?: boolean
+}
+
 export type AssinaturaStatus = 'PENDENTE' | 'ATIVA' | 'CANCELADA' | 'PAUSADA' | 'EXPIRADA'
 
 export type Assinatura = {
@@ -138,6 +152,20 @@ export const pagamentosApi = {
   getPlanos: (tipo?: string) =>
     api.get<{ data: Plano[] }>(`/planos${tipo ? `?tipo=${tipo}` : ''}`),
 
+  /**
+   * A lista do administrador, com os inativos junto.
+   *
+   * `GET /planos` é público e sempre escondeu plano inativo — certo para quem
+   * vai assinar, errado para quem administra: desativar tirava o plano da
+   * própria tela que o desativou.
+   */
+  getPlanosAdmin: () => api.get<{ data: Plano[] }>('/planos/todos'),
+
+  criarPlano: (dados: PlanoEntrada) => api.post<{ data: Plano }>('/planos', dados),
+
+  atualizarPlano: (id: string, dados: Partial<PlanoEntrada>) =>
+    api.put<{ data: Plano }>(`/planos/${id}`, dados),
+
   getMinhaAssinatura: () =>
     api.get<{ data: Assinatura | null }>('/assinaturas/minha'),
 
@@ -160,6 +188,18 @@ export const pagamentosApi = {
 
   getFatura: (id: string) =>
     api.get<{ data: Fatura }>(`/faturas/${id}`),
+
+  /**
+   * Cancela uma fatura. Só sai de PENDENTE: a máquina de estados do backend
+   * leva PAGA para ESTORNADA, nunca para CANCELADA — dinheiro que entrou se
+   * devolve, não se apaga.
+   */
+  cancelarFatura: (faturaId: string) =>
+    api.delete<{ success: boolean }>(`/faturas/${faturaId}`),
+
+  /** Gera a fatura do projeto. Devolve a fatura criada, com id. */
+  gerarFaturaDoProjeto: (projetoId: string) =>
+    api.post<{ data: Fatura }>(`/projetos/${projetoId}/fatura`, {}),
 
   pagarPix: (faturaId: string, cpf: string) =>
     api.post<{ data: PixPaymentResult }>(`/faturas/${faturaId}/pagar/pix`, { cpf }),
