@@ -336,6 +336,9 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
               // pela API — esta é a porta que faltava.
               { title: 'Planos (cadastro)', href: '/admin/planos', icon: Layers },
               { title: 'Saques (moderação)', href: '/admin/saques', icon: ArrowDownToLine },
+              // Disputa travava o saldo do designer e o produto não tinha onde
+              // destravar: as rotas de resolver existiam, sem tela nenhuma.
+              { title: 'Disputas (arbitragem)', href: '/admin/disputas', icon: Scale },
               { title: 'Status do sistema', href: '/status', icon: BarChart3 },
             ],
           }]

@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronsUpDown, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO" | "REVISAO";
+export type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO";
 
 export type ArteFilters = {
   q: any;
@@ -39,7 +39,7 @@ export default function ArtesToolbar({
   className?: string;
 }) {
   const statusOptions = useMemo<ArteStatus[]>(
-    () => ["EM_ANALISE", "APROVADO", "REJEITADO", "REVISAO"],
+    () => ["EM_ANALISE", "APROVADO", "REJEITADO"],
     []
   );
 

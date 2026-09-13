@@ -77,7 +77,6 @@ function StatusBadge({ status }: { status: string }) {
     EM_ANALISE: { label: "Em Análise", variant: "outline" as const, icon: Clock },
     APROVADO:   { label: "Aprovado",   variant: "default" as const, icon: CheckCircle2 },
     REJEITADO:  { label: "Rejeitado",  variant: "destructive" as const, icon: XCircle },
-    REVISAO:    { label: "Em revisão", variant: "secondary" as const, icon: AlertCircle },
   };
   const config =
     statusConfig[status as keyof typeof statusConfig] ?? {
@@ -322,7 +321,6 @@ function ArtesPageInner() {
     emAnalise: rows.filter(a => a.status === "EM_ANALISE").length,
     aprovadas: rows.filter(a => a.status === "APROVADO").length,
     rejeitadas: rows.filter(a => a.status === "REJEITADO").length,
-    emRevisao: rows.filter(a => a.status === "REVISAO").length,
   }), [rows]);
 
   // ========= Wizard =========
@@ -419,9 +417,6 @@ function ArtesPageInner() {
             {estatisticas.rejeitadas > 0 && (
               <Badge variant="destructive" className="gap-1" title="Rejeitadas"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
             )}
-            {estatisticas.emRevisao > 0 && (
-              <Badge variant="secondary" className="gap-1" title="Em revisão"><AlertCircle className="h-3 w-3" /> {estatisticas.emRevisao}</Badge>
-            )}
           </div>
         </div>
 
@@ -486,7 +481,6 @@ function ArtesPageInner() {
             { key: "EM_ANALISE", label: "Em Análise" },
             { key: "APROVADO", label: "Aprovado" },
             { key: "REJEITADO", label: "Rejeitado" },
-            { key: "REVISAO", label: "Em revisão" },
           ].map(s => (
             <Button
               key={s.key}

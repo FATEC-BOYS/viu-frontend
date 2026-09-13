@@ -189,10 +189,12 @@ export default function AdminHomePage() {
               href="/admin/saques"
               icone={ArrowDownToLine}
             />
+            {/* Apontava para /disputas, que lista e não resolve: o atalho
+                dizia "precisa de você" e levava a uma tela sem ação nenhuma. */}
             <Atalho
               rotulo="Disputas abertas"
               valor={precisaDeVoce.disputasAbertas}
-              href="/disputas"
+              href="/admin/disputas"
               icone={ScaleIcon}
             />
             <Atalho
