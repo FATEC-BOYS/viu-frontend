@@ -17,6 +17,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import TermosProjetoCard from '@/components/projetos/termos/TermosProjetoCard'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
@@ -178,6 +179,13 @@ export default function FaturaTab({
 
   return (
     <div className="space-y-5 max-w-lg">
+      {/*
+        Os termos vêm antes da fatura de propósito: é aqui que a falta deles
+        atrapalha. A pessoa abre a aba para cobrar e descobre que ainda não
+        combinou sob quais condições — em vez de descobrir depois, numa recusa.
+      */}
+      <TermosProjetoCard projetoId={projetoId} podeEditar={podeGerar} />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Faturas do projeto</h3>
         {podeGerar && (
