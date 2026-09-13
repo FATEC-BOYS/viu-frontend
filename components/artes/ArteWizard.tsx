@@ -15,7 +15,6 @@ import StepOptions from "./wizard/StepOptions";
 import {
   Step,
   sanitizeFilename,
-  mimeMatchesSelection,
 } from "./wizard/helpers";
 import { ehEmailNaoVerificado } from "@/lib/erros";
 
@@ -33,7 +32,6 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   // Step 1
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [mime, setMime] = useState<string>("image/png");
 
   // Step 2
   const [file, setFile] = useState<File | null>(null);
@@ -67,10 +65,11 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   /* ---------- Step 2: upload multipart → POST /artes/upload ---------- */
   async function createArteWithUpload() {
     if (!file) { setErr("Selecione um arquivo."); return; }
-    if (!mimeMatchesSelection(mime, file)) {
-      setErr("Tipo/Extensão do arquivo não confere com o formato escolhido.");
-      return;
-    }
+    /*
+     * Aqui havia uma segunda checagem do formato declarado contra o arquivo. Ela
+     * saiu junto com a pergunta: o formato agora é lido do arquivo, e o que
+     * `StepUpload` recusa é o que o servidor de fato não aceita.
+     */
     // O limite vem do backend: o valor que estava escrito aqui (100MB) era a
     // promessa por categoria, não o que o servidor aceita de fato (25MB).
     const erroTamanho = await validarTamanho(file);
@@ -164,13 +163,13 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
       <div className="min-h-[320px] md:min-h-[300px] flex flex-col">
         {step === 1 && (
           <StepDetails
-            nome={nome} descricao={descricao} mime={mime}
-            setNome={setNome} setDescricao={setDescricao} setMime={setMime}
+            nome={nome} descricao={descricao}
+            setNome={setNome} setDescricao={setDescricao}
           />
         )}
         {step === 2 && (
           <StepUpload
-            mime={mime} busy={busy} file={file}
+            busy={busy} file={file}
             setFile={setFile} setErr={setErr} onPreview={setPreviewLocal}
           />
         )}

@@ -53,6 +53,40 @@ export type UsuarioAdmin = {
   ativo: boolean
   telefone?: string | null
   criadoEm?: string
+  /**
+   * Quando o titular pediu a exclusão (LGPD Art. 18 IV).
+   *
+   * Preenchido significa conta excluída e anonimizada; nulo com `ativo: false`
+   * significa apenas desativada. Antes de existir, os dois casos eram
+   * indistinguíveis no painel — sobrava um "Inativo" que não dizia o que tinha
+   * acontecido nem quando.
+   */
+  excluidoEm?: string | null
+  _count?: { projetosDesigner: number; projetosCliente: number; artes: number }
+}
+
+/** Conta cujo titular pediu exclusão: nome e e-mail ali já são marcador, não dado. */
+export function contaExcluida(u: UsuarioAdmin): boolean {
+  return !!u.excluidoEm
+}
+
+/**
+ * O que ainda dá para dizer sobre uma conta excluída.
+ *
+ * Nome, e-mail, telefone e avatar foram anonimizados — mostrar
+ * `deleted+cxxx@removed.viu.app` como se fosse o e-mail da pessoa é exibir
+ * marcador no lugar de dado, o mesmo defeito de mostrar um CUID onde deveria
+ * estar um nome. O que sobrou e não é PII: quando entrou, quando saiu, o tipo
+ * de conta e o volume que ficou para trás por obrigação fiscal.
+ */
+export function resumoDaContaExcluida(u: UsuarioAdmin): string {
+  const projetos = (u._count?.projetosDesigner ?? 0) + (u._count?.projetosCliente ?? 0)
+  const artes = u._count?.artes ?? 0
+  const partes: string[] = []
+  if (projetos > 0) partes.push(`${projetos} ${projetos === 1 ? 'projeto' : 'projetos'}`)
+  if (artes > 0) partes.push(`${artes} ${artes === 1 ? 'arte' : 'artes'}`)
+  if (partes.length === 0) return 'Nenhum registro vinculado.'
+  return `${partes.join(' e ')} seguem vinculados por obrigação fiscal.`
 }
 
 export type StatsUsuarios = {

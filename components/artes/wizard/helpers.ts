@@ -27,14 +27,52 @@ export function sanitizeFilename(name: string) {
     .slice(0, 128);
 }
 
-export function mimeMatchesSelection(selectedMime: string, file: File) {
-  const meta = getSelectedMimeMeta(selectedMime);
-  const byMime = !!file.type && file.type === selectedMime;
-  const byExt = meta ? meta.exts.includes(extFromFilename(file.name)) : false;
-  // se file.type existir, precisa bater; se vier vazio, valida pela extensão
-  if (file.type) return byMime;
-  return byExt;
+/**
+ * O que o seletor de arquivos deve oferecer.
+ *
+ * Sem `accept`, o diálogo do sistema mostra tudo que existe na máquina, e a
+ * pessoa só descobre que o formato não serve depois de escolher. Filtrar na
+ * origem faz a maior parte dos enganos deixar de ser possível.
+ *
+ * Leva extensão E mime: o navegador usa uma ou outra dependendo do sistema, e
+ * arquivo vindo de rede ou de alguns celulares chega com `type` vazio.
+ */
+export const ACCEPT_ARTE = MIME_OPTIONS.flatMap((m) => [
+  ...m.exts.map((e) => "." + e),
+  m.value,
+]).join(",");
+
+/**
+ * QUAL é o formato deste arquivo — em vez de perguntar antes e conferir depois.
+ *
+ * O wizard pedia o formato no passo 1 e recusava no passo 2 quando não batia.
+ * O campo não ia para lugar nenhum: o `FormData` nunca o enviou, e o backend
+ * grava `tipo` a partir do mimetype do arquivo de verdade. Ou seja, a pergunta
+ * existia só para validar o arquivo contra ela mesma, e produzia um erro que
+ * não precisava existir.
+ *
+ * A extensão entra como segunda tentativa porque `file.type` vem vazio em
+ * arquivo de rede e em alguns celulares — e aí o nome é tudo que sobra.
+ */
+export function formatoDoArquivo(file: File) {
+  if (file.type) {
+    const porMime = MIME_OPTIONS.find((m) => m.value === file.type);
+    if (porMime) return porMime;
+  }
+  const ext = extFromFilename(file.name);
+  return MIME_OPTIONS.find((m) => m.exts.includes(ext)) ?? null;
 }
+
+/** Como chamar o que a pessoa escolheu, mesmo quando não é formato aceito. */
+export function rotuloDoArquivo(file: File) {
+  const conhecido = formatoDoArquivo(file);
+  if (conhecido) return conhecido.label;
+  const ext = extFromFilename(file.name);
+  return ext ? ext.toUpperCase() : file.type || "formato desconhecido";
+}
+
+/** Os formatos aceitos, em uma frase — para a recusa dizer o que serve. */
+export const FORMATOS_ACEITOS = MIME_OPTIONS.map((m) => m.label).join(", ");
 
 export function randomId() {
   return (typeof crypto !== "undefined" && "randomUUID" in crypto)
