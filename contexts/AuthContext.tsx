@@ -13,6 +13,14 @@ export type UserProfile = {
   // qualquer checagem por admin no front era erro de tipo.
   tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN'
   emailVerificado?: boolean
+  /**
+   * Preenchido quando um admin está DENTRO desta conta, em modo leitura.
+   *
+   * Vem de `/auth/me` porque é a única rota que toda tela consulta — a faixa de
+   * aviso nasce daqui sem cada página lembrar de perguntar. O nome do admin vem
+   * junto: um id na faixa não avisa ninguém de nada.
+   */
+  impersonacao?: { adminId: string; adminNome: string; adminEmail: string } | null
 }
 
 type AuthContextType = {

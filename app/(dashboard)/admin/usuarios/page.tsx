@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, RefreshCw, Search, Users } from 'lucide-react'
+import { Eye, Loader2, RefreshCw, Search, Users } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import EmptyState from '@/components/layout/EmptyState'
 import { FadeIn } from '@/components/layout/Motion'
@@ -12,6 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { iniciais } from '@/lib/iniciais'
 import { adminApi, type StatsUsuarios, type UsuarioAdmin } from '@/lib/admin'
+import { impersonacaoApi } from '@/lib/impersonacao'
+import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 
 const TIPOS: Array<{ valor: string; rotulo: string }> = [
   { valor: 'todos', rotulo: 'Todos' },
@@ -32,6 +35,9 @@ export default function AdminUsuariosPage() {
   const [total, setTotal] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [tipo, setTipo] = useState('todos')
+  const [entrando, setEntrando] = useState<string | null>(null)
+  const { recarregar } = useAuth()
+  const router = useRouter()
   const [busca, setBusca] = useState('')
 
   const carregar = useCallback(async () => {
@@ -53,6 +59,29 @@ export default function AdminUsuariosPage() {
       setCarregando(false)
     }
   }, [tipo])
+
+  /**
+   * Abre a sessão de leitura e vai para o dashboard — que é o que o usuário vê
+   * ao entrar, e portanto o ponto de partida certo para investigar um relato.
+   *
+   * `recarregar()` antes de navegar: o backend já trocou o cookie, e sem
+   * refazer `/auth/me` a faixa de aviso só apareceria no próximo carregamento
+   * completo — meia dúzia de telas navegadas sem nada dizendo em que conta a
+   * pessoa está.
+   */
+  async function entrarNaConta(u: UsuarioAdmin) {
+    setEntrando(u.id)
+    try {
+      await impersonacaoApi.entrar(u.id)
+      await recarregar()
+      toast.success(`Vendo o VIU como ${u.nome}. Somente leitura.`)
+      router.push('/dashboard')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível entrar na conta.')
+    } finally {
+      setEntrando(null)
+    }
+  }
 
   useEffect(() => {
     void carregar()
@@ -150,6 +179,32 @@ export default function AdminUsuariosPage() {
                   </div>
                   <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                 </div>
+
+                {/*
+                  Entrar na conta, somente leitura.
+
+                  Só aparece para quem é possível: outro ADMIN não é
+                  impersonável (seria escalada de privilégio) e conta inativa
+                  não tem o que mostrar. Desenhar o botão e deixar o servidor
+                  recusar seria mais um botão que só sabe dar erro — defeito que
+                  este produto já teve em fatura, disputa e arte.
+                */}
+                {u.tipo !== 'ADMIN' && u.ativo && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => void entrarNaConta(u)}
+                    disabled={entrando !== null}
+                  >
+                    {entrando === u.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" />
+                    )}
+                    <span className="ml-1.5 hidden sm:inline">Ver como</span>
+                  </Button>
+                )}
               </div>
             ))}
           </div>
