@@ -3,6 +3,7 @@ import { MobileNav } from '@/components/layout/MobileNav'
 import SignOutButton from '@/components/layout/SignOutButton'
 import { EmailVerificationBanner } from '@/components/layout/EmailVerificationBanner'
 import BuscaGlobal from '@/components/layout/BuscaGlobal'
+import { FaixaImpersonacao } from '@/components/layout/FaixaImpersonacao'
 
 export default function DashboardLayout({
   children,
@@ -16,6 +17,9 @@ export default function DashboardLayout({
         <Sidebar />
       </div>
       <main className="flex-1 overflow-auto">
+        {/* Acima de tudo, inclusive da barra superior: é o primeiro fato que a
+            pessoa precisa saber ao olhar a tela. */}
+        <FaixaImpersonacao />
         <div className="flex items-center gap-2 border-b p-3 sm:p-4">
           <MobileNav />
           <div className="ml-auto flex items-center gap-2">
