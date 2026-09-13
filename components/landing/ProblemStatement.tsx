@@ -1,6 +1,7 @@
 'use client'
 
 import Reveal from './Reveal'
+import { Selecionado } from '@/components/ui/Selecionado'
 
 /**
  * O problema, mostrado em vez de descrito.
@@ -28,8 +29,16 @@ export default function ProblemStatement() {
     <section className="border-y border-border/60 bg-muted/40 px-6 py-20 md:py-28">
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-20">
         <Reveal>
+          {/*
+            A segunda e última caixa da landing, no antagonista do produto: é a
+            palavra que faz o leitor concordar antes de a gente argumentar.
+
+            Duas na página inteira é o teto. A terceira começaria a desmanchar
+            as duas primeiras — o efeito é de seleção, e selecionar tudo é não
+            selecionar nada.
+          */}
           <h2 className="text-balance font-display text-3xl font-extrabold tracking-[-0.03em] sm:text-4xl md:text-[2.75rem] md:leading-[1.08]">
-            Chega de caçar feedback no WhatsApp.
+            Chega de caçar feedback no <Selecionado>WhatsApp</Selecionado>.
           </h2>
           <p className="mt-6 text-pretty text-lg leading-relaxed text-muted-foreground">
             Áudios perdidos. Prints sem contexto. Arquivos chamados{' '}
