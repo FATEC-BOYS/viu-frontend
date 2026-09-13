@@ -50,8 +50,14 @@ export default function ProjetoHeader({
   onCancelar: () => void;
 }) {
   return (
-    <header className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
+    /*
+     * `flex-wrap` e uma base para o título: sem isso os quatro botões de ação
+     * ficavam com a largura inteira no celular e sobravam uns 60px para o nome
+     * do projeto, que em `text-3xl` virava uma letra por linha ("Ir" / "U").
+     * Agora as ações descem para a linha de baixo quando não cabem.
+     */
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0 flex-1 basis-64">
         {/* Breadcrumb simples */}
         <div className="mb-1 text-xs text-muted-foreground">
           <Link href="/projetos" className="hover:underline">Projetos</Link>
@@ -59,8 +65,8 @@ export default function ProjetoHeader({
           <span className="truncate">Projeto</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight truncate">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1 className="min-w-0 truncate text-2xl font-bold tracking-tight sm:text-3xl">
             {projeto.nome}
           </h1>
 
@@ -82,7 +88,7 @@ export default function ProjetoHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/projetos" className="inline-flex items-center gap-2">
             <ArrowLeft className="h-4 w-4" /> Voltar
