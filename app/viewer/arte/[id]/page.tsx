@@ -50,6 +50,10 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
     arte_versao_id: null,
     autor_nome: f.autor?.nome ?? f.guestNome ?? null,
     autor_email: f.autor?.email ?? f.guestEmail ?? null,
+    // Sobre qual versão o comentário foi feito (cláusula 3.2). Nulo em
+    // comentário anterior ao campo — e nulo fica nulo: preencher por dedução
+    // produziria um palpite indistinguível de um registro.
+    versao_numero: f.versaoNumero ?? null,
   }))
 
   // `canComment` nunca existiu: GET /preview/:token devolve
