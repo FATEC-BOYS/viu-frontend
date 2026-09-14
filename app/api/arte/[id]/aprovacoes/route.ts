@@ -101,8 +101,17 @@ export async function PATCH(
   }
 
   try {
-    // Encontra a aprovação pelo arteId + aprovadorId
-    const listRes = await backendFetch(`/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&limit=1`,
+    /*
+     * Encontra a PENDÊNCIA — não "a aprovação mais recente".
+     *
+     * Sem `status=PENDENTE`, a busca ordenada por `criadoEm desc` podia
+     * devolver uma decisão já tomada (de uma versão mais nova) enquanto a
+     * versão anterior seguia esperando. O backend então respondia 409 "é
+     * terminal", e a tela dizia que a decisão falhou sem nunca ter chegado na
+     * linha certa.
+     */
+    const listRes = await backendFetch(
+      `/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&status=PENDENTE&limit=1`,
       { headers: { ...auth }, cache: "no-store" }
     );
     if (!listRes.ok) throw new Error("Falha ao buscar aprovação.");
@@ -110,7 +119,10 @@ export async function PATCH(
     const listBody = await listRes.json();
     const aprovacao = listBody.data?.[0];
     if (!aprovacao) {
-      return NextResponse.json({ error: "Aprovação não encontrada." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Não há decisão pendente sua nesta arte." },
+        { status: 404 },
+      );
     }
 
     const updateRes = await backendFetch(`/aprovacoes/${aprovacao.id}`, {

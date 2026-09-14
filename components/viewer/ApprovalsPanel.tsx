@@ -7,6 +7,7 @@ import { Check, X, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Textarea } from '@/components/ui/textarea'
 import { perfilEmCache } from '@/lib/api'
 
 /**
@@ -58,6 +59,8 @@ export default function ApprovalsPanel({ arteId, token }: { arteId: string; toke
   const [aprovacoes, setAprovacoes] = useState<Aprovacao[]>([])
   const [carregando, setCarregando] = useState(true)
   const [decidindo, setDecidindo] = useState<string | null>(null)
+  const [pedindoAjuste, setPedindoAjuste] = useState<string | null>(null)
+  const [motivo, setMotivo] = useState('')
 
   // Quem está olhando. Só o próprio aprovador pode decidir — é a mesma regra
   // que o backend aplica; aqui ela só deixa de ser uma promessa falsa na tela.
@@ -91,21 +94,31 @@ export default function ApprovalsPanel({ arteId, token }: { arteId: string; toke
     return () => clearInterval(t)
   }, [carregar])
 
-  async function decidir(ap: Aprovacao, decisao: 'APROVADO' | 'REJEITADO') {
+  async function decidir(
+    ap: Aprovacao,
+    decisao: 'APROVADO' | 'REJEITADO',
+    comentario?: string,
+  ) {
     setDecidindo(ap.id)
     try {
       const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ aprovadorId: ap.aprovador?.id, decisao }),
+        body: JSON.stringify({
+          aprovadorId: ap.aprovador?.id,
+          decisao,
+          comentario: comentario ?? null,
+        }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         toast.error(j?.error ?? 'Não foi possível registrar a decisão.')
         return
       }
-      toast.success(decisao === 'APROVADO' ? 'Arte aprovada' : 'Arte recusada')
+      toast.success(decisao === 'APROVADO' ? 'Arte aprovada' : 'Pedido de ajuste enviado')
+      setPedindoAjuste(null)
+      setMotivo('')
       await carregar()
     } catch {
       toast.error('Falha ao registrar a decisão.')
@@ -179,7 +192,47 @@ export default function ApprovalsPanel({ arteId, token }: { arteId: string; toke
                   </p>
                 )}
 
-                {minhaVez && (
+                {minhaVez && pedindoAjuste === ap.id && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {/*
+                      "Pedir ajustes" não é só uma palavra mais gentil que
+                      "Recusar": é o que a recusa passou a ser. Sem dizer o que
+                      mudar, o designer recebe de volta exatamente o que já
+                      tinha — e o backend recusa a recusa muda (422
+                      RECUSA_SEM_MOTIVO). O botão travado aqui evita que a
+                      pessoa descubra a regra levando um erro.
+                    */}
+                    <Textarea
+                      autoFocus
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="O que precisa mudar?"
+                      className="min-h-20 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={decidindo === ap.id || motivo.trim().length === 0}
+                        onClick={() => decidir(ap, 'REJEITADO', motivo.trim())}
+                      >
+                        {decidindo === ap.id ? 'Enviando…' : 'Enviar pedido'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={decidindo === ap.id}
+                        onClick={() => {
+                          setPedindoAjuste(null)
+                          setMotivo('')
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {minhaVez && pedindoAjuste !== ap.id && (
                   <div className="mt-3 flex gap-2">
                     <Button
                       size="sm"
@@ -192,9 +245,12 @@ export default function ApprovalsPanel({ arteId, token }: { arteId: string; toke
                       size="sm"
                       variant="outline"
                       disabled={decidindo === ap.id}
-                      onClick={() => decidir(ap, 'REJEITADO')}
+                      onClick={() => {
+                        setPedindoAjuste(ap.id)
+                        setMotivo('')
+                      }}
                     >
-                      Recusar
+                      Pedir ajustes
                     </Button>
                   </div>
                 )}

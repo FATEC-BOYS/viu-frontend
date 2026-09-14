@@ -22,3 +22,17 @@ if (typeof Element !== "undefined") {
   Element.prototype.releasePointerCapture ??= () => {};
   Element.prototype.scrollIntoView ??= () => {};
 }
+
+/**
+ * Mesma família: jsdom não tem `ResizeObserver`, e o Radix ScrollArea o
+ * instancia ao medir a área rolável. Sem isto, qualquer teste que interaja com
+ * um componente dentro de um ScrollArea morre em "ResizeObserver is not
+ * defined" — de novo, falha do ambiente e não do componente.
+ */
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

@@ -99,6 +99,14 @@ type Props = {
   onCommentModeChange?: (v: boolean) => void;
   /** Painel de aprovações, quando o visitante tem conta. Entra como aba da trilha. */
   aprovacoes?: React.ReactNode;
+  /**
+   * Barra "é a sua vez", quando há decisão pendente de quem está olhando.
+   *
+   * Entra acima da alça da gaveta e só no celular: no desktop a coluna lateral
+   * já mostra o painel inteiro. Vem de fora porque quem sabe se há pendência é
+   * o ViewerShell — este componente não fala com a rota de aprovações.
+   */
+  decisao?: React.ReactNode;
 };
 
 /* ------------------------------------------------------------------ */
@@ -138,6 +146,7 @@ export default function FeedbackViewer({
   commentMode: externalCommentMode,
   onCommentModeChange,
   aprovacoes = null,
+  decisao = null,
 }: Props) {
   /* — State — */
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>(initialFeedbacks);
@@ -995,6 +1004,8 @@ export default function FeedbackViewer({
         {canvas}
 
         <aside className="hidden min-h-0 border-l lg:flex lg:h-full lg:flex-col">{trilha}</aside>
+
+        {decisao}
 
         {/* A alça da gaveta, só no celular. */}
         <button

@@ -21,8 +21,17 @@ import ViewerShell from '../ViewerShell'
  */
 
 vi.mock('@/components/viewer/FeedbackViewer', () => ({
-  default: ({ aprovacoes }: { aprovacoes?: React.ReactNode }) => (
-    <div data-testid="feedback-viewer">{aprovacoes}</div>
+  default: ({
+    aprovacoes,
+    decisao,
+  }: {
+    aprovacoes?: React.ReactNode
+    decisao?: React.ReactNode
+  }) => (
+    <div data-testid="feedback-viewer">
+      {aprovacoes}
+      {decisao}
+    </div>
   ),
 }))
 vi.mock('@/components/viewer/ApprovalsPanel', () => ({
@@ -141,6 +150,48 @@ describe('link somente leitura', () => {
     comSessao()
     renderViewer({ readOnly: true })
     expect(screen.getByText('Somente leitura')).toBeInTheDocument()
+  })
+
+  /*
+   * O link que o produto cria nasce só-leitura (o wizard começa com o switch
+   * ligado). Como "Somente leitura" vinha antes de qualquer coisa, o visitante
+   * do link padrão via a frase e NENHUMA porta — o beco que o `next=` tinha
+   * fechado continuava aberto no caso mais comum. Só se vê dirigindo o app.
+   */
+  it('ainda assim oferece a porta para quem não tem sessão', () => {
+    renderViewer({ readOnly: true })
+    const entrar = screen.getByRole('link', { name: 'Entrar na sua conta' })
+    expect(entrar.getAttribute('href')).toContain('/login?next=')
+  })
+
+  it('não promete comentário que o link não permite', () => {
+    renderViewer({ readOnly: true })
+    expect(screen.queryByRole('link', { name: /entrar para comentar/i })).not.toBeInTheDocument()
+  })
+
+  /*
+   * Aprovar não passa pelo link: a permissão do link governa comentário, e a
+   * decisão vai por `PUT /aprovacoes/:id` com a sessão. Condicionar a barra a
+   * `!readOnly` escondia o botão justamente no link padrão.
+   */
+  it('mostra a decisão pendente mesmo com o link só-leitura', async () => {
+    comSessao()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          aprovacoes: [
+            { id: 'ap1', status: 'PENDENTE', versaoNumero: 2, aprovador: { id: 'cliente1' } },
+          ],
+        }),
+      }),
+    )
+
+    renderViewer({ readOnly: true })
+
+    expect(await screen.findByText(/aguarda sua decisão/i)).toBeInTheDocument()
+    vi.unstubAllGlobals()
   })
 })
 

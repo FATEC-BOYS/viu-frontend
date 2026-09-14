@@ -15,6 +15,8 @@ import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
 import PainelDoDia from '@/components/dashboard/PainelDoDia'
 import FilaDoDia, { type ItemDaFila } from '@/components/dashboard/FilaDoDia'
 import ParadoNoCliente, { type ItemParado } from '@/components/dashboard/ParadoNoCliente'
+import AguardandoVoce from '@/components/dashboard/AguardandoVoce'
+import FunilDoLink from '@/components/dashboard/FunilDoLink'
 import DesdeOntem, { type Evento } from '@/components/dashboard/DesdeOntem'
 import EstaSemana, { type SemanaResumo } from '@/components/dashboard/EstaSemana'
 import { prioridadeLabel } from '@/lib/tarefas'
@@ -515,6 +517,13 @@ export default function DashboardPage() {
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-4 sm:p-6 space-y-6">
       {/*
+        * Primeiro de tudo, e fora do `mostrarDashboard`: uma decisão esperando
+        * por você vale mais que qualquer painel. Some sozinho quando a fila
+        * está vazia, então não custa espaço a quem não tem nada pendente.
+        */}
+      <AguardandoVoce usuarioId={user?.id ?? null} />
+
+      {/*
         * O título era "Dashboard ✶" com a linha "Aqui vai um panorama do seu
         * estúdio hoje" embaixo — duas linhas que ninguém lê duas vezes, no
         * lugar mais valioso da tela. Quem já entrou sabe onde está; o que ele
@@ -597,6 +606,11 @@ export default function DashboardPage() {
             <DesdeOntem eventos={eventosDesdeOntem} proximoPasso={proximoPasso} />
             <EstaSemana resumo={resumoSemana} />
           </div>
+
+          {/* Contexto, como as duas faixas acima: diz onde a volta trava, não
+              o que fazer hoje. Some sozinho para quem ainda não compartilhou
+              nada e para o cliente, que recebe 403. */}
+          <FunilDoLink />
 
           {/* "Seus projetos" sai da primeira linha e desce inteiro: é
               navegação, não coisa a fazer hoje. */}

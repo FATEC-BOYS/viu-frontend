@@ -6,6 +6,8 @@ import Link from "next/link";
 import { perfilEmCache, temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
+import BarraDecisao from "@/components/viewer/BarraDecisao";
+import { useMinhaDecisao } from "@/components/viewer/hooks/useMinhaDecisao";
 import { rotuloArte } from "@/lib/rotulos";
 import { SeloLicencaCompacto, type Licenca } from "@/components/licenca/SeloLicenca";
 
@@ -90,13 +92,44 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
     setVoltarPara(window.location.pathname + window.location.search);
   }, []);
 
-  const situacao = readOnly
-    ? "Somente leitura"
-    : viewer?.email
-      ? `Comentando como ${viewer.email}`
-      : temConta
-        ? "Comentando com sua conta"
-        : null;
+  /*
+   * A pendência de quem está olhando mora aqui, e não dentro da barra, porque
+   * o painel lateral mostra a mesma linha. Dois donos do mesmo estado fariam a
+   * gaveta continuar dizendo "aguardando decisão" depois de decidida na barra
+   * — por isso `chaveDoPainel` remonta o painel quando a barra decide.
+   */
+  const { pendencia, decidir, decidindo } = useMinhaDecisao(arte.id, token);
+  const [chaveDoPainel, setChaveDoPainel] = useState(0);
+
+  const decidirEAtualizarPainel = async (
+    status: "APROVADO" | "REJEITADO",
+    comentario?: string,
+  ) => {
+    const r = await decidir(status, comentario);
+    if (r.ok) setChaveDoPainel((n) => n + 1);
+    return r;
+  };
+
+  /*
+   * Duas perguntas diferentes, que estavam coladas numa só.
+   *
+   * `readOnly` vem de `somenteLeitura` do link e diz se dá para COMENTAR —
+   * e o link que o produto cria nasce assim (o wizard começa com o switch
+   * ligado). Só que "Somente leitura" vinha antes de tudo, inclusive de quem
+   * não tem sessão: o visitante do link padrão via a frase e nenhuma porta.
+   *
+   * Quem tem conta lê a situação; quem não tem recebe a porta — com a promessa
+   * que o link realmente cumpre. Entrar num link só-leitura continua valendo:
+   * é como o cliente chega na própria decisão, que não depende da permissão do
+   * link e sim de ser o cliente do projeto.
+   */
+  const situacao = !temConta
+    ? null
+    : readOnly
+      ? "Somente leitura"
+      : viewer?.email
+        ? `Comentando como ${viewer.email}`
+        : "Comentando com sua conta";
 
   return (
     /*
@@ -145,7 +178,7 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
             href={voltarPara ? `/login?next=${encodeURIComponent(voltarPara)}` : "/login"}
             className="ml-auto shrink-0 text-xs font-medium underline underline-offset-2"
           >
-            Entrar para comentar
+            {readOnly ? "Entrar na sua conta" : "Entrar para comentar"}
           </Link>
         )}
       </header>
@@ -161,7 +194,29 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
           token={token}
           /* Aprovar exige sessão e ser o cliente do projeto. Sem conta a aba
              inteira sai, em vez de existir para devolver 401. */
-          aprovacoes={temConta ? <ApprovalsPanel arteId={arte.id} token={token} /> : null}
+          aprovacoes={
+            temConta ? (
+              <ApprovalsPanel key={chaveDoPainel} arteId={arte.id} token={token} />
+            ) : null
+          }
+          /* Só quando é a vez de quem está olhando — caso contrário a barra
+             não existe e a arte fica com a altura inteira. */
+          /*
+             Sem `!readOnly`: aprovar não passa pelo link. A permissão do link
+             governa comentário (`createFeedbackViaLink` recusa com 403); a
+             decisão vai por `PUT /aprovacoes/:id` com a sessão, e o backend só
+             exige ser o aprovador. Condicionar a barra ao link escondia o
+             botão justamente no link padrão do produto, que é só-leitura.
+          */
+          decisao={
+            pendencia ? (
+              <BarraDecisao
+                versaoNumero={pendencia.versaoNumero}
+                decidindo={decidindo}
+                aoDecidir={decidirEAtualizarPainel}
+              />
+            ) : null
+          }
         />
       </div>
     </main>
