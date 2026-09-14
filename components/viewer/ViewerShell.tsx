@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { perfilEmCache, temSessao } from "@/lib/api";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
@@ -78,13 +79,24 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
     setViewer(perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null);
   }, []);
 
+  /*
+   * Para onde mandar quem precisa entrar — e de volta para ESTA arte.
+   *
+   * Calculado no efeito, não na renderização: `window` não existe no servidor,
+   * e ler ali daria divergência de hidratação pelo mesmo motivo de `temConta`.
+   */
+  const [voltarPara, setVoltarPara] = useState<string | null>(null);
+  useEffect(() => {
+    setVoltarPara(window.location.pathname + window.location.search);
+  }, []);
+
   const situacao = readOnly
     ? "Somente leitura"
-    : !temConta
-      ? "Entre na sua conta para comentar"
-      : viewer?.email
-        ? `Comentando como ${viewer.email}`
-        : "Comentando com sua conta";
+    : viewer?.email
+      ? `Comentando como ${viewer.email}`
+      : temConta
+        ? "Comentando com sua conta"
+        : null;
 
   return (
     /*
@@ -117,7 +129,25 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
             conversa entre designer e cliente. */}
         <SeloLicencaCompacto licenca={licenca} contexto="publico" />
 
-        <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
+        {/*
+          Quem chega pelo link e não tem sessão via "Entre na sua conta para
+          comentar" — uma FRASE, sem link, com o botão de comentar desabilitado
+          ao lado. Beco sem saída: a tela pedia uma coisa e não dizia por onde.
+
+          Agora é porta, e volta para esta mesma arte depois do login. Sem o
+          `next`, entrar jogava a pessoa no dashboard e ela perdia o link que
+          tinha recebido — que é o único endereço que ela tem.
+        */}
+        {situacao ? (
+          <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
+        ) : (
+          <Link
+            href={voltarPara ? `/login?next=${encodeURIComponent(voltarPara)}` : "/login"}
+            className="ml-auto shrink-0 text-xs font-medium underline underline-offset-2"
+          >
+            Entrar para comentar
+          </Link>
+        )}
       </header>
 
       {/* `min-h-0` deixa o filho encolher dentro do flex — sem isto a área da
