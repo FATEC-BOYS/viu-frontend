@@ -65,39 +65,49 @@ describe('AguardandoVoce', () => {
     expect(screen.getByText('v2')).toBeInTheDocument()
   })
 
-  it('aprovar registra a decisão sem exigir comentário', async () => {
+  /**
+   * A decisão saiu daqui de propósito.
+   *
+   * Antes o cartão trazia "Aprovar" e "Pedir ajustes" ao lado de uma
+   * miniatura de 56px — aprovar sem ver a peça. Isso existia porque a arte
+   * não tinha endereço para quem estava logado. Agora tem, e a fila leva até
+   * lá: decidir acontece onde dá para olhar de perto, com o comentário e o
+   * histórico do lado. A regra do motivo obrigatório continua presa nos
+   * testes do visualizador e do backend.
+   */
+  it('o cartão leva para a revisão, com uma ação só', async () => {
     get.mockResolvedValue({ data: [pendente()] })
-    put.mockResolvedValue({})
     render(<AguardandoVoce usuarioId={EU} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Aprovar' }))
-
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/aprovacoes/ap1', {
-      status: 'APROVADO',
-      comentario: null,
-    }))
+    const abrir = await screen.findByRole('link', { name: 'Abrir revisão' })
+    expect(abrir.getAttribute('href')).toBe('/viewer/arte/arte-1')
+    expect(screen.queryByRole('button', { name: 'Aprovar' })).not.toBeInTheDocument()
   })
 
-  it('pedir ajustes só envia com motivo escrito', async () => {
-    get.mockResolvedValue({ data: [pendente()] })
-    put.mockResolvedValue({})
+  it('a peça é o assunto do cartão — a imagem vem do backend, assinada', async () => {
+    get.mockResolvedValue({
+      data: [pendente({ arte: { id: 'arte-1', nome: 'Cartaz do show', previewUrl: 'https://r2/x?assinado' } })],
+    })
     render(<AguardandoVoce usuarioId={EU} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Pedir ajustes' }))
+    const img = await screen.findByAltText('Cartaz do show')
+    expect(img).toBeInTheDocument()
+  })
 
-    const enviar = screen.getByRole('button', { name: 'Enviar pedido' })
-    expect(enviar).toBeDisabled()
+  it('sem imagem, o cartão não mostra erro — mostra a inicial da peça', async () => {
+    get.mockResolvedValue({ data: [pendente()] })
+    render(<AguardandoVoce usuarioId={EU} />)
 
-    await userEvent.type(screen.getByPlaceholderText('O que precisa mudar?'), '   ')
-    expect(screen.getByRole('button', { name: 'Enviar pedido' })).toBeDisabled()
+    await screen.findByText('Cartaz do show')
+    expect(screen.queryByAltText('Cartaz do show')).not.toBeInTheDocument()
+    expect(screen.getByText('C')).toBeInTheDocument()
+  })
 
-    await userEvent.type(screen.getByPlaceholderText('O que precisa mudar?'), 'o logo está esticado')
-    await userEvent.click(screen.getByRole('button', { name: 'Enviar pedido' }))
+  it('com a fila vazia, mostra o que quem a montou pediu', async () => {
+    get.mockResolvedValue({ data: [] })
+    render(<AguardandoVoce usuarioId={EU} vazio={<p>nada por aqui</p>} />)
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/aprovacoes/ap1', {
-      status: 'REJEITADO',
-      comentario: 'o logo está esticado',
-    }))
+    expect(await screen.findByText('nada por aqui')).toBeInTheDocument()
   })
 
   it('sem usuário não pergunta nada', async () => {

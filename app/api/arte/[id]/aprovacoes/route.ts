@@ -1,19 +1,6 @@
 // app/api/arte/[id]/aprovacoes/route.ts
-import { backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
+import { acessoAArte, backendFetch, credenciaisDaRequisicao } from "@/lib/serverBackend";
 import { NextRequest, NextResponse } from "next/server";
-
-
-/** Valida o token público via GET /preview/:token */
-async function validateToken(arteId: string, token: string): Promise<boolean> {
-  try {
-    const res = await backendFetch(`/preview/${token}`, { cache: "no-store" });
-    if (!res.ok) return false;
-    const body = await res.json();
-    return body?.data?.arte?.id === arteId;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * GET /api/arte/[id]/aprovacoes?token=...
@@ -29,19 +16,20 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id: arteId } = await context.params;
-  const token = req.nextUrl.searchParams.get("token") ?? "";
+  const token = req.nextUrl.searchParams.get("token");
 
-  if (!token) {
-    return NextResponse.json({ error: "Token ausente." }, { status: 400 });
-  }
-
-  const valid = await validateToken(arteId, token);
-  if (!valid) {
+  /*
+   * Token OU sessão. Antes era só token, e a rota respondia 400 sem ele — o
+   * que deixava a arte sem endereço para quem está logado. Quem é do projeto
+   * chega aqui pela própria conta.
+   */
+  const acesso = await acessoAArte(req, arteId, token);
+  if (!acesso.ok) {
     return NextResponse.json({ error: "Link inválido ou expirado." }, { status: 403 });
   }
 
-  // tenta buscar aprovações com JWT do usuário autenticado
-  const auth = credenciaisDaRequisicao(req);
+  // Sem sessão não há aprovações a mostrar: aprovar exige conta.
+  const auth = acesso.credenciais;
   if (!auth) {
     return NextResponse.json({ aprovacoes: [] });
   }

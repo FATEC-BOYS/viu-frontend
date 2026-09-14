@@ -663,8 +663,8 @@ function TelaFeedbacks() {
   /* ----------- ações ----------- */
   const handleVerNaArte = (fb: FeedbackRow) => {
     const url = (fb.posicao_x != null && fb.posicao_y != null)
-      ? `/artes/${fb.arte_id}?x=${Math.round(fb.posicao_x!)}&y=${Math.round(fb.posicao_y!)}`
-      : `/artes/${fb.arte_id}`;
+      ? `/viewer/arte/${fb.arte_id}?x=${Math.round(fb.posicao_x!)}&y=${Math.round(fb.posicao_y!)}`
+      : `/viewer/arte/${fb.arte_id}`;
     window.open(url, '_blank');
   };
   /*
