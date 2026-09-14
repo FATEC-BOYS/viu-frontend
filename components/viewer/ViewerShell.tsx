@@ -192,6 +192,10 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
           viewer={viewer}
           readOnly={readOnly}
           token={token}
+          /* Sem sessão a área de escrita não existe — ver o comentário na
+             prop. A porta leva de volta para esta mesma arte. */
+          temSessao={temConta}
+          urlDeLogin={voltarPara ? `/login?next=${encodeURIComponent(voltarPara)}` : "/login"}
           /* Aprovar exige sessão e ser o cliente do projeto. Sem conta a aba
              inteira sai, em vez de existir para devolver 401. */
           aprovacoes={
