@@ -1,6 +1,7 @@
 // app/viewer/arte/[id]/page.tsx
 import { notFound } from 'next/navigation'
 import ViewerShell from '@/components/viewer/ViewerShell'
+import LinkIndisponivel from '@/components/viewer/LinkIndisponivel'
 import { backendFetch } from '@/lib/serverBackend'
 
 export const runtime = 'nodejs'
@@ -23,10 +24,28 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
     // Mesmo motivo do resolvedor de link: sem header Origin o backend recusa,
     // e a arte compartilhada virava 404.
     const res = await backendFetch(`/preview/${token}`)
-    if (!res.ok) return notFound()
+    if (!res.ok) {
+      /*
+       * O motivo vem do backend e é MOSTRADO, em vez de virar página em branco.
+       *
+       * `notFound()` aqui tratava revogado, expirado, limite atingido e token
+       * inexistente como a mesma coisa: nada. O cliente abria no celular, via
+       * branco, e voltava para o WhatsApp dizendo "não abriu" — e cada um
+       * desses casos tem um próximo passo diferente.
+       */
+      const corpo = await res.json().catch(() => null)
+      return (
+        <LinkIndisponivel
+          motivo={corpo?.motivo ?? 'NAO_ENCONTRADO'}
+          expiraEm={corpo?.expiraEm ?? null}
+        />
+      )
+    }
     raw = await res.json()
   } catch {
-    return notFound()
+    // Rede fora, backend fora: não dá para dizer o motivo, e chutar um seria
+    // pior do que o genérico.
+    return <LinkIndisponivel motivo="NAO_ENCONTRADO" />
   }
 
   const d = raw.data ?? raw

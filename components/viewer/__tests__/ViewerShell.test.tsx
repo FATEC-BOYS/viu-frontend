@@ -90,9 +90,25 @@ describe('visitante anônimo (sem sessão)', () => {
     expect(screen.getByTestId('feedback-viewer')).toBeInTheDocument()
   })
 
-  it('diz que precisa entrar para comentar, em vez de deixar tentar', () => {
+  /*
+   * Antes isto era uma FRASE — "Entre na sua conta para comentar" — sem link, e
+   * o botão de comentar ficava desabilitado ao lado. A tela pedia uma coisa e
+   * não dizia por onde: quem recebeu o link no celular chegava num beco.
+   */
+  it('oferece uma PORTA para entrar, não só um aviso', () => {
     renderViewer()
-    expect(screen.getByText('Entre na sua conta para comentar')).toBeInTheDocument()
+    const entrar = screen.getByRole('link', { name: /entrar para comentar/i })
+    expect(entrar).toBeInTheDocument()
+  })
+
+  it('volta para esta mesma arte depois do login', () => {
+    /*
+     * Sem o `next`, entrar jogava a pessoa no dashboard — e ela perdia o link
+     * que tinha recebido, que é o único endereço que ela tem para a arte.
+     */
+    renderViewer()
+    const href = screen.getByRole('link', { name: /entrar para comentar/i }).getAttribute('href')
+    expect(href).toContain('/login?next=')
   })
 })
 
