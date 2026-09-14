@@ -2,22 +2,16 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-} from "@/components/ui/select";
-import { MIME_OPTIONS } from "./helpers";
 
 type Props = {
   nome: string;
   descricao: string;
-  mime: string;
   setNome: (v: string) => void;
   setDescricao: (v: string) => void;
-  setMime: (v: string) => void;
 };
 
 export default function StepDetails({
-  nome, descricao, mime, setNome, setDescricao, setMime,
+  nome, descricao, setNome, setDescricao,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -39,24 +33,16 @@ export default function StepDetails({
         />
       </div>
 
-      <div>
-        <Label>Formato do arquivo</Label>
-        <Select value={mime} onValueChange={setMime}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione o formato" />
-          </SelectTrigger>
-          <SelectContent>
-            {MIME_OPTIONS.map((m) => (
-              <SelectItem key={m.value} value={m.value}>
-                {m.label} — {m.value} ({m.exts.map((e) => "." + e).join(", ")})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Será verificado no próximo passo.
-        </p>
-      </div>
+      {/*
+        Aqui havia "Formato do arquivo", com o aviso "Será verificado no próximo
+        passo" — e era só isso que ele fazia. O valor nunca era enviado: o
+        `FormData` leva arquivo, nome, projeto e descrição, e o backend grava
+        `tipo` a partir do mimetype do arquivo de verdade.
+
+        Pedir para a pessoa prever o formato e depois recusar o arquivo dela
+        criava um erro que não precisava existir. O formato agora é lido do
+        arquivo no passo seguinte e dito de volta: "Você selecionou PNG".
+      */}
     </div>
   );
 }

@@ -11,7 +11,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { iniciais } from '@/lib/iniciais'
-import { adminApi, type StatsUsuarios, type UsuarioAdmin } from '@/lib/admin'
+import { formatDate } from '@/lib/helpers'
+import {
+  adminApi,
+  contaExcluida,
+  resumoDaContaExcluida,
+  type StatsUsuarios,
+  type UsuarioAdmin,
+} from '@/lib/admin'
 import { impersonacaoApi } from '@/lib/impersonacao'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
@@ -173,11 +180,35 @@ export default function AdminUsuariosPage() {
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium">{u.nome}</p>
+                    {/*
+                      Conta excluída não mostra o nome anonimizado como se fosse
+                      nome: "Usuário Removido" e `deleted+cxxx@removed.viu.app`
+                      são marcadores, não dados. Exibi-los na coluna do nome é o
+                      mesmo defeito de mostrar um CUID onde deveria estar uma
+                      pessoa.
+                    */}
+                    <p className="truncate font-medium">
+                      {contaExcluida(u) ? 'Conta excluída' : u.nome}
+                    </p>
                     <Badge variant="secondary">{ROTULO_TIPO[u.tipo]}</Badge>
-                    {!u.ativo && <Badge variant="destructive">Inativo</Badge>}
+                    {contaExcluida(u) ? (
+                      <Badge variant="outline">
+                        Excluída em {formatDate(u.excluidoEm!)}
+                      </Badge>
+                    ) : (
+                      !u.ativo && <Badge variant="destructive">Inativo</Badge>
+                    )}
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                  {contaExcluida(u) ? (
+                    /* O que sobreviveu, e por quê — é a informação que o painel
+                       precisa ter depois que a PII sai. */
+                    <p className="truncate text-xs text-muted-foreground">
+                      {resumoDaContaExcluida(u)}
+                      {u.criadoEm ? ` Entrou em ${formatDate(u.criadoEm)}.` : ''}
+                    </p>
+                  ) : (
+                    <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                  )}
                 </div>
 
                 {/*
@@ -189,7 +220,7 @@ export default function AdminUsuariosPage() {
                   recusar seria mais um botão que só sabe dar erro — defeito que
                   este produto já teve em fatura, disputa e arte.
                 */}
-                {u.tipo !== 'ADMIN' && u.ativo && (
+                {u.tipo !== 'ADMIN' && u.ativo && !contaExcluida(u) && (
                   <Button
                     size="sm"
                     variant="outline"

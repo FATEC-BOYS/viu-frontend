@@ -4,6 +4,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Card, CardContent, CardHeader, CardTitle,
@@ -316,13 +317,23 @@ function TwoFactorSection() {
 
 /** ---------- Página principal ---------- */
 export default function ConfiguracoesPage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [configs, setConfigs] = useState<ConfiguracoesSistema>(DEFAULT_CONFIGS);
   const [initializing, setInitializing] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingReset, setLoadingReset] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showExcluirDialog, setShowExcluirDialog] = useState(false);
+  /*
+   * Digitar EXCLUIR para confirmar.
+   *
+   * A ação é irreversível e apaga a identidade da própria pessoa: um botão
+   * vermelho a um clique de distância é acidente esperando acontecer. Digitar
+   * obriga a ler.
+   */
+  const [confirmacaoExclusao, setConfirmacaoExclusao] = useState('');
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     if (!user?.id) { setInitializing(false); return; }
@@ -335,6 +346,30 @@ export default function ConfiguracoesPage() {
       setInitializing(false);
     }
   }, [user?.id]);
+
+  /**
+   * Excluir a própria conta (LGPD Art. 18 IV).
+   *
+   * O botão estava aqui como "Excluir dados (em breve)", desabilitado, e a rota
+   * já existia e funcionava do outro lado — a função existia e ninguém
+   * alcançava.
+   *
+   * Depois de excluir, a sessão no servidor já caiu: `signOut` é para limpar o
+   * estado local e mandar a pessoa para fora. Sem isso ela ficaria numa tela do
+   * app levando 401 a cada clique.
+   */
+  const handleExcluirConta = async () => {
+    if (!user?.id || confirmacaoExclusao !== 'EXCLUIR') return;
+    setExcluindo(true);
+    try {
+      await api.delete(`/usuarios/${user.id}`);
+      toast.success('Conta excluída. Seus dados pessoais foram anonimizados.');
+      signOut();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível excluir a conta.');
+      setExcluindo(false);
+    }
+  };
 
   const handleSave = () => {
     if (!user?.id) return;
@@ -532,18 +567,89 @@ export default function ConfiguracoesPage() {
         <CardContent className="flex items-center justify-between gap-4">
           <div className="text-sm">
             <p className="font-medium">Resetar configurações</p>
-            <p className="text-muted-foreground">Volta tudo para os valores padrão</p>
+            <p className="text-muted-foreground">
+              Volta tudo para os valores padrão. Excluir a conta é definitivo.
+            </p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowResetDialog(true)}>
               <RefreshCw className="h-4 w-4 mr-2" /> Resetar
             </Button>
-            <Button variant="destructive" size="sm" disabled>
-              <Trash2 className="h-4 w-4 mr-2" /> Excluir dados (em breve)
+            <Button variant="destructive" size="sm" onClick={() => setShowExcluirDialog(true)}>
+              <Trash2 className="h-4 w-4 mr-2" /> Excluir minha conta
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={showExcluirDialog}
+        onOpenChange={(aberto) => {
+          setShowExcluirDialog(aberto);
+          // Zera a confirmação ao fechar: reabrir com "EXCLUIR" ainda digitado
+          // deixaria o botão armado sem a pessoa ter lido nada desta vez.
+          if (!aberto) setConfirmacaoExclusao('');
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir minha conta</DialogTitle>
+            <DialogDescription>
+              Não dá para desfazer. Você perde o acesso imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/*
+            O que acontece de verdade, em vez de "todos os seus dados serão
+            apagados" — que seria mentira: os registros financeiros ficam por
+            obrigação fiscal, e dizer o contrário seria uma promessa que o
+            produto não cumpre.
+          */}
+          <div className="space-y-2 text-sm">
+            <p className="font-medium">O que acontece:</p>
+            <ul className="ml-4 list-disc space-y-1 text-muted-foreground">
+              <li>Nome, e-mail, telefone e foto são anonimizados e não voltam.</li>
+              <li>Suas sessões abertas caem na hora, em todos os aparelhos.</li>
+              <li>
+                Faturas e registros contratuais ficam guardados por obrigação fiscal, já sem
+                seus dados pessoais.
+              </li>
+              <li>Projetos e artes que você compartilhou continuam com a outra parte.</li>
+            </ul>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirmar-exclusao">
+              Para confirmar, digite <span className="font-mono font-semibold">EXCLUIR</span>
+            </Label>
+            <Input
+              id="confirmar-exclusao"
+              value={confirmacaoExclusao}
+              onChange={(e) => setConfirmacaoExclusao(e.target.value)}
+              placeholder="EXCLUIR"
+              autoComplete="off"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExcluirDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleExcluirConta()}
+              disabled={confirmacaoExclusao !== 'EXCLUIR' || excluindo}
+            >
+              {excluindo ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Excluir minha conta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>
