@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { rotuloFeedback } from "@/lib/rotulos";
 import { api } from "@/lib/api";
 import { podeComentar } from "@/lib/viewerApi";
@@ -97,8 +98,29 @@ type Props = {
   readOnly?: boolean;
   commentMode?: boolean;
   onCommentModeChange?: (v: boolean) => void;
+  /**
+   * Há sessão? Não é o mesmo que `canComment`.
+   *
+   * Sem sessão, a área de escrita não fica desabilitada: ela NÃO EXISTE.
+   * Campo desabilitado ainda é campo — está no DOM, aceita preenchimento por
+   * script e sugere que existe um caminho de escrita sem conta. Aqui não
+   * existe: `POST /links/:token/feedbacks` e `POST /feedbacks` passam os dois
+   * por `authenticate`, e o autor sai da sessão. A tela passa a dizer a mesma
+   * coisa que o servidor: sem conta, só leitura e uma porta para entrar.
+   */
+  temSessao?: boolean;
+  /** Para onde mandar quem precisa entrar — já com a volta para esta arte. */
+  urlDeLogin?: string | null;
   /** Painel de aprovações, quando o visitante tem conta. Entra como aba da trilha. */
   aprovacoes?: React.ReactNode;
+  /**
+   * Barra "é a sua vez", quando há decisão pendente de quem está olhando.
+   *
+   * Entra acima da alça da gaveta e só no celular: no desktop a coluna lateral
+   * já mostra o painel inteiro. Vem de fora porque quem sabe se há pendência é
+   * o ViewerShell — este componente não fala com a rota de aprovações.
+   */
+  decisao?: React.ReactNode;
 };
 
 /* ------------------------------------------------------------------ */
@@ -137,7 +159,10 @@ export default function FeedbackViewer({
   readOnly,
   commentMode: externalCommentMode,
   onCommentModeChange,
+  temSessao = false,
+  urlDeLogin = null,
   aprovacoes = null,
+  decisao = null,
 }: Props) {
   /* — State — */
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>(initialFeedbacks);
@@ -202,7 +227,10 @@ export default function FeedbackViewer({
   const commentModeActive = externalCommentMode ?? internalCommentMode;
   const setCommentMode = onCommentModeChange ?? setInternalCommentMode;
 
-  const canComment = useMemo(() => !readOnly && !!viewer?.email, [readOnly, viewer]);
+  const canComment = useMemo(
+    () => temSessao && !readOnly && !!viewer?.email,
+    [temSessao, readOnly, viewer],
+  );
 
   /* — Encaixe da arte na área disponível — */
   useEffect(() => {
@@ -539,19 +567,25 @@ export default function FeedbackViewer({
   const barra = (
     <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-3">
       <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur">
-        <Button
-          size="sm"
-          variant={commentModeActive ? "default" : "ghost"}
-          className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs"
-          onClick={() => setCommentMode(!commentModeActive)}
-          disabled={!canComment}
-        >
-          <MessageCircle className="h-4 w-4" />
-          {commentModeActive ? "Clique na arte" : "Comentar"}
-          <kbd className="ml-0.5 hidden rounded border px-1 text-[9px] opacity-60 lg:inline">C</kbd>
-        </Button>
+        {/* Sem sessão o botão não fica cinza: ele sai. Marcar ponto na arte só
+            serve para escrever, e escrever exige conta. */}
+        {temSessao && (
+          <>
+            <Button
+              size="sm"
+              variant={commentModeActive ? "default" : "ghost"}
+              className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs"
+              onClick={() => setCommentMode(!commentModeActive)}
+              disabled={!canComment}
+            >
+              <MessageCircle className="h-4 w-4" />
+              {commentModeActive ? "Clique na arte" : "Comentar"}
+              <kbd className="ml-0.5 hidden rounded border px-1 text-[9px] opacity-60 lg:inline">C</kbd>
+            </Button>
 
-        <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+            <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+          </>
+        )}
 
         <button onClick={zoomOut} className="shrink-0 rounded-full p-1.5 hover:bg-muted" title="Diminuir" aria-label="Diminuir zoom">
           <ZoomOut className="h-4 w-4" />
@@ -929,7 +963,27 @@ export default function FeedbackViewer({
                 </button>
               </div>
             )}
-            {/* Input area */}
+            {/*
+              Sem sessão, nada de escrita no DOM — nem campo, nem gravador, nem
+              botão. No lugar, a porta.
+
+              Antes isto era um bloco desabilitado com `pointer-events-none`:
+              o `<textarea>` e o `<button>` continuavam na página, um script
+              preenchia e clicava sem obstáculo nenhum, e a promessa da tela
+              ("escreva um comentário") não batia com a do servidor, que
+              recusa escrita sem conta. O 401 continua sendo a barreira real;
+              esta tela apenas deixa de prometer o que não existe.
+            */}
+            {!temSessao ? (
+              <div className="rounded-lg border border-dashed p-3 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Comentar nesta arte precisa de conta.
+                </p>
+                <Button asChild size="sm" className="mt-2">
+                  <Link href={urlDeLogin ?? "/login"}>Entrar para comentar</Link>
+                </Button>
+              </div>
+            ) : (
             <div className={!canComment ? "opacity-60 pointer-events-none" : ""}>
               <Textarea
                 placeholder={readOnly ? "Comentários desabilitados" : "Escreva um comentário…"}
@@ -981,6 +1035,7 @@ export default function FeedbackViewer({
                 <p className="text-xs text-destructive mt-1">{recorder.permissionError}</p>
               )}
             </div>
+            )}
           </div>
         </>
       )}
@@ -995,6 +1050,8 @@ export default function FeedbackViewer({
         {canvas}
 
         <aside className="hidden min-h-0 border-l lg:flex lg:h-full lg:flex-col">{trilha}</aside>
+
+        {decisao}
 
         {/* A alça da gaveta, só no celular. */}
         <button

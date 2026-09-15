@@ -112,18 +112,32 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     try {
       setSubmitting(true);
 
-      // 1) Cria o usuário cliente via REST API
-      // Gera senha temporária — o cliente pode redefinir via "esqueci minha senha"
-      const tempPassword = `Viu@${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-      const clienteRes = await api.post<{ data: { id: string } }>('/usuarios', {
-        nome: nome.trim(),
-        email: email.trim(),
-        senha: tempPassword,
-        telefone: telefone || undefined,
-        tipo: "CLIENTE",
-      });
+      /*
+       * 1) Quem é esta pessoa?
+       *
+       * Antes aqui era `POST /usuarios` — "crie este usuário" — e a chamada
+       * morria em "Email já está em uso" toda vez que a pessoa já tinha conta:
+       * porque se cadastrou sozinha, ou porque outro designer já a cadastrara.
+       * Não havia saída pela interface, e o jeito era inventar um segundo
+       * e-mail. A mesma pessoa com duas contas, e a fila de decisões dela
+       * partida ao meio.
+       *
+       * A senha temporária também saiu daqui: quem cadastra não sorteia a
+       * credencial de outra pessoa. Quando é preciso criar, quem gera é o
+       * servidor; a pessoa entra pelo "esqueci minha senha", como já era.
+       */
+      const clienteRes = await api.post<{ data: { id: string; nome: string; jaExistia: boolean } }>(
+        '/clientes',
+        {
+          nome: nome.trim(),
+          email: email.trim(),
+          telefone: telefone || undefined,
+        },
+      );
       const clienteId = clienteRes.data?.id;
       if (!clienteId) throw new Error("Não retornou id do cliente.");
+      const jaExistia = clienteRes.data?.jaExistia === true;
+      const nomeDoCliente = clienteRes.data?.nome || nome.trim();
 
       // 2) Projeto opcional
       if (criarProjeto && proj.nome.trim()) {
@@ -142,7 +156,17 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
       // 3) Contatos opcionais — sem endpoint dedicado no backend ainda
       // TODO: implementar endpoint POST /contatos quando disponível no backend
 
-      toast.success("Cliente criado com sucesso!");
+      /*
+       * A frase diz o que aconteceu de verdade. "Cliente criado" seria mentira
+       * quando a conta já existia — e é justamente o caso em que o designer
+       * precisa saber, porque o nome que vale é o que a pessoa cadastrou, não
+       * o que ele digitou.
+       */
+      toast.success(
+        jaExistia
+          ? `${nomeDoCliente} já tem conta no VIU — vinculamos ao seu projeto.`
+          : `Cliente cadastrado. ${nomeDoCliente} vai receber o convite por e-mail.`,
+      );
       onCreated?.(clienteId);
       handleClose();
     } catch (err: any) {

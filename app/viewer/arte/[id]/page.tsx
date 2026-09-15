@@ -1,8 +1,8 @@
 // app/viewer/arte/[id]/page.tsx
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import ViewerShell from '@/components/viewer/ViewerShell'
 import LinkIndisponivel from '@/components/viewer/LinkIndisponivel'
-import { backendFetch } from '@/lib/serverBackend'
+import { backendFetch, credenciaisDaSessao } from '@/lib/serverBackend'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,11 +13,59 @@ type Props = {
   searchParams?: Promise<{ token?: string }>
 }
 
+/**
+ * A arte pela sessão — sem token nenhum.
+ *
+ * Este endereço era exclusivo de quem tinha o link, e por isso a peça não
+ * tinha endereço nenhum para quem está logado: o dashboard apontava para
+ * `/artes/<id>`, que é 404, e a única porta para a arte era o WhatsApp.
+ *
+ * `GET /artes/:id` aplica a mesma regra de acesso do resto da API — um 200
+ * aqui É a autorização. Os comentários vêm à parte porque `/preview` (que os
+ * traz junto) só existe para token.
+ */
+async function porSessao(id: string) {
+  const auth = await credenciaisDaSessao()
+  if (!auth) redirect(`/login?next=${encodeURIComponent(`/viewer/arte/${id}`)}`)
+
+  const res = await backendFetch(`/artes/${encodeURIComponent(id)}`, { headers: { ...auth } })
+  if (res.status === 401) redirect(`/login?next=${encodeURIComponent(`/viewer/arte/${id}`)}`)
+  if (!res.ok) return null
+
+  const arte = (await res.json())?.data
+  if (!arte?.id) return null
+
+  const resFb = await backendFetch(
+    `/feedbacks?arteId=${encodeURIComponent(id)}&limit=200`,
+    { headers: { ...auth } },
+  )
+  const feedbacks = resFb.ok ? ((await resFb.json())?.data ?? []) : []
+
+  return {
+    arte,
+    feedbacks,
+    licenca: arte.licenca ?? null,
+    /*
+     * `somenteLeitura` é do LINK, e aqui não há link. A permissão de quem está
+     * na própria conta vem do acesso ao projeto — que o backend já checou para
+     * devolver esta arte. Herdar o switch de algum link faria a mesma pessoa
+     * poder ou não comentar conforme qual link o designer configurou por
+     * último.
+     */
+    somenteLeitura: false,
+  }
+}
+
 export default async function ArteViewerPage({ params, searchParams }: Props) {
   const { id } = await params
   const sp = (await searchParams) ?? {}
   const token = sp.token ?? ''
-  if (!token) return notFound()
+
+  if (!token) {
+    const daSessao = await porSessao(id)
+    if (!daSessao) return notFound()
+    return <ArteNaTela token="" d={daSessao} />
+  }
 
   let raw: any
   try {
@@ -50,9 +98,14 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
 
   const d = raw.data ?? raw
   if (!d?.arte) return notFound()
+  if (d.arte.id !== id) return notFound()
 
+  return <ArteNaTela token={token} d={d} />
+}
+
+/** A tela em si, alimentada por qualquer uma das duas origens. */
+function ArteNaTela({ token, d }: { token: string; d: any }) {
   const arte = d.arte
-  if (arte.id !== id) return notFound()
 
   const feedbacks = (d.feedbacks ?? []).map((f: any) => ({
     id: f.id,
