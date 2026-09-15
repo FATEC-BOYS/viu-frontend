@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -16,8 +17,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MailCheck } from 'lucide-react'
 
-export default function RecuperarPage() {
-  const [email, setEmail] = useState('')
+function RecuperarPageConteudo() {
+  /*
+   * `?email=` vem da tela de cadastro, quando ela descobre que já existe conta
+   * com aquele endereço. Sem isto a pessoa acabava de digitar o e-mail e teria
+   * que digitar de novo — no passo em que ela já está confusa por ter sido
+   * recusada num cadastro que nunca pediu.
+   */
+  const searchParams = useSearchParams()
+  const [email, setEmail] = useState(searchParams.get('email') ?? '')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -94,5 +102,17 @@ export default function RecuperarPage() {
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+/*
+ * `useSearchParams` exige fronteira de Suspense no App Router — mesmo padrão
+ * que a tela de login já usa.
+ */
+export default function RecuperarPage() {
+  return (
+    <Suspense>
+      <RecuperarPageConteudo />
+    </Suspense>
   )
 }

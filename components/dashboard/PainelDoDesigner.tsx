@@ -25,6 +25,16 @@ type Projeto = {
   status: string
   prazo?: string | null
   cliente?: { nome?: string | null } | null
+  /**
+   * Quem ocupa cada ponta — porque agora as duas podem ser esta pessoa.
+   *
+   * Ser cliente virou posição no projeto, não tipo de conta: um designer pode
+   * contratar outro. Sem estes dois ids, a linha do projeto onde ELE é o
+   * cliente saía como "Marca do estúdio da Ana — Ana Silva", ou seja, ela
+   * própria listada como cliente de si mesma.
+   */
+  clienteId?: string | null
+  designer?: { nome?: string | null } | null
   _count?: { artes?: number }
 }
 
@@ -239,6 +249,8 @@ export default function PainelDoDesigner() {
                 id: p.id, nome: p.nome, status: p.status,
                 prazo: p.prazo ?? null,
                 cliente: p.cliente ? { nome: p.cliente.nome } : null,
+                clienteId: p.cliente?.id ?? p.clienteId ?? null,
+                designer: p.designer ? { nome: p.designer.nome } : null,
                 _count: p._count,
               }))
             : []
@@ -655,10 +667,26 @@ export default function PainelDoDesigner() {
                         href={`/projetos/${projeto.id}`}
                         className="block rounded-md py-2.5 transition-colors hover:bg-muted/50"
                       >
-                        <span className="block truncate text-sm font-medium">{projeto.nome}</span>
+                        <span className="block truncate text-sm font-medium">
+                          {projeto.nome}
+                          {/* Quando a pessoa é o CLIENTE deste projeto, dizer
+                              isso. Sem a etiqueta a linha ficava "Marca do
+                              estúdio da Ana — Ana Silva": ela listada como
+                              cliente de si mesma, na própria fila de trabalho. */}
+                          {projeto.clienteId && projeto.clienteId === user?.id ? (
+                            <span className="ml-2 rounded-full border border-border bg-muted px-2 py-0.5 align-middle text-[10px] font-medium text-muted-foreground">
+                              você é o cliente
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {projeto.cliente?.nome || 'Sem cliente'} ·{' '}
-                          {projeto._count?.artes ?? 0} {(projeto._count?.artes ?? 0) === 1 ? 'arte' : 'artes'}
+                          {projeto.clienteId && projeto.clienteId === user?.id
+                            ? projeto.designer?.nome
+                              ? `com ${projeto.designer.nome}`
+                              : 'sem designer definido'
+                            : projeto.cliente?.nome || 'Sem cliente'}{' '}
+                          · {projeto._count?.artes ?? 0}{' '}
+                          {(projeto._count?.artes ?? 0) === 1 ? 'arte' : 'artes'}
                           {projeto.prazo
                             ? ` · entrega ${new Date(projeto.prazo).toLocaleDateString('pt-BR')}`
                             : ''}
