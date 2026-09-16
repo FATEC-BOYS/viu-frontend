@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
-import { Miniatura, Pilula } from '@/components/dashboard/pecasDoCartao'
+import { Miniatura } from '@/components/dashboard/pecasDoCartao'
 
 /**
  * O que está esperando uma decisão SUA.
@@ -20,17 +20,24 @@ import { Miniatura, Pilula } from '@/components/dashboard/pecasDoCartao'
  * faixa é o dado, não o `tipo` do usuário. Designer que também é cliente de
  * outro projeto tem fila aqui, e ramificar por papel esconderia isso dele.
  *
- * Um cartão, uma ação: **abrir a revisão**. A versão anterior decidia aqui
- * dentro, com botões de aprovar e pedir ajustes ao lado de uma miniatura de
- * 56px — aprovar sem ver a peça. Isso existia porque a arte não tinha
- * endereço para quem está logado; agora tem (`/viewer/arte/<id>`), e a decisão
- * mora onde dá para olhar de perto, junto do comentário e do histórico.
+ * Forma: UM cartão com linhas, não um cartão por peça.
+ *
+ * A versão anterior dava a largura inteira à imagem de cada peça, e três
+ * pendências viravam três telas de rolagem. A lista não precisa deixar a peça
+ * AVALIÁVEL — precisa deixar IDENTIFICÁVEL; avaliar acontece no visualizador,
+ * a um toque daqui, onde dá para dar zoom e ler o comentário. A miniatura
+ * quadrada de 96px identifica, e as três pendências cabem numa tela só.
+ *
+ * Nenhum botão preenchido: a linha inteira é o alvo. Três blocos de cor
+ * empilhados fazem cada um parecer menos urgente que o anterior, e num
+ * telefone a linha é um alvo de toque maior que qualquer botão.
  */
 
 export type ArteEsperando = {
   id: string
   arteId: string
   arteNome: string
+  projetoNome: string | null
   versao: number | null
   previewUrl: string | null
   criadoEm: string
@@ -44,8 +51,8 @@ function diasDesde(iso: string): number {
 
 function espera(dias: number): string {
   if (dias === 0) return 'chegou hoje'
-  if (dias === 1) return 'esperando desde ontem'
-  return `esperando há ${dias} dias`
+  if (dias === 1) return 'desde ontem'
+  return `há ${dias} dias`
 }
 
 export default function AguardandoVoce({
@@ -76,6 +83,7 @@ export default function AguardandoVoce({
           id: String(a.id),
           arteId: String(a.arte?.id ?? ''),
           arteNome: a.arte?.nome ?? 'Arte sem nome',
+          projetoNome: a.arte?.projeto?.nome ?? null,
           // `versaoNumero` é a versão julgada; `arte.versao` é a atual. Mostrar
           // a segunda faria a linha mudar de rótulo quando o designer subisse
           // outra entrega, sem que a decisão pendente fosse outra.
@@ -99,51 +107,73 @@ export default function AguardandoVoce({
   if (!carregou) return null
   if (itens.length === 0) return <>{vazio}</>
 
+  const maisAntiga = Math.max(...itens.map((i) => diasDesde(i.criadoEm)))
+
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">Aguardando você</h2>
-        <span className="font-mono text-xs text-muted-foreground">
+    <section className="overflow-hidden rounded-xl border border-primary/25 bg-card">
+      <header className="flex items-baseline justify-between gap-3 border-b px-4 py-3 sm:px-5">
+        <h2 className="text-sm font-semibold tracking-tight">Aguardando você</h2>
+        <p className="shrink-0 text-xs text-muted-foreground">
           {itens.length === 1 ? '1 peça' : `${itens.length} peças`}
-        </span>
-      </div>
+          {maisAntiga > 0 ? ` · a mais antiga ${espera(maisAntiga)}` : ''}
+        </p>
+      </header>
 
-      {/* Uma coluna no celular: a peça é o assunto, e miniatura pequena numa
-          grade de duas colunas obriga a abrir para saber o que é. */}
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="divide-y">
         {itens.map((item) => (
-          <li
-            key={item.id}
-            className="overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-sm"
-          >
-            <Link href={item.arteId ? `/viewer/arte/${item.arteId}` : '#'} className="block">
-              <Miniatura src={item.previewUrl} nome={item.arteNome} />
-            </Link>
+          <li key={item.id}>
+            <Link
+              href={item.arteId ? `/viewer/arte/${item.arteId}` : '#'}
+              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:px-5"
+            >
+              {/* 64px, igual no celular e no desktop.
+                  
+                  Com 96px a linha passava de 190px de altura e o texto ficava
+                  boiando no meio de um vão — o oposto da densidade que a gente
+                  foi buscar. 64px ainda identifica a peça, e é o visualizador,
+                  a um toque daqui, que existe para olhar de perto. */}
+              <div className="w-16 shrink-0 overflow-hidden rounded-md border">
+                <Miniatura src={item.previewUrl} nome={item.arteNome} proporcao="aspect-square" />
+              </div>
 
-            <div className="flex flex-col gap-3 p-4">
-              <div className="flex flex-col gap-2">
-                <Pilula tom="atencao">Aguardando sua revisão</Pilula>
-                <h3 className="text-base font-semibold leading-snug tracking-tight">
+              {/* Célula de duas linhas: identidade em cima, contexto embaixo.
+                  Dobra a informação sem dobrar a altura da linha. */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
                   {item.arteNome}
                   {item.versao ? (
                     <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
                       v{item.versao}
                     </span>
                   ) : null}
-                </h3>
-                <p suppressHydrationWarning className="text-xs text-muted-foreground">
-                  {espera(diasDesde(item.criadoEm))}
+                </p>
+                {/*
+                  A espera vem PRIMEIRO, e não há pílula de status.
+                  
+                  Todas as linhas deste cartão têm o mesmo estado — ele já está
+                  no título "Aguardando você". Repetir "Aguardando sua revisão"
+                  em cada uma gastava uma linha inteira no celular para dizer
+                  três vezes a mesma coisa. O que diferencia uma linha da outra
+                  é HÁ QUANTO TEMPO, e era justamente isso que o `truncate`
+                  cortava quando o nome do projeto vinha na frente.
+                */}
+                <p suppressHydrationWarning className="truncate text-xs text-muted-foreground">
+                  <span className="text-foreground/70">{espera(diasDesde(item.criadoEm))}</span>
+                  {item.projetoNome ? ` · ${item.projetoNome}` : ''}
                 </p>
               </div>
 
-              {/* Uma ação por cartão, e do tamanho do polegar. */}
-              <Button asChild className="h-12 w-full text-sm">
-                <Link href={item.arteId ? `/viewer/arte/${item.arteId}` : '#'}>Abrir revisão</Link>
-              </Button>
-            </div>
+              <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
           </li>
         ))}
       </ul>
+
+      {/* A frase que diz o que a lista significa. É escrita, não CSS — e é o
+          que separa uma tabela de um painel que explica a si mesmo. */}
+      <p className="border-t px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
+        Abrir a peça é onde dá para olhar de perto, comentar e decidir. Nada aqui anda sem você.
+      </p>
     </section>
   )
 }

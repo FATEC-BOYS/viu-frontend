@@ -75,13 +75,18 @@ describe('AguardandoVoce', () => {
    * histórico do lado. A regra do motivo obrigatório continua presa nos
    * testes do visualizador e do backend.
    */
-  it('o cartão leva para a revisão, com uma ação só', async () => {
+  it('a linha inteira leva para a revisão — sem botão preenchido', async () => {
     get.mockResolvedValue({ data: [pendente()] })
     render(<AguardandoVoce usuarioId={EU} />)
 
-    const abrir = await screen.findByRole('link', { name: 'Abrir revisão' })
-    expect(abrir.getAttribute('href')).toBe('/viewer/arte/arte-1')
-    expect(screen.queryByRole('button', { name: 'Aprovar' })).not.toBeInTheDocument()
+    /*
+     * O alvo é a linha, não um botão dentro dela: três blocos de cor
+     * empilhados fazem cada um parecer menos urgente que o anterior, e num
+     * telefone a linha é um alvo de toque maior que qualquer botão.
+     */
+    const linha = await screen.findByRole('link', { name: /Cartaz do show/ })
+    expect(linha.getAttribute('href')).toBe('/viewer/arte/arte-1')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('a peça é o assunto do cartão — a imagem vem do backend, assinada', async () => {

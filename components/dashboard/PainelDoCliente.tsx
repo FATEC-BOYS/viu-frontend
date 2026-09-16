@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { pagamentosApi, type Fatura, formatReais } from '@/lib/pagamentos'
 import AguardandoVoce from '@/components/dashboard/AguardandoVoce'
-import { Miniatura, Pilula } from '@/components/dashboard/pecasDoCartao'
+import { ChevronRight } from 'lucide-react'
+import { Pilula } from '@/components/dashboard/pecasDoCartao'
 
 /**
  * O painel de quem CONTRATA.
@@ -34,7 +35,6 @@ type ProjetoDoCliente = {
   status: string
   prazo: string | null
   designer: string | null
-  capa: string | null
 }
 
 const ROTULO_STATUS: Record<string, string> = {
@@ -64,9 +64,9 @@ function prazoEmPalavras(prazo: string | null): string | null {
 /** Nada pendente não é erro nem vazio — é a boa notícia do dia. */
 function FilaVazia({ temProjeto }: { temProjeto: boolean }) {
   return (
-    <section className="rounded-2xl border border-dashed bg-card/60 p-8 text-center">
-      <p className="text-base font-medium">Nada esperando por você agora ✶</p>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+    <section className="rounded-xl border border-dashed bg-card/60 px-4 py-8 text-center sm:px-5">
+      <p className="text-sm font-medium">Nada esperando por você agora ✶</p>
+      <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
         {temProjeto
           ? 'Quando o designer mandar uma peça para sua revisão, ela aparece aqui em cima.'
           : 'Assim que um designer te incluir num projeto, o trabalho dele aparece por aqui.'}
@@ -75,47 +75,52 @@ function FilaVazia({ temProjeto }: { temProjeto: boolean }) {
   )
 }
 
-function GrupoDeProjetos({
-  titulo,
-  projetos,
-  discreto = false,
-}: {
-  titulo: string
-  projetos: ProjetoDoCliente[]
-  /** O que já acabou fica na tela, mas não disputa atenção com o que anda. */
-  discreto?: boolean
-}) {
+/**
+ * Os projetos como LISTA, não como grade de cartões com capa.
+ *
+ * A versão anterior dava a cada projeto um cartão com a arte mais recente
+ * como capa. A capa não informava nada: aqui a pessoa está navegando, não
+ * decidindo — quem precisa ver a peça é a fila de cima, e lá a miniatura tem
+ * função. Como decoração, a capa custava três vezes a altura e empurrava o
+ * resto da tela para baixo da dobra.
+ *
+ * Um cartão, linhas separadas por fio, pílula dizendo o estado. Assim
+ * "concluído" e "em andamento" convivem sem que um título minta sobre o
+ * outro, que era o problema da separação em duas seções.
+ */
+function ListaDeProjetos({ projetos }: { projetos: ProjetoDoCliente[] }) {
   return (
-    <section className="flex flex-col gap-4">
-      <h2
-        className={
-          discreto
-            ? 'font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground'
-            : 'text-lg font-semibold tracking-tight'
-        }
-      >
-        {titulo}
-      </h2>
+    <section className="overflow-hidden rounded-xl border bg-card">
+      <header className="flex items-baseline justify-between gap-3 border-b px-4 py-3 sm:px-5">
+        <h2 className="text-sm font-semibold tracking-tight">Seus projetos</h2>
+        <p className="shrink-0 text-xs text-muted-foreground">
+          {projetos.length === 1 ? '1 projeto' : `${projetos.length} projetos`}
+        </p>
+      </header>
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="divide-y">
         {projetos.map((p) => {
           const prazo = prazoEmPalavras(p.prazo)
           return (
-            <li key={p.id} className="overflow-hidden rounded-2xl border bg-card">
-              <Link href={`/projetos/${p.id}`} className="block">
-                <Miniatura src={p.capa} nome={p.nome} proporcao="aspect-[16/10]" />
-                <div className="flex flex-col gap-2 p-4">
-                  <Pilula tom={TOM_STATUS[p.status] ?? 'neutro'}>
-                    {ROTULO_STATUS[p.status] ?? p.status}
-                  </Pilula>
-                  <h3 className="text-sm font-semibold leading-snug tracking-tight">{p.nome}</h3>
-                  <p className="text-xs text-muted-foreground">
+            <li key={p.id}>
+              <Link
+                href={`/projetos/${p.id}`}
+                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:px-5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{p.nome}</p>
+                  <p className="truncate text-xs text-muted-foreground">
                     {p.designer ? `com ${p.designer}` : 'sem designer definido'}
                     {/* Só mostra prazo quando ele existe: "sem prazo" repetido
-                        em todo cartão é ruído, não informação. */}
+                        em toda linha é ruído, não informação. */}
                     {prazo ? ` · ${prazo}` : ''}
                   </p>
                 </div>
+
+                <Pilula tom={TOM_STATUS[p.status] ?? 'neutro'}>
+                  {ROTULO_STATUS[p.status] ?? p.status}
+                </Pilula>
+                <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Link>
             </li>
           )
@@ -139,27 +144,18 @@ export default function PainelDoCliente({
   useEffect(() => {
     let vivo = true
     ;(async () => {
-      const [resProjetos, resArtes, resFaturas] = await Promise.allSettled([
+      /*
+       * Duas chamadas, não três. A terceira buscava `/artes?limit=50` só para
+       * pegar uma capa por projeto — e a capa saiu da lista, porque ali a
+       * pessoa navega em vez de decidir. Requisição que ninguém lê é peso e
+       * mentira: diz que a tela mostra a peça quando ela não mostra.
+       */
+      const [resProjetos, resFaturas] = await Promise.allSettled([
         api.get<{ data: any[] }>('/projetos?limit=20'),
-        // A capa de cada projeto é a arte mais recente dele. `/artes` já
-        // devolve `previewUrl` assinada; sem esta chamada o cartão do projeto
-        // seria só texto, e a tela inteira depende de ver a peça.
-        api.get<{ data: any[] }>('/artes?limit=50'),
         // `tipo=cliente`: as faturas que ELE deve, não as que alguém tem a receber.
         pagamentosApi.getFaturas('cliente'),
       ])
       if (!vivo) return
-
-      const capaPorProjeto = new Map<string, string>()
-      if (resArtes.status === 'fulfilled') {
-        for (const a of resArtes.value.data ?? []) {
-          const projetoId = a.projeto?.id ?? a.projetoId
-          if (!projetoId || !a.previewUrl) continue
-          // `/artes` já vem em ordem decrescente de criação: a primeira que
-          // aparece para cada projeto é a mais recente dele.
-          if (!capaPorProjeto.has(projetoId)) capaPorProjeto.set(projetoId, a.previewUrl)
-        }
-      }
 
       if (resProjetos.status === 'fulfilled') {
         setProjetos(
@@ -169,7 +165,6 @@ export default function PainelDoCliente({
             status: p.status,
             prazo: p.prazo ?? null,
             designer: p.designer?.nome ?? null,
-            capa: capaPorProjeto.get(p.id) ?? null,
           })),
         )
       }
@@ -186,21 +181,23 @@ export default function PainelDoCliente({
   const aPagar = faturas.reduce((soma, f) => soma + (f.valor ?? 0), 0)
 
   /*
-   * Dois grupos, e não um "tudo que não foi cancelado".
+   * Ordenados, não separados em duas seções.
    *
-   * Antes projeto concluído entrava embaixo do título "Em andamento" — o
-   * rótulo mentia sobre metade da lista. Separar custa uma seção a mais e
-   * devolve a pergunta que o cliente faz de verdade ao abrir: o que ainda
-   * está acontecendo?
+   * Projeto concluído embaixo do título "Em andamento" era rótulo mentindo
+   * sobre metade da lista. A separação em dois blocos resolvia isso e custava
+   * duas molduras; com uma pílula por linha dizendo o estado, o que anda vem
+   * primeiro e a verdade fica em cada linha, onde ela pertence.
    */
-  const emAndamento = projetos.filter((p) => p.status === 'EM_ANDAMENTO' || p.status === 'PAUSADO')
-  const concluidos = projetos.filter((p) => p.status === 'CONCLUIDO')
+  const ORDEM: Record<string, number> = { EM_ANDAMENTO: 0, PAUSADO: 1, CONCLUIDO: 2 }
+  const listados = projetos
+    .filter((p) => p.status !== 'CANCELADO')
+    .sort((a, b) => (ORDEM[a.status] ?? 9) - (ORDEM[b.status] ?? 9))
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Oi, {nome}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight">Oi, {nome}</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           {carregando ? 'Carregando seus trabalhos…' : 'O que precisa de você está logo abaixo.'}
         </p>
       </header>
@@ -210,27 +207,26 @@ export default function PainelDoCliente({
         vazio={carregando ? null : <FilaVazia temProjeto={projetos.length > 0} />}
       />
 
-      {emAndamento.length > 0 && (
-        <GrupoDeProjetos titulo="Em andamento" projetos={emAndamento} />
-      )}
-
-      {concluidos.length > 0 && (
-        <GrupoDeProjetos titulo="Concluídos" projetos={concluidos} discreto />
-      )}
+      {listados.length > 0 && <ListaDeProjetos projetos={listados} />}
 
       {/* Abaixo de tudo, e só quando existe. Um cartão "R$ 0,00 a pagar" é uma
           preocupação inventada, e cobrança no topo faz a tela receber alguém
-          com uma conta em vez de com o trabalho. */}
+          com uma conta em vez de com o trabalho.
+
+          O valor é o herói, com legenda embaixo: quem abre quer saber QUANTO,
+          e a frase em volta só atrapalhava a leitura do número. */}
       {faturas.length > 0 && (
-        <section className="flex flex-col gap-3 rounded-2xl border bg-card p-5">
-          <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
-            A pagar
-          </h2>
-          <p className="text-sm">
-            <b className="font-semibold tabular-nums">{formatReais(aPagar)}</b> em{' '}
-            {faturas.length === 1 ? '1 fatura em aberto' : `${faturas.length} faturas em aberto`}.
-          </p>
-          <div>
+        <section className="rounded-xl border bg-card px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight">A pagar</h2>
+              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">
+                {formatReais(aPagar)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {faturas.length === 1 ? '1 fatura em aberto' : `${faturas.length} faturas em aberto`}
+              </p>
+            </div>
             <Button asChild size="sm" variant="outline">
               <Link href="/faturas">Ver faturas</Link>
             </Button>
