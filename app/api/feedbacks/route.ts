@@ -3,12 +3,19 @@ import { NextResponse } from 'next/server'
 
 
 /**
- * Comentar por link compartilhado.
+ * Comentar — pelo link compartilhado ou pela própria conta.
  *
  * Ler pelo link é público (GET /preview/:token), mas comentar exige conta:
  * Feedback.autorId é obrigatório no schema, com FK para usuarios, então todo
  * comentário tem autor rastreável — é o que sustenta o histórico de aprovação
  * e o caminho de anonimização da LGPD. Convidado sem cadastro não cabe aí.
+ *
+ * Com token, vai por `POST /links/:token/feedbacks`, que respeita o
+ * `somenteLeitura` DO LINK — o link é encaminhável e pode parar na mão de um
+ * terceiro. Sem token, vai por `POST /feedbacks`, que exige acesso ao projeto:
+ * é o cliente na conta dele, e a permissão dele não vem da configuração de um
+ * link específico (podem existir dois links da mesma arte, com switches
+ * diferentes; nenhum deles é a regra da pessoa).
  */
 export async function POST(req: Request) {
   try {
@@ -28,15 +35,33 @@ export async function POST(req: Request) {
 
       // guestNome/guestEmail eram enviados aqui, mas o backend nunca os leu —
       // o autor sai do token.
-      const res = await backendFetch(`/links/${token}/feedbacks`, {
+      const corpo = JSON.stringify(
+        token
+          ? {
+              conteudo: conteudo ?? '',
+              tipo: tipo ?? 'TEXTO',
+              posicaoX: posicao_x ?? null,
+              posicaoY: posicao_y ?? null,
+            }
+          : {
+              // `POST /feedbacks` precisa saber sobre qual arte é — o link
+              // dizia isso pelo token.
+              arteId: body.arteId,
+              conteudo: conteudo ?? '',
+              tipo: tipo ?? 'TEXTO',
+              posicaoX: posicao_x ?? null,
+              posicaoY: posicao_y ?? null,
+            },
+      )
+
+      if (!token && !body.arteId) {
+        return NextResponse.json({ error: 'Arte não informada.' }, { status: 400 })
+      }
+
+      const res = await backendFetch(token ? `/links/${token}/feedbacks` : '/feedbacks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify({
-          conteudo: conteudo ?? '',
-          tipo: tipo ?? 'TEXTO',
-          posicaoX: posicao_x ?? null,
-          posicaoY: posicao_y ?? null,
-        }),
+        body: corpo,
       })
       const data = await res.json()
       return NextResponse.json(data, { status: res.ok ? 201 : res.status })
@@ -48,21 +73,28 @@ export async function POST(req: Request) {
       const token = String(form.get('token') || '')
       const file = form.get('file') as File | null
 
+      const arteId = form.get('arteId')
+
       if (!file) return NextResponse.json({ error: 'Arquivo ausente' }, { status: 400 })
-      if (!token) return NextResponse.json({ error: 'Token ausente' }, { status: 400 })
+      if (!token && !arteId) {
+        return NextResponse.json({ error: 'Arte não informada.' }, { status: 400 })
+      }
 
       // Monta novo FormData para encaminhar ao backend
       const fwd = new FormData()
       fwd.append('audio', file, file.name)
-      const arteId = form.get('arteId'); if (arteId) fwd.append('arteId', String(arteId))
+      if (arteId) fwd.append('arteId', String(arteId))
       const posX = form.get('posicao_x'); if (posX) fwd.append('posicaoX', String(posX))
       const posY = form.get('posicao_y'); if (posY) fwd.append('posicaoY', String(posY))
 
-      const res = await backendFetch(`/links/${token}/feedbacks/audio`, {
-        method: 'POST',
-        headers: { ...auth },
-        body: fwd,
-      })
+      const res = await backendFetch(
+        token ? `/links/${token}/feedbacks/audio` : '/feedbacks/audio',
+        {
+          method: 'POST',
+          headers: { ...auth },
+          body: fwd,
+        },
+      )
       const data = await res.json()
       return NextResponse.json(data, { status: res.ok ? 201 : res.status })
     }

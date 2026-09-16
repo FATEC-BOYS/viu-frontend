@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import ApprovalsPanel from '../ApprovalsPanel'
 
 /**
@@ -59,14 +60,46 @@ afterEach(() => {
 const props = { arteId: 'arte1', token: 'tok123' }
 
 describe('quem pode decidir', () => {
-  it('mostra Aprovar e Recusar para o aprovador da vez', async () => {
+  it('mostra Aprovar e Pedir ajustes para o aprovador da vez', async () => {
     logadoComo(EU)
     responder([aprovacao()])
 
     render(<ApprovalsPanel {...props} />)
 
-    expect(await screen.findByRole('button', { name: /aprovar/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /recusar/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Aprovar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pedir ajustes' })).toBeInTheDocument()
+  })
+
+  /**
+   * "Pedir ajustes" no lugar de "Recusar" não é copy mais macia: é o que a
+   * recusa passou a ser. Recusar sem dizer o que mudar devolve ao designer o
+   * que ele já tinha, e o backend responde 422 (RECUSA_SEM_MOTIVO). A tela
+   * trava o botão para a pessoa não descobrir a regra levando erro.
+   */
+  it('só envia o pedido de ajuste depois que o motivo é escrito', async () => {
+    logadoComo(EU)
+    responder([aprovacao()])
+
+    render(<ApprovalsPanel {...props} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pedir ajustes' }))
+    expect(screen.getByRole('button', { name: 'Enviar pedido' })).toBeDisabled()
+
+    await userEvent.type(screen.getByPlaceholderText('O que precisa mudar?'), 'o azul saiu errado')
+    expect(screen.getByRole('button', { name: 'Enviar pedido' })).toBeEnabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar pedido' }))
+
+    await waitFor(() => {
+      const chamada = (globalThis.fetch as any).mock.calls.find(
+        ([, init]: any[]) => init?.method === 'PATCH',
+      )
+      expect(chamada).toBeTruthy()
+      expect(JSON.parse(chamada[1].body)).toMatchObject({
+        decisao: 'REJEITADO',
+        comentario: 'o azul saiu errado',
+      })
+    })
   })
 
   it('não oferece decisão na aprovação de outra pessoa', async () => {

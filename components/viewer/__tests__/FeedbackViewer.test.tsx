@@ -104,6 +104,13 @@ const defaultProps = {
   token: "tok_123",
   viewer: { email: "viewer@test.com", nome: "Viewer" },
   readOnly: false,
+  /*
+   * O padrão destes testes é "tem sessão", porque é sobre escrever que eles
+   * falam. Sem sessão a área de escrita deixou de existir no DOM — não fica
+   * desabilitada — e esse caso tem o próprio bloco no fim do arquivo.
+   */
+  temSessao: true,
+  urlDeLogin: "/login?next=%2Fl%2Ftok_123",
 };
 
 beforeEach(() => {
@@ -628,5 +635,55 @@ describe("FeedbackViewer", () => {
     fireEvent.click(imgContainer, { clientX: 100, clientY: 50 });
     // No pin indicator bar
     expect(screen.queryByText(/Comentário posicionado/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Sem sessão, a escrita não fica desabilitada: ela não existe.
+ *
+ * Campo desabilitado ainda é campo — está no DOM, um script preenche e
+ * dispara sem obstáculo, e a tela promete um caminho de escrita que o
+ * servidor recusa (401 nas duas rotas de feedback). A barreira real continua
+ * sendo o backend; o que muda aqui é a tela parar de prometer.
+ */
+describe("visitante sem sessão", () => {
+  const semSessao = { ...defaultProps, temSessao: false, viewer: null };
+
+  it("não tem campo de comentário no DOM", () => {
+    render(<FeedbackViewer {...semSessao} />);
+    expect(screen.queryByPlaceholderText(/escreva um comentário/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("não tem gravador de áudio no DOM", () => {
+    render(<FeedbackViewer {...semSessao} />);
+    expect(screen.queryByRole("button", { name: /gravar áudio/i })).not.toBeInTheDocument();
+  });
+
+  it("não tem botão de enviar comentário no DOM", () => {
+    render(<FeedbackViewer {...semSessao} />);
+    expect(screen.queryByRole("button", { name: /enviar comentário/i })).not.toBeInTheDocument();
+  });
+
+  it("não oferece marcar ponto na arte — marcar só serve para escrever", () => {
+    render(<FeedbackViewer {...semSessao} />);
+    expect(screen.queryByRole("button", { name: /^comentar$/i })).not.toBeInTheDocument();
+  });
+
+  it("no lugar, oferece a porta — e ela volta para esta arte", () => {
+    render(<FeedbackViewer {...semSessao} />);
+    const porta = screen.getByRole("link", { name: /entrar para comentar/i });
+    expect(porta.getAttribute("href")).toContain("/login?next=");
+  });
+
+  it("continua mostrando a arte e os comentários — ler pelo link é público", () => {
+    render(<FeedbackViewer {...semSessao} initialFeedbacks={[baseFeedback]} />);
+    expect(screen.getByText(baseFeedback.conteudo)).toBeInTheDocument();
+  });
+
+  it("com sessão, a área de escrita volta a existir", () => {
+    render(<FeedbackViewer {...defaultProps} />);
+    expect(screen.getByPlaceholderText(/escreva um comentário/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /entrar para comentar/i })).not.toBeInTheDocument();
   });
 });

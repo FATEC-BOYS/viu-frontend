@@ -404,6 +404,19 @@ export default function CadastroPage() {
   const sendingRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /*
+   * "Este e-mail já tem conta" não é o mesmo tipo de erro que os outros.
+   *
+   * Nos outros, o próximo passo é tentar de novo. Neste, não existe tentar de
+   * novo — e ele acontece bastante com quem NUNCA pediu conta: o designer
+   * cadastrou o cliente pelo wizard, e meses depois o cliente vem se cadastrar
+   * sozinho. Ele via "Email já está em uso", não tinha senha nenhuma (a conta
+   * nasceu com uma aleatória que ninguém conhece) e parava ali.
+   *
+   * A saída sempre existiu — definir a senha pelo fluxo de recuperação —, só
+   * não estava escrita em lugar nenhum.
+   */
+  const [emailJaTemConta, setEmailJaTemConta] = useState(false);
 
   const canNext = useMemo(() => {
     if (step === STEPS.ROLE) return !!tipo;
@@ -437,6 +450,7 @@ export default function CadastroPage() {
       sendingRef.current = true;
       setSending(true);
       setMsg(null);
+      setEmailJaTemConta(false);
 
       await api.post('/auth/register', {
         nome: nome.trim(),
@@ -455,7 +469,13 @@ export default function CadastroPage() {
       // não tinha como perceber.
       router.replace(`/verificar-email?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
-      setMsg(err?.message ?? 'Erro inesperado ao cadastrar.');
+      // Pelo `codigo`, não pela frase: a mensagem é copy e vai mudar.
+      if (err?.body?.codigo === 'EMAIL_EM_USO') {
+        setEmailJaTemConta(true);
+        setMsg(null);
+      } else {
+        setMsg(err?.message ?? 'Erro inesperado ao cadastrar.');
+      }
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -521,6 +541,28 @@ export default function CadastroPage() {
               <p className="text-sm text-center text-destructive" aria-live="polite">
                 {msg}
               </p>
+            )}
+
+            {emailJaTemConta && (
+              <div className="rounded-lg border bg-muted/40 p-4 text-center" aria-live="polite">
+                <p className="text-sm font-medium">Já existe uma conta com este e-mail.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pode ser que alguém tenha criado para você — é o que acontece quando um
+                  designer cadastra o cliente dele. Defina sua senha e entre.
+                </p>
+                <div className="mt-3 flex flex-col justify-center gap-2 sm:flex-row">
+                  <Button asChild className="h-11 sm:h-9">
+                    <Link href={`/recuperar?email=${encodeURIComponent(email)}`}>
+                      Definir minha senha
+                    </Link>
+                  </Button>
+                  {/* "Esqueci minha senha" seria mentira para quem nunca teve
+                      uma. Quem já tem entra direto pelo segundo botão. */}
+                  <Button asChild variant="outline" className="h-11 sm:h-9">
+                    <Link href={`/login?email=${encodeURIComponent(email)}`}>Entrar</Link>
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
 
