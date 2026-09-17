@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
-import { pagamentosApi, SaldoInfo, Assinatura, Fatura, formatReais } from '@/lib/pagamentos'
+import { pagamentosApi, SaldoInfo, Assinatura, Fatura } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
 import PainelDoDia from '@/components/dashboard/PainelDoDia'
@@ -581,6 +581,7 @@ export default function PainelDoDesigner() {
         <div className="flex flex-col gap-4">
           <PainelDoDia
             nome={displayName}
+            comTrilha={mostrarTrilha}
             pendencia={{
               feedbacks: metricas.feedbacksRecentes,
               tarefas: metricas.tarefasPendentes,
@@ -590,29 +591,18 @@ export default function PainelDoDesigner() {
           />
 
           {/*
-            * Os números em uma linha, não em quatro caixas dentro de um
-            * cartão. Quem procura o número acha; quem veio trabalhar não
-            * tropeça neles antes de chegar na fila.
-            */}
-          <div className="flex flex-wrap gap-x-6 gap-y-1 px-1 text-sm text-muted-foreground">
-            <span>
-              <b className="font-semibold tabular-nums text-foreground">{metricas.projetosAtivos}</b>{' '}
-              {metricas.projetosAtivos === 1 ? 'projeto ativo' : 'projetos ativos'}
-            </span>
-            <span>
-              <b className="font-semibold tabular-nums text-foreground">{metricas.totalArtes}</b>{' '}
-              {metricas.totalArtes === 1 ? 'arte' : 'artes'}
-            </span>
-            <span>
-              <b className="font-semibold tabular-nums text-foreground">{metricas.feedbacksRecentes}</b>{' '}
-              {metricas.feedbacksRecentes === 1 ? 'feedback' : 'feedbacks'}
-            </span>
-            <span>
-              <b className="font-semibold tabular-nums text-foreground">{metricas.tarefasPendentes}</b>{' '}
-              {metricas.tarefasPendentes === 1 ? 'tarefa aberta' : 'tarefas abertas'}
-            </span>
-          </div>
-
+            A linha de números saiu daqui.
+            
+            Ela ficava entre o recado do dia e a fila, e repetia os dois: o
+            recado já diz "3 feedbacks esperando você" e a fila lista os três,
+            um a um. A mesma pendência era anunciada três vezes antes de a
+            pessoa poder tocar em qualquer uma — e a linha ficava no meio do
+            caminho entre a manchete e o que ela resume.
+            
+            Os outros dois números (projetos ativos, total de artes) não são
+            trabalho de hoje: "Seus projetos" logo abaixo lista os projetos, e
+            o total de artes é estatística, não fila.
+          */}
           {/*
             * Duas linhas, e a ordem é a da urgência: em cima o que se faz
             * agora — a sua fila, e ao lado o que não está na sua mão. Embaixo

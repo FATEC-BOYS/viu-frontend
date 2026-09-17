@@ -41,10 +41,21 @@ export default function ParadoNoCliente({
   itens: ItemParado[]
   proximoPasso?: ProximoPasso
 }) {
+  /*
+   * O título segue o que a faixa está mostrando.
+   *
+   * Era "Parado no cliente" fixo, e dois dos três estados vazios falavam de
+   * coisa parada em VOCÊ: "Você ainda não mandou nenhum link" e "primeiro sobe
+   * a arte". O título dizia de quem era a bola e o corpo dizia o contrário, na
+   * mesma caixa — e é justamente de quem é a bola que esta faixa existe para
+   * responder.
+   */
+  const aindaNaoMandei = itens.length === 0 && proximoPasso !== null
+
   return (
     <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
-        Parado no cliente
+        {aindaNaoMandei ? 'Parado em você' : 'Parado no cliente'}
       </h2>
 
       {itens.length === 0 ? (

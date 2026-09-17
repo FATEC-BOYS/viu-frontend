@@ -94,14 +94,24 @@ export default function EstaSemana({ resumo }: { resumo: SemanaResumo }) {
         Esta semana
       </h2>
 
-      <div className="rounded-lg bg-pastel-menta/40 p-3.5">
+      {/*
+        A menta só aparece quando há o que comemorar.
+
+        No zero, o bloco verde com o número gigante e a linha do tempo por
+        baixo dizia "indo bem" enquanto o número dizia "nada aconteceu" — e a
+        sparkline de quatro zeros é uma reta rente ao chão, ruído puro. Esta é
+        a única faixa da tela que devolve alguma coisa; celebrar o zero gasta
+        justamente a cor que faz a semana boa valer.
+      */}
+      <div className={aprovacoes > 0 ? 'rounded-lg bg-pastel-menta/40 p-3.5' : ''}>
         <p className="font-display text-3xl font-extrabold leading-none tracking-[-0.035em] tabular-nums">
           {aprovacoes}
         </p>
         <p className="mt-1 text-pretty text-xs text-muted-foreground">
           {recadoDaSemana(historico, aprovacoes)}
         </p>
-        <Sparkline valores={historico} />
+        {/* Sem histórico nenhum a linha não compara nada consigo mesma. */}
+        {historico.some((v) => v > 0) && <Sparkline valores={historico} />}
       </div>
 
       {/* O dinheiro desce de peso: é contexto, não a ação do dia. */}

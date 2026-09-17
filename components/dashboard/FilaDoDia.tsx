@@ -35,6 +35,21 @@ const PINO: Record<ItemDaFila['tipo'], string> = {
   prazo: 'bg-pastel-menta',
 }
 
+/**
+ * O que o pino quer dizer, em palavras.
+ *
+ * Ele era `aria-hidden` e nada mais dizia o tipo: a cor era o único indicador,
+ * invisível para quem usa leitor de tela e mudo para quem abre o VIU pela
+ * primeira vez e ainda não aprendeu o código. A fila mistura três naturezas de
+ * propósito — é o ponto dela — mas misturar sem nomear transfere para quem lê
+ * o trabalho de adivinhar por que aquelas linhas estão juntas.
+ */
+const NOME_DO_TIPO: Record<ItemDaFila['tipo'], string> = {
+  feedback: 'Feedback',
+  tarefa: 'Tarefa',
+  prazo: 'Prazo',
+}
+
 export default function FilaDoDia({
   itens,
   proximoPasso = null,
@@ -76,6 +91,7 @@ export default function FilaDoDia({
               >
                 <span aria-hidden className={`w-[3px] shrink-0 rounded-full ${PINO[item.tipo]}`} />
                 <span className="min-w-0 flex-1">
+                  <span className="sr-only">{NOME_DO_TIPO[item.tipo]}: </span>
                   <span className="block truncate text-sm font-medium">{item.titulo}</span>
                   <span className="block truncate text-xs text-muted-foreground">{item.apoio}</span>
                 </span>
