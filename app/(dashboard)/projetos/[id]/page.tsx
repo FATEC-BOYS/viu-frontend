@@ -32,17 +32,13 @@ import NumerosDoProjeto from "@/components/projetos/overview/NumerosDoProjeto";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
 import MicroKanban from "@/components/projetos/overview/MicroKanban";
 import TarefasEmLinha from "@/components/projetos/overview/TarefasEmLinha";
-import CTAContextual from "@/components/projetos/overview/CTAContextual";
 import OverviewSkeleton from "@/components/projetos/overview/OverviewSkeleton";
 
 import ArtesToolbar from "@/components/projetos/artes/ArtesToolbar";
 import ArtesDenseList from "@/components/projetos/artes/ArtesDenseList";
 import ArteQuickPeekDrawer from "@/components/projetos/artes/ArteQuickPeekDrawer";
 import ArtesSkeleton from "@/components/projetos/artes/ArtesSkeleton";
-import type {
-  ArteFilters as UIArteFilters,
-  ArteStatus,
-} from "@/components/projetos/artes/ArtesToolbar";
+import type { ArteFilters as UIArteFilters } from "@/components/projetos/artes/ArtesToolbar";
 import type { ArteListItem as UIArteListItem } from "@/components/projetos/artes/ArtesDenseList";
 
 import AprovacaoPanel from "@/components/projetos/aprovacao/AprovacaoPanel";
@@ -59,6 +55,16 @@ import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton"
 
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
 import NovaVersaoDialog from "@/components/artes/NovaVersaoDialog";
+import ArteWizard from "@/components/artes/ArteWizard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 import { getArteDetail, type ArteDetail } from "@/lib/artes";
 import ProjetoModal, { type ProjetoInitial } from "@/components/projetos/ProjetoModal";
 import { toast } from "sonner";
@@ -218,6 +224,17 @@ export default function ProjetoPage() {
   const [artFrom, setArtFrom] = useState(0);
   const [filters, setFilters] = useState<ArteFilters>({} as ArteFilters);
   const [peekId, setPeekId] = useState<string | null>(null);
+  /*
+   * Subir arte não tinha porta nesta tela.
+   *
+   * "Subir nova arte", na Visão Geral, só chamava `setTab("artes")` — e a aba
+   * Artes é busca, filtros e lista, sem nenhum botão de subir. O designer era
+   * levado para um beco: a ação mais comum do produto exigia sair do projeto,
+   * ir em /artes e escolher de novo, num seletor, o projeto em que ele já
+   * estava. O `ArteWizard` sempre recebeu `projetoId`; só não estava montado
+   * aqui.
+   */
+  const [subindoArte, setSubindoArte] = useState(false);
   /** Arte cujo diálogo de nova versão está aberto. */
   const [arteVersao, setArteVersao] = useState<ArteDetail | null>(null);
   /** Arte para a qual se está pedindo aprovação a partir da lista. */
@@ -516,7 +533,9 @@ export default function ProjetoPage() {
                 onAction={() => {
                   if (resumo.estado === "CONCLUIR") concluirProjeto();
                   else if (resumo.estado === "PEDIR_APROVACAO") setTab("approval");
-                  else setTab("artes");
+                  // "Subir nova arte" abre o wizard, em vez de só trocar de aba
+                  // para uma que não tinha como subir nada.
+                  else setSubindoArte(true);
                 }}
               />
 
@@ -578,14 +597,23 @@ export default function ProjetoPage() {
 
         {tab === "artes" && (
           <>
-            <ArtesToolbar
-              filters={filters}
-              onChange={f => {
-                setFilters(f);
-                setArtFrom(0);
-                loadArtes(false);
-              }}
-            />
+            <div className="flex items-start justify-between gap-3">
+              <ArtesToolbar
+                className="flex-1"
+                filters={filters}
+                onChange={f => {
+                  setFilters(f);
+                  setArtFrom(0);
+                  loadArtes(false);
+                }}
+              />
+              {/* O único botão cheio desta aba, e a ação que ela existe para
+                  servir. */}
+              <Button className="shrink-0 gap-1.5" onClick={() => setSubindoArte(true)}>
+                <Upload className="h-4 w-4" />
+                Subir nova arte
+              </Button>
+            </div>
             {artLoading && artRows.length === 0 ? (
               <ArtesSkeleton />
             ) : (
@@ -686,6 +714,33 @@ export default function ProjetoPage() {
 
         {tab === "billing" && <FaturaTab projetoId={id} designerId={projeto?.designer?.id ?? null} />}
       </div>
+
+      {/*
+        Sem seletor de projeto: já estamos dentro de um. Em /artes o wizard
+        precisa perguntar; aqui perguntar seria pedir de novo o que a URL já diz.
+      */}
+      <Dialog open={subindoArte} onOpenChange={setSubindoArte}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Subir nova arte</DialogTitle>
+            <DialogDescription>Em {projeto.nome}.</DialogDescription>
+          </DialogHeader>
+          {subindoArte && (
+            <ArteWizard
+              projetoId={projeto.id}
+              onFinished={() => {
+                setSubindoArte(false);
+                toast.success("Arte criada.");
+                setTab("artes");
+                loadArtes(false);
+                // O resumo conta artes: sem recarregar, a Visão Geral seguiria
+                // dizendo "1 de 2 já aprovadas" depois da terceira entrar.
+                loadOverview();
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {arteVersao && (
         <NovaVersaoDialog
