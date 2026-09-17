@@ -22,6 +22,17 @@ export interface Projeto {
   cliente: { id: string; nome: string }
   // GET /projetos já devolvia `equipe`; o front simplesmente ignorava.
   equipe: { id: string; nome: string; slug: string } | null
+  /**
+   * Quanto do projeto já foi aprovado.
+   *
+   * Estava faltando no tipo, e o cartão lia com `(p as any)?.metricas` — o
+   * cast desligou a checagem que teria denunciado que o backend nunca mandava
+   * este objeto. A barra de progresso nasceu vazia em todo projeto e ficou
+   * assim, porque nada em lugar nenhum reclamava. Agora é opcional e tipado:
+   * uma resposta antiga sem o campo continua compilando, e uma leitura de
+   * caminho errado não.
+   */
+  metricas?: { totalArtes: number; aprovadas: number } | null
   criado_em: string
   atualizado_em: string
 }
@@ -81,6 +92,23 @@ function mapProjeto(p: any): Projeto {
     cliente: { id: p.cliente?.id ?? '', nome: p.cliente?.nome ?? '' },
     equipe: p.equipe
       ? { id: p.equipe.id, nome: p.equipe.nome, slug: p.equipe.slug ?? '' }
+      : null,
+    /*
+     * Este mapeador monta o objeto campo a campo, e por isso ele é uma porta:
+     * o que não está listado aqui não entra, por mais que o servidor mande.
+     *
+     * `metricas` não estava — e essa é a raiz do `as any` que havia no cartão.
+     * O tipo `Projeto` não tinha o campo, então quem foi desenhar a barra de
+     * progresso não conseguiu lê-lo tipado e contornou com um cast. O cast
+     * desligou a checagem, ninguém mais reclamou, e a barra ficou vazia em
+     * todo projeto desde então. Três elos: o mapeador descarta, o tipo não
+     * declara, o cast silencia.
+     */
+    metricas: p.metricas
+      ? {
+          totalArtes: Number(p.metricas.totalArtes ?? 0),
+          aprovadas: Number(p.metricas.aprovadas ?? 0),
+        }
       : null,
     criado_em: p.criadoEm ?? p.criado_em ?? '',
     atualizado_em: p.atualizadoEm ?? p.atualizado_em ?? '',
