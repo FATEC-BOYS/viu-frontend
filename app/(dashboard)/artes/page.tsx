@@ -17,6 +17,7 @@ import ArteWizard from "@/components/artes/ArteWizard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
@@ -93,6 +94,41 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/**
+ * Um par rótulo/valor em que o valor é clicável e cabe no espaço que tem.
+ *
+ * Existe porque `truncate` num invólucro não corta o texto de um <button>
+ * dentro dele: a caixa trata o botão como bloco atômico, some com ele inteiro e
+ * deixa só o rótulo. Aqui o rótulo não encolhe (`shrink-0`) e quem trunca é o
+ * botão, que é quem tem o texto.
+ */
+function ValorFiltravel({
+  rotulo,
+  valor,
+  onClick,
+}: {
+  rotulo: string;
+  valor: string | null | undefined;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-1">
+      <span className="shrink-0 text-muted-foreground">{rotulo}:</span>
+      {valor ? (
+        <button
+          className="min-w-0 truncate underline underline-offset-2 hover:opacity-80"
+          title={valor}
+          onClick={onClick}
+        >
+          {valor}
+        </button>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )}
+    </div>
+  );
+}
+
 function TipoPill({ tipo, onClick }: { tipo: string; onClick?: () => void }) {
   return (
     <button
@@ -162,8 +198,17 @@ function ArteCard({
         </div>
       </div>
 
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-3">
+      {/*
+        `min-w-0` no filho direto do CardHeader.
+
+        O CardHeader do shadcn é `grid`, e um item de grade nasce com
+        `min-width: auto`: ele se recusa a encolher abaixo do conteúdo. O nome
+        da arte então crescia para fora do cartão e o `overflow-hidden` do
+        cartão cortava no meio da palavra — "Cartão de Visita TechStar" — sem
+        nem reticências, porque o `truncate` nunca chegava a agir.
+      */}
+      <CardHeader className="min-w-0 pb-2">
+        <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="text-base truncate">{arte.nome}</CardTitle>
             <p className="text-xs text-muted-foreground truncate">
@@ -180,38 +225,39 @@ function ArteCard({
       </CardHeader>
 
       <CardContent className="pt-0">
+        {/*
+          O `truncate` estava no invólucro, e o valor dentro de um <button>.
+
+          `text-overflow: ellipsis` só corta o texto do próprio elemento — não
+          alcança dentro de um botão, que a caixa trata como bloco atômico. O
+          resultado era o rótulo sobreviver e o VALOR sumir inteiro: a tela
+          mostrava "Projeto: …" e "Cliente:", que são exatamente os dois campos
+          que distinguem uma arte de outra numa lista global. "Autor" escapava
+          só porque seu invólucro não tinha `flex-1` e nunca chegava a
+          transbordar.
+
+          Agora o `truncate` está no botão, que é quem tem o texto.
+        */}
         <div className="flex items-center justify-between gap-2 text-xs">
-          <div className="min-w-0 flex-1 truncate">
-            <span className="text-muted-foreground">Projeto: </span>
-            <button
-              className="underline underline-offset-2 hover:opacity-80"
-              onClick={() => arte.projeto_nome && onFilter("projeto", arte.projeto_nome)}
-            >
-              {arte.projeto_nome}
-            </button>
-          </div>
+          <ValorFiltravel
+            rotulo="Projeto"
+            valor={arte.projeto_nome}
+            onClick={() => arte.projeto_nome && onFilter("projeto", arte.projeto_nome)}
+          />
           <span className="shrink-0 text-muted-foreground">{formatDate(arte.criado_em)}</span>
         </div>
 
-        <div className="flex items-center justify-between gap-2 text-xs mt-2">
-          <div className="min-w-0 flex-1 truncate">
-            <span className="text-muted-foreground">Cliente: </span>
-            <button
-              className="underline underline-offset-2 hover:opacity-80"
-              onClick={() => arte.cliente_nome && onFilter("cliente", arte.cliente_nome)}
-            >
-              {arte.cliente_nome}
-            </button>
-          </div>
-          <div className="truncate">
-            <span className="text-muted-foreground">Autor: </span>
-            <button
-              className="underline underline-offset-2 hover:opacity-80"
-              onClick={() => arte.autor_nome && onFilter("autor", arte.autor_nome)}
-            >
-              {arte.autor_nome}
-            </button>
-          </div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+          <ValorFiltravel
+            rotulo="Cliente"
+            valor={arte.cliente_nome}
+            onClick={() => arte.cliente_nome && onFilter("cliente", arte.cliente_nome)}
+          />
+          <ValorFiltravel
+            rotulo="Autor"
+            valor={arte.autor_nome}
+            onClick={() => arte.autor_nome && onFilter("autor", arte.autor_nome)}
+          />
         </div>
 
         <div className="mt-3 flex items-center justify-between">
@@ -411,11 +457,13 @@ function ArtesPageInner() {
             {estatisticas.emAnalise > 0 && (
               <Badge variant="outline" className="gap-1" title="Em análise"><Clock className="h-3 w-3" /> {estatisticas.emAnalise}</Badge>
             )}
+            {/* Contornados: são contagens, e três pílulas cheias no topo
+                disputavam a atenção com o único botão que faz algo aqui. */}
             {estatisticas.aprovadas > 0 && (
-              <Badge className="gap-1" title="Aprovadas"><CheckCircle2 className="h-3 w-3" /> {estatisticas.aprovadas}</Badge>
+              <Badge variant="outline" className="gap-1 border-emerald-600/30 text-emerald-700 dark:text-emerald-400" title="Aprovadas"><CheckCircle2 className="h-3 w-3" /> {estatisticas.aprovadas}</Badge>
             )}
             {estatisticas.rejeitadas > 0 && (
-              <Badge variant="destructive" className="gap-1" title="Rejeitadas"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
+              <Badge variant="outline" className="gap-1 border-destructive/30 text-destructive" title="Rejeitadas"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
             )}
           </div>
         </div>
@@ -485,9 +533,18 @@ function ArtesPageInner() {
             <Button
               key={s.key}
               size="sm"
-              variant={statusFilter === s.key ? "default" : "outline"}
+              /* `secondary` e não `default`: o chip ativo precisa se
+                 distinguir dos outros, não competir com "Nova Arte" pela
+                 mesma cor. Estado não é ação.
+
+                 Com a borda: só o fundo `secondary` neste tema claro quase
+                 some, e aí nada na linha diz qual filtro está valendo. */
+              variant={statusFilter === s.key ? "secondary" : "outline"}
               onClick={() => setParam("status", s.key)}
-              className="rounded-full"
+              className={cn(
+                "rounded-full",
+                statusFilter === s.key && "border border-foreground/25 font-medium",
+              )}
             >
               {s.label}
             </Button>
@@ -499,9 +556,12 @@ function ArtesPageInner() {
           <div className="flex items-center gap-2 overflow-x-auto py-1">
             <Button
               size="sm"
-              variant={tipoFilter === "todos" ? "default" : "outline"}
+              variant={tipoFilter === "todos" ? "secondary" : "outline"}
               onClick={() => setParam("tipo", "todos")}
-              className="rounded-full"
+              className={cn(
+                "rounded-full",
+                tipoFilter === "todos" && "border border-foreground/25 font-medium",
+              )}
             >
               <Layers3 className="h-4 w-4 mr-1" /> Todos tipos
             </Button>
@@ -509,9 +569,12 @@ function ArtesPageInner() {
               <Button
                 key={t}
                 size="sm"
-                variant={tipoFilter === t ? "default" : "outline"}
+                variant={tipoFilter === t ? "secondary" : "outline"}
                 onClick={() => setParam("tipo", t)}
-                className="rounded-full"
+                className={cn(
+                  "rounded-full",
+                  tipoFilter === t && "border border-foreground/25 font-medium",
+                )}
               >
                 {t}
               </Button>
