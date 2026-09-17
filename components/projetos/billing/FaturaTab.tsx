@@ -1,14 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import {
-  Receipt, CheckCircle2, Clock, XCircle, Loader2,
-  Plus, ArrowRight, Zap, AlertCircle
-} from 'lucide-react'
+import { Loader2, Plus, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
 import { useRouter } from 'next/navigation'
@@ -19,13 +15,15 @@ import {
 } from '@/components/ui/alert-dialog'
 import TermosProjetoCard from '@/components/projetos/termos/TermosProjetoCard'
 import ContratoProjetoCard from '@/components/projetos/contrato/ContratoProjetoCard'
-import { frasedeQuemFalta, type PapelContrato } from '@/lib/contrato'
+import type { PapelContrato } from '@/lib/contrato'
+import type { CampoTermo } from '@/lib/termos'
+import { passoDaCobranca } from '@/lib/passoDaCobranca'
 
-const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
-  PENDENTE: { label: 'Aguardando pagamento', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
-  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
-  CANCELADA: { label: 'Cancelada', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
-  ESTORNADA: { label: 'Estornada', icon: AlertCircle, cls: 'text-purple-400 bg-purple-400/10' },
+const ROTULO_STATUS: Record<FaturaStatus, string> = {
+  PENDENTE: 'Aguardando pagamento',
+  PAGA: 'Paga',
+  CANCELADA: 'Cancelada',
+  ESTORNADA: 'Estornada',
 }
 
 /**
@@ -59,13 +57,36 @@ export default function FaturaTab({
   const podeGerar = ehAdmin || (!!usuarioId && !!designerId && usuarioId === designerId)
 
   /*
-   * Estado do contrato, reportado pelo card acima. A aba não consulta de novo:
+   * Estado do contrato, reportado pelo card abaixo. A aba não consulta de novo:
    * duas leituras da mesma coisa podem discordar, e discordar aqui significa o
-   * aviso dizer "pode cobrar" enquanto o backend recusa.
+   * aviso dizer "pode cobrar" enquanto o backend recusa. `null` enquanto a
+   * primeira resposta não chega — sem isso a frase do passo nasceria errada,
+   * anunciando "gere o resumo" antes de saber se os termos estão combinados.
    */
-  const [contratoPendente, setContratoPendente] = useState<
-    { temContrato: boolean; faltam: PapelContrato[] } | null
-  >(null)
+  const [estadoContrato, setEstadoContrato] = useState<{
+    termosFaltantes: CampoTermo[]
+    possoAceitar: boolean
+    temContrato: boolean
+    faltam: PapelContrato[]
+  } | null>(null)
+
+  const receberEstadoContrato = useCallback(
+    (e: { termosFaltantes: CampoTermo[]; possoAceitar: boolean; temContrato: boolean; faltam: PapelContrato[] }) =>
+      setEstadoContrato({
+        termosFaltantes: e.termosFaltantes,
+        possoAceitar: e.possoAceitar,
+        temContrato: e.temContrato,
+        faltam: e.faltam,
+      }),
+    [],
+  )
+
+  /*
+   * Bump quando os termos são salvos: o card do contrato relê e a frase do
+   * passo acompanha. Sem isso, salvar os termos deixava a aba anunciando uma
+   * pendência que a pessoa acabou de resolver.
+   */
+  const [versaoTermos, setVersaoTermos] = useState(0)
 
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [loading, setLoading] = useState(true)
@@ -188,153 +209,149 @@ export default function FaturaTab({
     )
   }
 
+  /*
+   * Onde o projeto está na sequência — combinar, gerar, aceitar, cobrar.
+   *
+   * A conta é feita aqui, uma vez, e as três seções obedecem: só o passo atual
+   * ganha botão cheio, e só ele escreve a frase explicativa. Antes cada seção
+   * avisava por conta própria, e a mesma pendência aparecia em três caixas
+   * âmbar seguidas, com dois botões cheios disputando a tela — um deles
+   * desabilitado.
+   */
+  const passo = passoDaCobranca({
+    podeCobrar: podeGerar,
+    termosFaltantes: estadoContrato?.termosFaltantes ?? [],
+    temContrato: estadoContrato?.temContrato ?? false,
+    faltamAceitar: estadoContrato?.faltam ?? [],
+    possoAceitar: estadoContrato?.possoAceitar ?? false,
+    fatura: faturaAtiva?.status === 'PAGA' ? 'PAGA' : faturaAtiva ? 'PENDENTE' : 'NENHUMA',
+    souPagador: !!faturaAtiva && ehPagador(faturaAtiva),
+    nomeDoCliente: faturaAtiva?.cliente.nome,
+  })
+
+  /** A segunda linha de cada fatura: o estado dela em palavras, não em pílula. */
+  function situacaoDaFatura(f: Fatura): string {
+    if (f.status === 'PAGA') {
+      return f.dataPagamento
+        ? `Paga em ${new Date(f.dataPagamento).toLocaleDateString('pt-BR')}`
+        : 'Pagamento confirmado'
+    }
+    if (f.status !== 'PENDENTE') return ROTULO_STATUS[f.status] ?? f.status
+    if (ehPagador(f)) return 'Aguardando seu pagamento'
+    return (
+      `Aguardando o pagamento de ${f.cliente.nome}` +
+      (ehRecebedor(f) ? ` · você recebe ${f.valorLiquidoDesignerFormatado}` : '')
+    )
+  }
+
   return (
-    <div className="space-y-5 max-w-lg">
+    <div className="max-w-2xl space-y-4">
       {/*
-        Os termos vêm antes da fatura de propósito: é aqui que a falta deles
-        atrapalha. A pessoa abre a aba para cobrar e descobre que ainda não
-        combinou sob quais condições — em vez de descobrir depois, numa recusa.
+        A única frase explicativa da aba. Âmbar só quando a pendência é de quem
+        está lendo: um projeto esperando o cliente pagar não é problema do
+        designer, e pintar isso de alerta treina a pessoa a ignorar alertas.
       */}
-      <TermosProjetoCard projetoId={projetoId} podeEditar={podeGerar} />
-
-      {/* Depois dos termos porque é deles que o contrato nasce: a ordem na tela
-          é a ordem do que acontece — combinar, gerar, as duas partes aceitarem. */}
-      <ContratoProjetoCard
-        projetoId={projetoId}
-        podeGerar={podeGerar}
-        aoMudarEstado={({ pronto, temContrato, faltam }) =>
-          setContratoPendente(pronto ? null : { temContrato, faltam })
-        }
-      />
-
-      {/*
-        O aviso fica junto do botão, não só no card acima: é aqui que a pessoa
-        vai cobrar. Hoje ele só informa — `EXIGIR_CONTRATO_PROJETO` nasce
-        desligado, e ligar o bloqueio com os projetos existentes sem contrato
-        deixaria todo mundo sem conseguir faturar.
-      */}
-      {podeGerar && contratoPendente !== null && (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
-          {!contratoPendente.temContrato
-            ? 'Este projeto ainda não tem o resumo do combinado gerado.'
-            : frasedeQuemFalta(contratoPendente.faltam)}{' '}
-          Dá para cobrar assim mesmo, mas sem o resumo aceito não há registro do que foi combinado
-          se a cobrança virar discussão.
+      {estadoContrato !== null && (
+        <p
+          className={cn(
+            'text-sm',
+            passo.pendente ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground',
+          )}
+        >
+          {passo.frase}
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Faturas do projeto</h3>
-        {podeGerar && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 rounded-xl"
-            onClick={aoClicarGerar}
-            disabled={generating}
-          >
-            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-            Gerar fatura
-          </Button>
-        )}
+      {/*
+        Uma borda só, com fio entre as seções. Eram três cartões empilhados,
+        cada um com caixas âmbar dentro — caixa dentro de caixa dentro da aba,
+        que já está dentro da página do projeto.
+
+        A ordem é a do que acontece: combinar as condições, gerar o resumo que
+        nasce delas, cobrar.
+      */}
+      <div className="divide-y rounded-xl border bg-card">
+        <TermosProjetoCard
+          projetoId={projetoId}
+          podeEditar={podeGerar}
+          emDestaque={passo.passo === 'COMBINAR'}
+          aoSalvar={() => setVersaoTermos((v) => v + 1)}
+        />
+
+        <ContratoProjetoCard
+          projetoId={projetoId}
+          podeGerar={podeGerar}
+          emDestaque={passo.passo === 'GERAR' || passo.passo === 'ACEITAR'}
+          recarregar={versaoTermos}
+          aoMudarEstado={receberEstadoContrato}
+        />
+
+        <section className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Faturas do projeto</h3>
+            {podeGerar && (
+              <Button
+                size="sm"
+                variant={passo.passo === 'COBRAR' ? 'default' : 'outline'}
+                className="gap-1.5"
+                onClick={aoClicarGerar}
+                disabled={generating}
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                Gerar fatura
+              </Button>
+            )}
+          </div>
+
+          {faturas.length === 0 ? (
+            /* Uma linha, não uma caixa tracejada de 10 de padding com um ícone
+               grande no meio: "não há nada aqui" não merece o maior elemento
+               da tela. */
+            <p className="text-sm text-muted-foreground">Nenhuma fatura gerada ainda.</p>
+          ) : (
+            <ul className="divide-y">
+              {faturas.map((fatura) => (
+                <li key={fatura.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium tabular-nums">
+                      {fatura.valorFormatado}
+                      {fatura.descricao ? (
+                        <span className="font-normal text-muted-foreground"> · {fatura.descricao}</span>
+                      ) : null}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {situacaoDaFatura(fatura)}
+                    </p>
+                  </div>
+
+                  {fatura.status === 'PENDENTE' && ehPagador(fatura) ? (
+                    <Button
+                      asChild
+                      size="sm"
+                      variant={passo.passo === 'PAGAR' ? 'default' : 'outline'}
+                      className="h-8 shrink-0 gap-1"
+                    >
+                      <Link href={`/faturas/${fatura.id}`}>
+                        <Zap className="h-3 w-3" />
+                        Pagar com PIX
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" variant="ghost" className="h-8 shrink-0">
+                      <Link href={`/faturas/${fatura.id}`}>Ver</Link>
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
-      <AnimatePresence>
-        {faturas.length === 0 ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground"
-          >
-            <Receipt className="h-8 w-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Nenhuma fatura gerada para este projeto.</p>
-          </motion.div>
-        ) : (
-          faturas.map((fatura, i) => {
-            // A coluna `status` é texto livre no banco, não enum: um valor
-            // fora deste mapa derrubava a aba inteira em vez de mostrar uma
-            // fatura com rótulo desconhecido.
-            const { label, icon: Icon, cls } = STATUS_CFG[fatura.status] ?? {
-              label: fatura.status, icon: AlertCircle, cls: 'text-muted-foreground bg-muted',
-            }
-            return (
-              <motion.div
-                key={fatura.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.07, type: 'spring', stiffness: 300, damping: 26 }}
-                className="rounded-xl border border-border/60 overflow-hidden"
-              >
-                <div className="flex items-center gap-3 p-4">
-                  <div className="p-2 rounded-lg bg-muted">
-                    <Receipt className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold tabular-nums">{fatura.valorFormatado}</p>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${cls}`}>
-                        <Icon className="h-3 w-3" />
-                        {label}
-                      </span>
-                    </div>
-                    {fatura.descricao && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{fatura.descricao}</p>
-                    )}
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>Cliente: {fatura.cliente.nome}</span>
-                      <span>·</span>
-                      <span>Designer recebe: {fatura.valorLiquidoDesignerFormatado}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {fatura.status === 'PENDENTE' && (
-                  <>
-                    <Separator />
-                    <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500/5 px-4 py-2">
-                      {ehPagador(fatura) ? (
-                        <>
-                          <p className="text-xs text-muted-foreground">Vence quando você quiser pagar</p>
-                          <Button asChild size="sm" className="h-7 gap-1 rounded-xl">
-                            <Link href={`/faturas/${fatura.id}`}>
-                              <Zap className="h-3 w-3" />
-                              Pagar com PIX
-                            </Link>
-                          </Button>
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Aguardando o pagamento de {fatura.cliente.nome}
-                          {ehRecebedor(fatura) && `. Você recebe ${fatura.valorLiquidoDesignerFormatado} quando cair.`}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {fatura.status === 'PAGA' && (
-                  <>
-                    <Separator />
-                    <div className="flex items-center justify-between px-4 py-2 bg-emerald-500/5">
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400 dark:text-emerald-400">
-                        {fatura.dataPagamento
-                          ? `Pago em ${new Date(fatura.dataPagamento).toLocaleDateString('pt-BR')}`
-                          : 'Pagamento confirmado'}
-                      </p>
-                      <Button asChild size="sm" variant="ghost" className="h-7 rounded-xl gap-1">
-                        <Link href={`/faturas/${fatura.id}`}>
-                          Ver detalhes <ArrowRight className="h-3 w-3" />
-                        </Link>
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            )
-          })
-        )}
-      </AnimatePresence>
 
       {/*
         O alerta existe porque a recusa chegava como um toast vermelho depois
