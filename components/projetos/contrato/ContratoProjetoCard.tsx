@@ -77,6 +77,8 @@ export default function ContratoProjetoCard({
   aoMudarEstado?: (estado: {
     /** O que falta nos termos, segundo a mesma leitura que traz o contrato. */
     termosFaltantes: CampoTermo[]
+    /** Os termos mudaram depois de o vigente ser gerado. O servidor é quem diz. */
+    desatualizado: boolean
     /** Tenho papel no contrato e ainda não aceitei. */
     possoAceitar: boolean
     pronto: boolean
@@ -109,6 +111,7 @@ export default function ContratoProjetoCard({
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [aceite, setAceite] = useState<EstadoAceite | null>(null)
   const [termosFaltantes, setTermosFaltantes] = useState<CampoTermo[]>([])
+  const [desatualizado, setDesatualizado] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [gerando, setGerando] = useState(false)
   const [aceitando, setAceitando] = useState(false)
@@ -122,8 +125,10 @@ export default function ContratoProjetoCard({
       setContrato(res.data)
       setAceite(res.aceite)
       setTermosFaltantes(res.termosFaltantes)
+      setDesatualizado(!!res.desatualizado)
       avisar.current?.({
         termosFaltantes: res.termosFaltantes,
+        desatualizado: !!res.desatualizado,
         possoAceitar: !!res.data && !!res.aceite.meuPapel && !res.aceite.jaAceitei,
         pronto: !!res.data && res.aceite.faltam.length === 0,
         temContrato: !!res.data,
@@ -195,7 +200,15 @@ export default function ContratoProjetoCard({
   }
 
   const termosProntos = termosFaltantes.length === 0
-  const podeAceitar = !!contrato && !!aceite?.meuPapel && !aceite.jaAceitei
+  /*
+   * Ninguém aceita um resumo que já não descreve o combinado.
+   *
+   * Aceitar congelaria a concordância no texto errado — justamente o que este
+   * documento existe para impedir. O caminho é gerar a versão nova, que reabre
+   * os aceites. Oferecer o botão aqui seria oferecer o erro.
+   */
+  const podeAceitar =
+    !!contrato && !!aceite?.meuPapel && !aceite.jaAceitei && !desatualizado
 
   return (
     <section className="space-y-3 p-4">
@@ -250,6 +263,19 @@ export default function ContratoProjetoCard({
             </span>
             <span className="text-muted-foreground">gerado em {dataCurta(contrato.criadoEm)}</span>
           </div>
+
+          {/*
+            Um resumo que já não descreve o combinado precisa dizer isso em
+            cima do próprio documento — a frase da aba avisa uma vez, mas é
+            aqui que a pessoa está lendo v1, hash e aceites, e nada disso vale
+            para os termos de hoje.
+          */}
+          {desatualizado && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              As condições mudaram depois desta versão. Gere a nova para os aceites voltarem a valer.
+            </p>
+          )}
 
           {/* Do dado, não de texto fixo: some sozinho quando a redação for revisada.
               Aqui é linha, não caixa: no card ela informa, e a caixa fica para o

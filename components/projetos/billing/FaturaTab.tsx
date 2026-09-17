@@ -67,15 +67,23 @@ export default function FaturaTab({
     termosFaltantes: CampoTermo[]
     possoAceitar: boolean
     temContrato: boolean
+    desatualizado: boolean
     faltam: PapelContrato[]
   } | null>(null)
 
   const receberEstadoContrato = useCallback(
-    (e: { termosFaltantes: CampoTermo[]; possoAceitar: boolean; temContrato: boolean; faltam: PapelContrato[] }) =>
+    (e: {
+      termosFaltantes: CampoTermo[]
+      possoAceitar: boolean
+      temContrato: boolean
+      desatualizado: boolean
+      faltam: PapelContrato[]
+    }) =>
       setEstadoContrato({
         termosFaltantes: e.termosFaltantes,
         possoAceitar: e.possoAceitar,
         temContrato: e.temContrato,
+        desatualizado: e.desatualizado,
         faltam: e.faltam,
       }),
     [],
@@ -222,6 +230,7 @@ export default function FaturaTab({
     podeCobrar: podeGerar,
     termosFaltantes: estadoContrato?.termosFaltantes ?? [],
     temContrato: estadoContrato?.temContrato ?? false,
+    contratoDesatualizado: estadoContrato?.desatualizado ?? false,
     faltamAceitar: estadoContrato?.faltam ?? [],
     possoAceitar: estadoContrato?.possoAceitar ?? false,
     fatura: faturaAtiva?.status === 'PAGA' ? 'PAGA' : faturaAtiva ? 'PENDENTE' : 'NENHUMA',

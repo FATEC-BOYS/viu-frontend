@@ -59,6 +59,18 @@ export interface RespostaContrato {
   aceite: EstadoAceite
   /** O que falta nos termos para o contrato poder ser gerado. */
   termosFaltantes: CampoTermo[]
+  /**
+   * Se os termos mudaram depois de o contrato vigente ser gerado.
+   *
+   * O servidor renderiza o anexo com os termos de hoje e compara o hash com o
+   * do vigente. A tela não tem como calcular — não tem o template nem os dados
+   * — e sem essa resposta ela afirmava "Combinado e aceito pelas duas partes.
+   * Pode cobrar." sobre um documento que descreve outro acordo.
+   *
+   * Opcional para uma resposta antiga não quebrar o tipo; ausente é tratado
+   * como `false`, que é o que o produto fazia antes.
+   */
+  desatualizado?: boolean
 }
 
 /** Uma versão na lista de histórico — sem o texto, que é grande. */
