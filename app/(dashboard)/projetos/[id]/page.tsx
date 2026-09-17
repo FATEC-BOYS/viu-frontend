@@ -31,6 +31,7 @@ import EstadoDoProjeto from "@/components/projetos/overview/EstadoDoProjeto";
 import NumerosDoProjeto from "@/components/projetos/overview/NumerosDoProjeto";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
 import MicroKanban from "@/components/projetos/overview/MicroKanban";
+import TarefasEmLinha from "@/components/projetos/overview/TarefasEmLinha";
 import CTAContextual from "@/components/projetos/overview/CTAContextual";
 import OverviewSkeleton from "@/components/projetos/overview/OverviewSkeleton";
 
@@ -199,7 +200,8 @@ export default function ProjetoPage() {
         id: String(it.id ?? idx),
         kind: it.kind,
         label: String(it.label ?? "Próximo passo"),
-        meta: it.meta,
+        detalhe: it.detalhe,
+        arteId: it.arteId,
         done: !!it.done,
       }));
 
@@ -518,35 +520,51 @@ export default function ProjetoPage() {
                 }}
               />
 
-              {/* O kanban tem três colunas dentro: em metade da largura os
-                  cartões ficam espremidos. */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_3fr]">
-                <ProximosPassos
-                  passos={passos}
-                  onAction={passo => {
-                    switch (passo.kind) {
-                      // O prazo se define no mesmo modal do "Editar".
-                      case "DEFINIR_PRAZO_PROJETO":
-                      case "PRAZO":
-                        setEditando(true);
-                        break;
-                      case "ENVIAR_APROVACAO":
-                      case "LEMBRAR_APROVADORES":
-                      case "CONVIDAR_APROVADOR":
-                      case "APROVADOR":
-                      case "APROVACAO":
-                        setTab("approval");
-                        break;
-                      case "ATRIBUIR_TAREFA":
-                      case "TAREFA":
-                        setTab("tasks");
-                        break;
-                      default:
-                        setTab("artes");
-                    }
-                  }}
-                />
-                <MicroKanban kanban={kanban} onAbrir={() => setTab("tasks")} />
+              {/*
+                Uma borda para as duas colunas, com fio entre elas.
+
+                Eram dois cartões lado a lado, e o da direita era um quadro de
+                três cartões — cartão dentro de cartão dentro da aba. O quadro
+                continua existindo na aba Tarefas, que é onde comparar colunas
+                faz sentido; aqui a pergunta é "o que está na minha mão", e
+                isso é lista.
+              */}
+              <div className="grid grid-cols-1 divide-y rounded-xl border bg-card md:grid-cols-[2fr_3fr] md:divide-x md:divide-y-0">
+                <div className="p-4">
+                  <ProximosPassos
+                    passos={passos}
+                    onAction={passo => {
+                      switch (passo.kind) {
+                        // O prazo se define no mesmo modal do "Editar".
+                        case "DEFINIR_PRAZO_PROJETO":
+                        case "PRAZO":
+                          setEditando(true);
+                          break;
+                        case "ENVIAR_APROVACAO":
+                        case "LEMBRAR_APROVADORES":
+                        case "CONVIDAR_APROVADOR":
+                        case "APROVADOR":
+                        case "APROVACAO":
+                          setTab("approval");
+                          break;
+                        case "ATRIBUIR_TAREFA":
+                        case "TAREFA":
+                          setTab("tasks");
+                          break;
+                        default:
+                          setTab("artes");
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="p-4">
+                  <TarefasEmLinha
+                    kanban={kanban}
+                    onAbrir={() => setTab("tasks")}
+                    onVerTodas={() => setTab("tasks")}
+                  />
+                </div>
               </div>
 
               <NumerosDoProjeto

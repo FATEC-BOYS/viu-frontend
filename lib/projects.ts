@@ -324,7 +324,19 @@ export interface ProximoPasso {
   tipo?: string
   kind: ProximoPassoKind
   label: string
-  meta?: Record<string, any>
+  /**
+   * A segunda linha do passo, escrita para uma pessoa.
+   *
+   * Isto era `meta?: Record<string, any>`, e a tela imprimia o saco inteiro
+   * como `${chave}: ${valor}`. O produtor pendurava ali o id da arte — carga
+   * para o clique, não texto — e o designer lia
+   * "arteId: c3f1d14fcb5998a23e0344227" embaixo do título da tarefa. Um campo
+   * sem tipo entre quem produz e quem desenha é o que deixa a chave primária
+   * do banco chegar na tela.
+   */
+  detalhe?: string
+  /** Carga do clique, nunca desenhada. */
+  arteId?: string
   done?: boolean
 }
 
@@ -343,7 +355,11 @@ export async function getProximosPassos(id: string): Promise<ProximoPasso[]> {
     passos.push({
       kind: 'ENVIAR_APROVACAO',
       label: `Enviar para aprovação: "${pendentes[0].nome}"`,
-      meta: { arteId: pendentes[0].id },
+      arteId: pendentes[0].id,
+      detalhe:
+        pendentes.length > 1
+          ? `e mais ${pendentes.length - 1} ${pendentes.length - 1 === 1 ? 'arte esperando' : 'artes esperando'}`
+          : undefined,
     })
   }
   return passos
