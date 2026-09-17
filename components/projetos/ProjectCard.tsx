@@ -11,12 +11,21 @@ import StatusBadge from "./StatusBadge";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+/*
+ * Sem `as any`.
+ *
+ * Era `(p as any)?.metricas?.totalArtes`, e o cast desligou a única checagem
+ * que teria denunciado o problema: o backend nunca mandou `metricas`. A barra
+ * ficava zerada em todo projeto, para sempre, e nada reclamava — nem o
+ * compilador, nem a tela, que desenha uma barra vazia com a mesma cara de
+ * "0% feito".
+ */
 function useProjetoProgress(p: Projeto) {
-  const totalArtes = (p as any)?.metricas?.totalArtes ?? 0;
-  const aprovadas   = (p as any)?.metricas?.aprovadas  ?? 0;
-  if (!totalArtes) return { value: 0, text: "—" };
+  const totalArtes = p.metricas?.totalArtes ?? 0;
+  const aprovadas = p.metricas?.aprovadas ?? 0;
+  if (!totalArtes) return null;
   const v = Math.round((aprovadas / totalArtes) * 100);
-  return { value: v, text: `${v}%` };
+  return { value: v, texto: `${aprovadas} de ${totalArtes} aprovadas` };
 }
 
 export default function ProjectCard({
@@ -41,9 +50,9 @@ export default function ProjectCard({
   return (
     <Card className="group card-interativo">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-base">
               <Link href={`/projetos/${p.id}`} className="hover:underline focus:outline-none focus:underline">
                 {p.nome}
               </Link>
@@ -54,7 +63,11 @@ export default function ProjectCard({
                 cliente={p.cliente ? { nome: p.cliente.nome } : undefined}
               />
               {p.designer?.nome && p.cliente?.nome && <span className="text-xs">•</span>}
-              <span className="line-clamp-1">
+              {/* `min-w-0` para o `line-clamp` ter onde encolher: sem ele o
+                  nome do cliente sumia atrás do "&", e ficava "Ana Silva &…"
+                  em todo cartão — o cliente é metade do que identifica um
+                  projeto numa lista. */}
+              <span className="min-w-0 line-clamp-1">
                 {p.designer?.nome}{p.designer?.nome && p.cliente?.nome ? " & " : ""}{p.cliente?.nome}
               </span>
             </div>
@@ -66,13 +79,28 @@ export default function ProjectCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Progresso */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Progresso</span><span>{prog.text}</span>
+        {/*
+          Sem artes não há barra.
+
+          Desenhar a régua vazia com um "—" ao lado ocupava a mesma altura de
+          um progresso real para dizer que não há nada a mostrar — e as três
+          barras vazias lado a lado davam à grade a aparência de um projeto
+          travado. Uma linha diz melhor.
+
+          E o rótulo diz a contagem, não a porcentagem: "1 de 2 aprovadas" é
+          o que a pessoa quer saber; "50%" ela teria que reconstituir.
+        */}
+        {prog ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{prog.texto}</span>
+              <span>{prog.value}%</span>
+            </div>
+            <Progress value={prog.value} />
           </div>
-          <Progress value={prog.value} />
-        </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Nenhuma arte neste projeto ainda.</p>
+        )}
 
         {/* Infos */}
         <div className="flex flex-wrap gap-2 text-xs">
@@ -90,9 +118,13 @@ export default function ProjectCard({
               {p.equipe.nome}
             </Badge>
           )}
-          {(p as any)?.metricas?.artesAtivas != null && (
-            <Badge variant="outline">{(p as any).metricas.artesAtivas} artes ativas</Badge>
-          )}
+          {/*
+            Aqui havia um badge "N artes ativas" lendo
+            `(p as any).metricas.artesAtivas`. O backend nunca mandou esse
+            campo tampouco, então a condição era sempre falsa e o badge nunca
+            apareceu para ninguém. Sai em vez de ganhar um número novo: a linha
+            de progresso acima já diz quantas artes existem e quantas passaram.
+          */}
         </div>
 
         {/*
