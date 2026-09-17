@@ -64,8 +64,12 @@ export async function GET(
 
 /**
  * PATCH /api/arte/[id]/aprovacoes
- * Body: { aprovadorId, decisao, comentario?, versao? }
+ * Body: { aprovacaoId, decisao, comentario?, aprovadorId? }
  * Requer Authorization header com JWT do usuário autenticado.
+ *
+ * `aprovacaoId` é o id que a tela escolheu e mostrou. `aprovadorId` continua
+ * aceito como caminho de compatibilidade, para clientes que ainda não foram
+ * atualizados; é ele que obriga a reconsulta descrita abaixo.
  */
 export async function PATCH(
   req: NextRequest,
@@ -79,41 +83,60 @@ export async function PATCH(
   }
 
   const body = await req.json().catch(() => ({}));
-  const { aprovadorId, decisao, comentario } = body;
+  const { aprovacaoId, aprovadorId, decisao, comentario } = body;
 
-  if (!aprovadorId || !decisao) {
+  if (!decisao || (!aprovacaoId && !aprovadorId)) {
     return NextResponse.json(
-      { error: "aprovadorId e decisao são obrigatórios." },
+      { error: "aprovacaoId (ou aprovadorId) e decisao são obrigatórios." },
       { status: 400 }
     );
   }
 
   try {
     /*
-     * Encontra a PENDÊNCIA — não "a aprovação mais recente".
+     * Quando a tela manda o id, não se redescobre nada.
      *
-     * Sem `status=PENDENTE`, a busca ordenada por `criadoEm desc` podia
-     * devolver uma decisão já tomada (de uma versão mais nova) enquanto a
-     * versão anterior seguia esperando. O backend então respondia 409 "é
-     * terminal", e a tela dizia que a decisão falhou sem nunca ter chegado na
-     * linha certa.
+     * A reconsulta abaixo existia para achar a pendência a partir do
+     * aprovador. Ela e a busca que alimenta a barra de decisão são duas
+     * consultas diferentes, com limites diferentes, concordando por um
+     * `orderBy` que nenhuma das duas declara — e a mesma pessoa pode ter duas
+     * pendências abertas na mesma arte, porque `solicitarAprovacao` deduplica
+     * por `versaoNumero`. O modo de falhar é aplicar a decisão na versão
+     * errada, que neste produto é o ato que vale.
+     *
+     * Não é buraco de autorização passar o id: o backend recusa com 403
+     * quando `aprovacao.aprovadorId !== usuario.id`, qualquer que seja o
+     * caminho.
      */
-    const listRes = await backendFetch(
-      `/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&status=PENDENTE&limit=1`,
-      { headers: { ...auth }, cache: "no-store" }
-    );
-    if (!listRes.ok) throw new Error("Falha ao buscar aprovação.");
+    let alvo: string | null = aprovacaoId ?? null;
 
-    const listBody = await listRes.json();
-    const aprovacao = listBody.data?.[0];
-    if (!aprovacao) {
+    if (!alvo) {
+      /*
+       * Caminho de compatibilidade. Encontra a PENDÊNCIA — não "a aprovação
+       * mais recente": sem `status=PENDENTE`, a busca ordenada por `criadoEm
+       * desc` podia devolver uma decisão já tomada (de uma versão mais nova)
+       * enquanto a versão anterior seguia esperando. O backend respondia 409
+       * "é terminal", e a tela dizia que a decisão falhou sem nunca ter
+       * chegado na linha certa.
+       */
+      const listRes = await backendFetch(
+        `/aprovacoes?arteId=${arteId}&aprovadorId=${aprovadorId}&status=PENDENTE&limit=1`,
+        { headers: { ...auth }, cache: "no-store" }
+      );
+      if (!listRes.ok) throw new Error("Falha ao buscar aprovação.");
+
+      const listBody = await listRes.json();
+      alvo = listBody.data?.[0]?.id ?? null;
+    }
+
+    if (!alvo) {
       return NextResponse.json(
         { error: "Não há decisão pendente sua nesta arte." },
         { status: 404 },
       );
     }
 
-    const updateRes = await backendFetch(`/aprovacoes/${aprovacao.id}`, {
+    const updateRes = await backendFetch(`/aprovacoes/${alvo}`, {
       method: "PUT",
       headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({ status: decisao, comentario: comentario ?? null }),

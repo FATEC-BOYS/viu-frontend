@@ -49,6 +49,18 @@ type Props = {
   versoes: { id: string | null; numero: number; criado_em: string; status: string | null }[];
   aprovacoesByVersao: Record<string, any[]>;
   readOnly: boolean;
+  /**
+   * Se o cookie de sessão veio na requisição, segundo o servidor.
+   *
+   * Esta tela decidia isso sozinha, lendo `localStorage` uma vez num efeito de
+   * montagem. Mas o perfil em cache é conveniência de interface, não a
+   * credencial: quem manda é o cookie HttpOnly, que o JavaScript não enxerga.
+   * Com o armazenamento vazio, bloqueado, ou ainda não preenchido pelo
+   * `AuthProvider` na primeira carga, a leitura dava `false` e a pessoa logada
+   * recebia a porta de login no lugar dos próprios controles — e nunca mais,
+   * porque o efeito não relê.
+   */
+  sessaoNoServidor: boolean;
   token: string;
   /**
    * Estado da licença de uso, da cláusula 7.1 do anexo. `null` quando o projeto
@@ -57,7 +69,14 @@ type Props = {
   licenca?: Licenca | null;
 };
 
-export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, licenca }: Props) {
+export default function ViewerShell({
+  arte,
+  initialFeedbacks,
+  readOnly,
+  sessaoNoServidor,
+  token,
+  licenca,
+}: Props) {
   /**
    * Sessão decide o que a interface pode prometer.
    *
@@ -67,16 +86,18 @@ export default function ViewerShell({ arte, initialFeedbacks, readOnly, token, l
    * Começa `false` e só sobe no efeito: no servidor não há localStorage, e
    * decidir na primeira renderização daria divergência de hidratação.
    */
-  const [temConta, setTemConta] = useState(false);
+  // Nasce com o que o servidor sabe, em vez de `false` até um efeito rodar.
+  const [temConta, setTemConta] = useState(sessaoNoServidor);
   const [viewer, setViewer] = useState<{ email: string; nome: string | null } | null>(null);
 
   const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
 
   useEffect(() => {
-    // `temSessao` e não `perfilEmCache`: ter sessão não pode depender de o
-    // perfil em cache trazer id. Quem decide o acesso é o cookie; o perfil só
-    // alimenta a etiqueta de quem está comentando.
-    setTemConta(temSessao());
+    // O `||`, e não substituição: o cache só pode CONFIRMAR sessão, nunca
+    // negar a que o servidor viu. `temSessao` lê `localStorage`, que vem vazio
+    // em aba anônima, com armazenamento bloqueado, ou antes de o
+    // `AuthProvider` preencher — e nenhum desses casos significa deslogado.
+    setTemConta((antes) => antes || temSessao());
     const perfil = perfilEmCache();
     setViewer(perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null);
   }, []);
