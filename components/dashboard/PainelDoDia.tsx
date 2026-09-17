@@ -79,9 +79,19 @@ export function recadoDoDia(p: Pendencia, nome: string): {
 export default function PainelDoDia({
   pendencia,
   nome,
+  comTrilha = false,
 }: {
   pendencia: Pendencia
   nome: string
+  /**
+   * Se a trilha de onboarding está na tela acima.
+   *
+   * Enquanto ela aparece, o passo dela é O que fazer — e o botão dela já é
+   * cheio. Dois botões cheios na mesma dobra, na mesma cor, fazem a pessoa
+   * escolher entre duas coisas que o produto acabou de dizer serem a próxima.
+   * Aqui o recado continua sendo a manchete; só a ação cede a vez.
+   */
+  comTrilha?: boolean
 }) {
   const { titulo, detalhe, acao } = recadoDoDia(pendencia, nome)
 
@@ -91,7 +101,7 @@ export default function PainelDoDia({
         <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-2xl">{titulo}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{detalhe}</p>
       </div>
-      <Button asChild className="shrink-0">
+      <Button asChild variant={comTrilha ? 'outline' : 'default'} className="shrink-0">
         <Link href={acao.href}>{acao.label}</Link>
       </Button>
     </section>
