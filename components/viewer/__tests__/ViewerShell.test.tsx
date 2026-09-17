@@ -55,6 +55,9 @@ function renderViewer(props: Partial<React.ComponentProps<typeof ViewerShell>> =
       versoes={[]}
       aprovacoesByVersao={{}}
       readOnly={false}
+      // O padrão dos testes é o visitante de link sem sessão; quem tem sessão
+      // passa `sessaoNoServidor` explicitamente, como a página faz.
+      sessaoNoServidor={false}
       token="tok123"
       {...props}
     />,
@@ -79,6 +82,28 @@ beforeEach(() => {
 })
 
 afterEach(() => localStorage.clear())
+
+describe('sessão que só o servidor enxerga', () => {
+  /*
+   * O caso que quebrava: cookie HttpOnly válido e `localStorage` vazio.
+   *
+   * Acontece em aba anônima, com armazenamento bloqueado, e — o mais comum —
+   * na primeira carga, antes de o `AuthProvider` preencher o cache. A tela
+   * lia `localStorage` uma vez e concluía "deslogado", entregando a porta de
+   * login a quem já estava dentro. E nunca mais, porque o efeito não relê.
+   */
+  it('dá os controles a quem o servidor diz estar logado, mesmo sem cache', () => {
+    renderViewer({ sessaoNoServidor: true })
+    expect(screen.getByTestId('approvals-panel')).toBeInTheDocument()
+  })
+
+  it('o cache confirma a sessão, nunca a nega', () => {
+    // Sem cache e sem sessão no servidor continua sendo visitante — o `||` não
+    // pode transformar ausência de cache em sessão.
+    renderViewer({ sessaoNoServidor: false })
+    expect(screen.queryByTestId('approvals-panel')).not.toBeInTheDocument()
+  })
+})
 
 describe('visitante anônimo (sem sessão)', () => {
   it('não recebe o modal de identificação', () => {

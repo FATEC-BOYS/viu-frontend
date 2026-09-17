@@ -83,6 +83,23 @@ export function useMinhaDecisao(arteId: string, token: string) {
           headers: { 'Content-Type': 'application/json' },
           cache: 'no-store',
           body: JSON.stringify({
+            /*
+             * O id da pendência que ESTA tela escolheu e mostrou.
+             *
+             * Ia só o `aprovadorId`, e a rota reconsultava
+             * `?status=PENDENTE&limit=1` para redescobrir qual linha era. Duas
+             * consultas, duas paginações, um `orderBy` implícito em comum — e
+             * a mesma pessoa pode ter duas pendências abertas na mesma arte:
+             * `solicitarAprovacao` deduplica por `versaoNumero`, então pedir
+             * aprovação da v2 com a v1 ainda sem resposta abre uma segunda.
+             *
+             * Hoje as duas consultas concordam (ambas pegam a mais nova).
+             * Mas o acordo depende de uma ordenação que ninguém declarou, e o
+             * modo de falhar é registrar aprovação na versão errada — que
+             * neste produto é o ato que vale. Mandando o id, não há segunda
+             * consulta de onde divergir.
+             */
+            aprovacaoId: pendencia.id,
             aprovadorId: pendencia.aprovadorId,
             decisao: status,
             comentario: comentario ?? null,

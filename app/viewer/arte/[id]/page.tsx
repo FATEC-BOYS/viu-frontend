@@ -64,7 +64,8 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
   if (!token) {
     const daSessao = await porSessao(id)
     if (!daSessao) return notFound()
-    return <ArteNaTela token="" d={daSessao} />
+    // Chegou aqui pela própria conta: `credenciaisDaSessao` provou o cookie.
+    return <ArteNaTela token="" d={daSessao} sessaoNoServidor />
   }
 
   let raw: any
@@ -100,11 +101,40 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
   if (!d?.arte) return notFound()
   if (d.arte.id !== id) return notFound()
 
-  return <ArteNaTela token={token} d={d} />
+  /*
+   * Quem abre por link pode estar logado também — o designer conferindo o que
+   * o cliente vê, o cliente que já tem conta. O cookie está na requisição e
+   * só o servidor o enxerga; perguntar aqui é a única forma de a tela saber.
+   */
+  const sessaoNoServidor = (await credenciaisDaSessao()) !== null
+
+  return <ArteNaTela token={token} d={d} sessaoNoServidor={sessaoNoServidor} />
 }
 
 /** A tela em si, alimentada por qualquer uma das duas origens. */
-function ArteNaTela({ token, d }: { token: string; d: any }) {
+function ArteNaTela({
+  token,
+  d,
+  sessaoNoServidor,
+}: {
+  token: string
+  d: any
+  /**
+   * Se o cookie de sessão veio nesta requisição, segundo o servidor.
+   *
+   * O `ViewerShell` decidia isso sozinho lendo `localStorage` uma vez, num
+   * efeito de montagem. O perfil em cache é conveniência de interface, não a
+   * credencial — quem manda é o cookie HttpOnly, que o JavaScript não vê. Com
+   * o armazenamento vazio, bloqueado, ou simplesmente ainda não preenchido
+   * pelo `AuthProvider` na primeira carga, a leitura dava `false` e a pessoa
+   * logada recebia a porta de login no lugar dos próprios controles de
+   * comentar e decidir — e nunca mais, porque o efeito não relê.
+   *
+   * O servidor já sabe. Passar o que ele sabe é mais barato e mais correto do
+   * que a tela adivinhar.
+   */
+  sessaoNoServidor: boolean
+}) {
   const arte = d.arte
 
   const feedbacks = (d.feedbacks ?? []).map((f: any) => ({
@@ -189,6 +219,7 @@ function ArteNaTela({ token, d }: { token: string; d: any }) {
       versoes={versoes}
       aprovacoesByVersao={{}}
       readOnly={readOnly}
+      sessaoNoServidor={sessaoNoServidor}
       token={token}
       /* Cláusula 7.1 do anexo: quem abre o link é quem vai usar a peça, e o
          uso só é licenciado depois da quitação. Vem calculado do backend a
