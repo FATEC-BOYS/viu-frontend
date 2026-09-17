@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, FileSignature, History, Loader2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/dialog'
 import {
   contratoApi,
-  frasedeQuemFalta,
   hashCurto,
   ROTULO_PAPEL,
   type Contrato,
@@ -23,7 +22,7 @@ import {
   type PapelContrato,
   type VersaoContrato,
 } from '@/lib/contrato'
-import { frasedoQueFalta, type CampoTermo } from '@/lib/termos'
+import { type CampoTermo } from '@/lib/termos'
 
 /**
  * O contrato do projeto: gerar, ler e aceitar.
@@ -46,11 +45,28 @@ function dataCurta(iso: string): string {
 export default function ContratoProjetoCard({
   projetoId,
   podeGerar,
+  emDestaque,
+  recarregar,
   aoMudarEstado,
 }: {
   projetoId: string
   /** Designer do projeto ou admin. */
   podeGerar: boolean
+  /**
+   * Se o próximo passo da aba é aqui.
+   *
+   * Quem decide é `passoDaCobranca`, na aba — este card não tem como saber se
+   * a seção de cima ainda está pendente. Só o passo atual ganha botão cheio:
+   * com cada seção decidindo sozinha, a tela tinha dois e um deles vinha
+   * desabilitado, tomando o destaque sem oferecer nada.
+   */
+  emDestaque: boolean
+  /**
+   * Muda quando os termos são salvos acima, para o estado do contrato ser
+   * relido. Sem isso, salvar os termos deixava a frase da aba falando de uma
+   * pendência que acabou de ser resolvida.
+   */
+  recarregar?: number
   /**
    * Reporta para a aba se o contrato está pronto e quem falta.
    *
@@ -59,6 +75,10 @@ export default function ContratoProjetoCard({
    * responderem coisas diferentes sobre o mesmo estado.
    */
   aoMudarEstado?: (estado: {
+    /** O que falta nos termos, segundo a mesma leitura que traz o contrato. */
+    termosFaltantes: CampoTermo[]
+    /** Tenho papel no contrato e ainda não aceitei. */
+    possoAceitar: boolean
     pronto: boolean
     /**
      * Se existe contrato gerado. Separado de `faltam` porque sem contrato o
@@ -69,6 +89,23 @@ export default function ContratoProjetoCard({
     faltam: PapelContrato[]
   }) => void
 }) {
+  /*
+   * O aviso para a aba mora num ref, e fora das dependências de `carregar`.
+   *
+   * Ele é saída deste componente, não entrada da busca. Estando na lista de
+   * dependências, ele dizia "busque de novo quando mudar quem é avisado" — e a
+   * aba passa uma arrow inline, que nasce nova a cada render dela. Avisar
+   * renderizava a aba, a arrow nascia nova, `carregar` nascia nova, o efeito
+   * disparava e avisava de novo. Medido na aba Fatura antes da correção: 455
+   * requisições ao contrato em 10 segundos, e este card preso no spinner para
+   * sempre, porque `setCarregando(true)` voltava antes de qualquer resposta
+   * chegar. A tela nunca chegava a mostrar o contrato.
+   */
+  const avisar = useRef(aoMudarEstado)
+  useEffect(() => {
+    avisar.current = aoMudarEstado
+  })
+
   const [contrato, setContrato] = useState<Contrato | null>(null)
   const [aceite, setAceite] = useState<EstadoAceite | null>(null)
   const [termosFaltantes, setTermosFaltantes] = useState<CampoTermo[]>([])
@@ -85,7 +122,9 @@ export default function ContratoProjetoCard({
       setContrato(res.data)
       setAceite(res.aceite)
       setTermosFaltantes(res.termosFaltantes)
-      aoMudarEstado?.({
+      avisar.current?.({
+        termosFaltantes: res.termosFaltantes,
+        possoAceitar: !!res.data && !!res.aceite.meuPapel && !res.aceite.jaAceitei,
         pronto: !!res.data && res.aceite.faltam.length === 0,
         temContrato: !!res.data,
         faltam: res.aceite.faltam,
@@ -95,7 +134,11 @@ export default function ContratoProjetoCard({
     } finally {
       setCarregando(false)
     }
-  }, [projetoId, aoMudarEstado])
+    // `recarregar` não é lido no corpo — ele é o sinal de "leia de novo",
+    // mandado pela aba quando os termos são salvos acima. O lint vê uma
+    // dependência sem uso; tirá-la é que quebraria o comportamento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projetoId, recarregar])
 
   useEffect(() => {
     void carregar()
@@ -155,7 +198,7 @@ export default function ContratoProjetoCard({
   const podeAceitar = !!contrato && !!aceite?.meuPapel && !aceite.jaAceitei
 
   return (
-    <section className="rounded-xl border bg-card p-4 space-y-3">
+    <section className="space-y-3 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           {/*
@@ -182,20 +225,14 @@ export default function ContratoProjetoCard({
 
       {!contrato ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            Nenhum resumo gerado. É ele que registra o que foi combinado e a quem pertence a peça
-            se a conta não for paga.
-          </p>
-
-          {!termosProntos && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
-              Antes de gerar, falta combinar {frasedoQueFalta(termosFaltantes)}.
-            </p>
-          )}
-
           {/* Só o designer gera — mesma regra de criar fatura e definir termos. */}
           {podeGerar && (
-            <Button size="sm" onClick={() => void gerar()} disabled={gerando || !termosProntos}>
+            <Button
+              size="sm"
+              variant={emDestaque ? 'default' : 'outline'}
+              onClick={() => void gerar()}
+              disabled={gerando || !termosProntos}
+            >
               {gerando && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Gerar resumo
             </Button>
@@ -214,15 +251,14 @@ export default function ContratoProjetoCard({
             <span className="text-muted-foreground">gerado em {dataCurta(contrato.criadoEm)}</span>
           </div>
 
-          {/* Do dado, não de texto fixo: some sozinho quando a redação for revisada. */}
+          {/* Do dado, não de texto fixo: some sozinho quando a redação for revisada.
+              Aqui é linha, não caixa: no card ela informa, e a caixa fica para o
+              diálogo de leitura, que é o instante em que a pessoa vai aceitar. */}
           {!contrato.revisadoJuridicamente && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <p>
-                <b>Pendente de revisão jurídica.</b> Esta redação ainda não foi validada por
-                advogado.
-              </p>
-            </div>
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Redação pendente de revisão jurídica.
+            </p>
           )}
 
           <div className="space-y-1.5 text-sm">
@@ -236,25 +272,28 @@ export default function ContratoProjetoCard({
                   </span>
                 </p>
               ))
-            ) : (
-              <p className="text-muted-foreground">Ninguém aceitou esta versão ainda.</p>
-            )}
+            ) : null}
 
-            {aceite && aceite.faltam.length > 0 && (
-              <p className="text-muted-foreground">{frasedeQuemFalta(aceite.faltam)}</p>
-            )}
+            {/*
+              Quem falta aceitar não se escreve aqui.
+              
+              A frase da aba já diz — e dizia a mesma coisa, palavra por
+              palavra, seiscentos pixels acima: "Falta o cliente aceitar." em
+              cima e "Falta o cliente aceitar." aqui. Esta seção lista quem
+              aceitou; quem falta é assunto do passo, que é da aba.
+            */}
           </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button size="sm" variant="outline" onClick={() => setLendo(true)}>
-              Ler o contrato
+            {/* Um botão, não dois: "Ler o contrato" e "Ler e aceitar" abriam o
+                mesmo diálogo lado a lado. O rótulo diz o que se faz lá dentro. */}
+            <Button
+              size="sm"
+              variant={podeAceitar && emDestaque ? 'default' : 'outline'}
+              onClick={() => setLendo(true)}
+            >
+              {podeAceitar ? 'Ler e aceitar' : 'Ler o resumo'}
             </Button>
-
-            {podeAceitar && (
-              <Button size="sm" onClick={() => setLendo(true)}>
-                Ler e aceitar
-              </Button>
-            )}
 
             {aceite?.jaAceitei && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">

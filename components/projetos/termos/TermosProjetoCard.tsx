@@ -23,7 +23,6 @@ import {
 } from '@/components/ui/dialog'
 import {
   termosApi,
-  frasedoQueFalta,
   ROTULO_ARQUIVOS_FONTE,
   type TermosProjeto,
   type TermosEntrada,
@@ -57,10 +56,23 @@ function deInputDate(valor: string): string | null {
 export default function TermosProjetoCard({
   projetoId,
   podeEditar,
+  emDestaque,
+  aoSalvar,
 }: {
   projetoId: string
   /** Designer do projeto ou admin. O cliente lê e não edita. */
   podeEditar: boolean
+  /**
+   * Se o próximo passo da aba é aqui. Quem decide é `passoDaCobranca`, na aba:
+   * só o passo atual ganha botão cheio.
+   */
+  emDestaque: boolean
+  /**
+   * Avisa a aba que os termos mudaram, para o estado do contrato ser relido.
+   * Sem isso, salvar deixava a frase da aba anunciando uma pendência que a
+   * pessoa acabou de resolver — a tela discordando de si mesma.
+   */
+  aoSalvar?: () => void
 }) {
   const [termos, setTermos] = useState<TermosProjeto | null>(null)
   const [faltam, setFaltam] = useState<CampoTermo[]>([])
@@ -107,6 +119,7 @@ export default function TermosProjetoCard({
       setTermos(res.data)
       setFaltam(res.faltam)
       toast.success(res.completos ? 'Termos combinados.' : 'Salvo. Ainda falta preencher algo.')
+      aoSalvar?.()
     } catch (err) {
       // O backend recusa combinação incoerente (prazo até uma data sem a data,
       // exclusividade sem fim) e explica qual campo.
@@ -141,7 +154,7 @@ export default function TermosProjetoCard({
      foi combinado, mas mudar é decisão de quem cobra. */
   if (!podeEditar) {
     return (
-      <section className="rounded-xl border bg-card p-4 space-y-3">
+      <section className="space-y-3 p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <ScrollText className="h-4 w-4" /> O que foi combinado
         </h3>
@@ -168,7 +181,7 @@ export default function TermosProjetoCard({
   }
 
   return (
-    <section className="rounded-xl border bg-card p-4 space-y-4">
+    <section className="space-y-4 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <ScrollText className="h-4 w-4" /> O que foi combinado
@@ -184,13 +197,6 @@ export default function TermosProjetoCard({
           </Button>
         )}
       </div>
-
-      {!completos && (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
-          Falta combinar {frasedoQueFalta(faltam)}. Sem isso o anexo do projeto sai com lacunas — e
-          é ele que decide de quem é a peça se a conta não for paga.
-        </p>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -354,7 +360,12 @@ export default function TermosProjetoCard({
       </div>
 
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => void salvar()} disabled={salvando}>
+        <Button
+          size="sm"
+          variant={emDestaque ? 'default' : 'outline'}
+          onClick={() => void salvar()}
+          disabled={salvando}
+        >
           {salvando && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
           Salvar termos
         </Button>
