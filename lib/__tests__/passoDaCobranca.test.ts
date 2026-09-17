@@ -14,6 +14,7 @@ const designer: EstadoDaCobranca = {
   podeCobrar: true,
   termosFaltantes: [],
   temContrato: false,
+  contratoDesatualizado: false,
   faltamAceitar: [],
   possoAceitar: false,
   fatura: 'NENHUMA',
@@ -91,6 +92,48 @@ describe('passoDaCobranca', () => {
     expect(passoDaCobranca(emitida).passo).toBeNull()
     expect(passoDaCobranca(emitida).frase).toContain('João Santos')
     expect(passoDaCobranca({ ...emitida, podeCobrar: false, souPagador: true }).passo).toBe('PAGAR')
+  })
+
+  describe('resumo que já não descreve o combinado', () => {
+    /*
+     * Mudar os termos depois do aceite. A tela dizia "Combinado e aceito pelas
+     * duas partes. Pode cobrar." sobre um documento que descreve outro acordo —
+     * e é ele que decide de quem é a peça se a conta não for paga.
+     */
+    const velho = { temContrato: true, contratoDesatualizado: true }
+
+    it('manda o designer gerar a versão nova', () => {
+      const r = passoDaCobranca({ ...designer, ...velho, faltamAceitar: [] })
+      expect(r.passo).toBe('GERAR')
+      expect(r.pendente).toBe(true)
+    })
+
+    it('não oferece aceite, mesmo para quem ainda não aceitou', () => {
+      // Aceitar congelaria a concordância no texto errado — é o passo errado,
+      // não um passo a mais.
+      const r = passoDaCobranca({ ...cliente, ...velho, possoAceitar: true })
+      expect(r.passo).not.toBe('ACEITAR')
+      expect(r.passo).toBeNull()
+    })
+
+    it('não deixa cobrar dizendo que está tudo aceito', () => {
+      const r = passoDaCobranca({ ...designer, ...velho, faltamAceitar: [], possoAceitar: false })
+      expect(r.passo).not.toBe('COBRAR')
+      expect(r.frase).not.toMatch(/aceito pelas duas partes/i)
+    })
+
+    it('mas uma fatura já emitida passa na frente', () => {
+      // Uma vez cobrado, mexer no resumo não desfaz a cobrança: mandar regerar
+      // seria mandar arrumar o que já passou.
+      const r = passoDaCobranca({
+        ...designer,
+        ...velho,
+        fatura: 'PENDENTE',
+        nomeDoCliente: 'João Santos',
+      })
+      expect(r.passo).toBeNull()
+      expect(r.frase).toContain('João Santos')
+    })
   })
 
   it('projeto pago não pede mais que se combine nada', () => {

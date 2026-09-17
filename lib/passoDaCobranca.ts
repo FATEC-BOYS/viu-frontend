@@ -24,6 +24,13 @@ export interface EstadoDaCobranca {
   /** O que falta nos termos. Vem do servidor junto com o contrato. */
   termosFaltantes: CampoTermo[]
   temContrato: boolean
+  /**
+   * Os termos mudaram depois que o contrato vigente foi gerado.
+   *
+   * Quem responde é o servidor: ele renderiza o anexo com os termos de hoje e
+   * compara o hash com o do vigente. A tela não tem como calcular.
+   */
+  contratoDesatualizado: boolean
   /** Papéis que ainda não aceitaram a versão vigente. */
   faltamAceitar: PapelContrato[]
   /** Tenho papel no contrato e ainda não aceitei — o servidor é quem diz. */
@@ -102,6 +109,30 @@ export function passoDaCobranca(e: EstadoDaCobranca): Passo {
       : {
           passo: null,
           frase: 'O designer ainda não gerou o resumo do combinado.',
+          pendente: false,
+        }
+  }
+
+  /*
+   * Contrato velho vem ANTES de aceitar, e é por isso que ele está aqui.
+   *
+   * Um resumo que descreve outro acordo não deve ser aceito — aceitá-lo
+   * congelaria a concordância no texto errado, que é exatamente o que este
+   * documento existe para impedir. Então não se oferece "ler e aceitar": se
+   * oferece gerar a versão nova, que reabre os aceites.
+   */
+  if (e.contratoDesatualizado) {
+    return e.podeCobrar
+      ? {
+          passo: 'GERAR',
+          frase:
+            'As condições mudaram depois que este resumo foi gerado. Gere a versão nova — a que está valendo descreve outro acordo.',
+          pendente: true,
+        }
+      : {
+          passo: null,
+          frase:
+            'As condições mudaram depois que este resumo foi gerado. O designer precisa gerar a versão nova antes de qualquer aceite valer.',
           pendente: false,
         }
   }
