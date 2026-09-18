@@ -192,8 +192,23 @@ function ListItem({
           da fila, so existia dentro da aba Quadro, atras de um <select> que
           mostrava "ABERTO" em caixa alta. Trocamos um pelo outro.
         */}
+        {/*
+          `aria-label` além do `title`: um botão só de ícone precisa de nome
+          acessível, e tooltip não é nome. São três por linha, em toda linha —
+          quem usa leitor de tela ouvia três botões sem rótulo por feedback.
+
+          O nome diz sobre QUAL feedback se está agindo: numa lista, "Resolver"
+          repetido não distingue nada.
+        */}
         <div className="flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
-          <Button variant="ghost" size="icon" className="size-8" onClick={(e) => { e.stopPropagation(); onVerNaArte(fb); }} title="Ver na arte">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={(e) => { e.stopPropagation(); onVerNaArte(fb); }}
+            title="Ver na arte"
+            aria-label={`Ver na arte o comentário de ${fb.autor_nome ?? 'alguém'}`}
+          >
             <Eye className="h-4 w-4" />
           </Button>
           <Button
@@ -202,10 +217,18 @@ function ListItem({
             className="size-8"
             onClick={(e) => { e.stopPropagation(); onAlternarResolvido(fb); }}
             title={isResolved ? 'Reabrir' : 'Marcar como resolvido'}
+            aria-label={`${isResolved ? 'Reabrir' : 'Marcar como resolvido'} o comentário de ${fb.autor_nome ?? 'alguém'}`}
           >
             {isResolved ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
           </Button>
-          <Button variant="ghost" size="icon" className="size-8" onClick={(e) => { e.stopPropagation(); onCriarTarefa(fb); }} title="Criar tarefa">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={(e) => { e.stopPropagation(); onCriarTarefa(fb); }}
+            title="Criar tarefa"
+            aria-label={`Criar tarefa a partir do comentário de ${fb.autor_nome ?? 'alguém'}`}
+          >
             <PlusCircle className="h-4 w-4" />
           </Button>
         </div>
