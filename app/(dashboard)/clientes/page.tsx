@@ -107,15 +107,41 @@ function ClienteCard({
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
+              {/*
+                O nome fica com a linha inteira.
+
+                Ele dividia espaço com um badge `shrink-0` de ~90px, dentro de
+                um cartão de grade que já é estreito — e o nome, que é a única
+                coisa que identifica o cliente numa tela chamada "Clientes",
+                era quem absorvia toda a perda: sobrava "Mari…", "Joã…".
+
+                E o badge só aparece quando diz algo. "Vínculo ativo" estava em
+                todos os cartões; uma pílula que se repete em toda linha não
+                informa, só cobra largura. O vínculo rompido é a exceção — essa
+                sim precisa saltar.
+              */}
               <div className="flex items-center gap-2">
-                <h4 className="font-medium truncate">{c.nome}</h4>
-                <Badge variant={c.vinculado ? "secondary" : "destructive"} className="shrink-0">
-                  {c.vinculado ? "Vínculo ativo" : "Vínculo rompido"}
-                </Badge>
+                <h4 className="min-w-0 truncate font-medium">{c.nome}</h4>
+                {!c.vinculado && (
+                  <Badge variant="destructive" className="shrink-0">
+                    Vínculo rompido
+                  </Badge>
+                )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-                <span className="flex items-center gap-1 min-w-0"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{c.email}</span></span>
-                {c.telefone && <span className="hidden sm:flex items-center gap-1 shrink-0"><Phone className="h-3 w-3" />{c.telefone}</span>}
+              {/* O telefone era `shrink-0` e comia o e-mail, que virava
+                  "clie…". Os dois encolhem, e o e-mail vem primeiro porque é
+                  por ele que se procura alguém. */}
+              <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex min-w-0 items-center gap-1">
+                  <Mail className="h-3 w-3 shrink-0" />
+                  <span className="truncate" title={c.email}>{c.email}</span>
+                </span>
+                {c.telefone && (
+                  <span className="hidden min-w-0 items-center gap-1 sm:flex">
+                    <Phone className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{c.telefone}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -150,14 +176,20 @@ function ClienteCard({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1 text-muted-foreground"><Calendar className="h-3 w-3" />Próximo prazo</span>
-          <span className="font-medium">{formatDate(proxPrazo?.prazo || null)}</span>
+      {/* `gap-2` e valores que não encolhem: sem isso o rótulo encostava no
+          número — lia-se "OrçamentoR$ 8.000,00" — e "Próximo prazo" quebrava
+          em duas linhas para caber. */}
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+            <Calendar className="h-3 w-3 shrink-0" />
+            <span className="truncate">Prazo</span>
+          </span>
+          <span className="shrink-0 font-medium">{formatDate(proxPrazo?.prazo || null)}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1 text-muted-foreground">Orçamento</span>
-          <span className="font-semibold">{formatBRLFromCents(orcamentoTotal)}</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-muted-foreground">Orçamento</span>
+          <span className="shrink-0 font-semibold">{formatBRLFromCents(orcamentoTotal)}</span>
         </div>
       </div>
 
