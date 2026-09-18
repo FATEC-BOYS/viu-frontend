@@ -6,7 +6,7 @@ vi.mock('@/lib/api', () => ({
 }))
 
 import { api, apiUpload } from '@/lib/api'
-import { createNovaVersao, listArtesOverview, listVersoes } from '../artes'
+import { createNovaVersao, idDoFiltro, listArtesOverview, listVersoes } from '../artes'
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -201,5 +201,44 @@ describe('listArtesOverview', () => {
       count: 0,
       porStatus: {},
     })
+  })
+})
+
+/**
+ * A URL é memória de longo prazo: link guardado, link mandado, botão voltar.
+ *
+ * Os filtros de projeto, cliente e autor guardavam NOME e passaram a guardar
+ * id. Um endereço de antes traz "Maria Oliveira" onde hoje se espera um id —
+ * e mandá-lo como `clienteId` devolve lista vazia com o chip dizendo "—".
+ * Antes ele não filtrava nada e mostrava tudo; passaria a mostrar nada.
+ */
+describe('idDoFiltro', () => {
+  const CLIENTES = [
+    { id: 'c1', nome: 'Maria Oliveira' },
+    { id: 'c2', nome: 'João Santos' },
+  ]
+
+  it('deixa passar o id que já é id', () => {
+    expect(idDoFiltro('c1', CLIENTES)).toBe('c1')
+  })
+
+  it('traduz o nome que veio de um link antigo', () => {
+    expect(idDoFiltro('Maria Oliveira', CLIENTES)).toBe('c1')
+  })
+
+  it('não se perde na caixa das letras', () => {
+    // Quem escreveu foi um navegador, não uma escolha de lista.
+    expect(idDoFiltro('maria oliveira', CLIENTES)).toBe('c1')
+  })
+
+  it('devolve null para o que não dá para reconhecer', () => {
+    // Cliente removido, projeto de outra conta, endereço digitado à mão: um
+    // filtro que não dá para honrar não pode ficar de pé esvaziando a lista.
+    expect(idDoFiltro('c99', CLIENTES)).toBeNull()
+    expect(idDoFiltro('Fulano de Tal', CLIENTES)).toBeNull()
+  })
+
+  it('devolve null quando não há opção nenhuma', () => {
+    expect(idDoFiltro('c1', [])).toBeNull()
   })
 })

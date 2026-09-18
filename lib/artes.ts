@@ -239,6 +239,33 @@ export type FacetasDeArtes = {
 const SEM_FACETAS: FacetasDeArtes = { projetos: [], clientes: [], autores: [], tipos: [] }
 
 /**
+ * O id correspondente a um valor de filtro vindo da URL.
+ *
+ * A URL é memória de longo prazo: gente guarda link, manda no WhatsApp, aperta
+ * o botão voltar. Estes filtros guardavam NOME e passaram a guardar id, então
+ * um endereço de antes traz "Maria Oliveira" onde hoje se espera um id — e
+ * mandá-lo como `clienteId` devolve lista vazia com o chip dizendo "Cliente: —".
+ * Antes ele não filtrava nada e mostrava tudo; passaria a mostrar nada.
+ *
+ * Mas o caso não é só o link antigo: id de cliente removido, id de projeto de
+ * outra conta, endereço digitado à mão. Todos chegam aqui iguais, e a resposta
+ * é a mesma — se dá para reconhecer, reconhece; se não dá, o filtro não vale.
+ * Um filtro que não dá para honrar não pode ficar de pé esvaziando a lista.
+ *
+ * @returns o id, ou `null` quando não há como reconhecer o valor.
+ */
+export function idDoFiltro(
+  valor: string,
+  opcoes: Array<{ id: string; nome: string }>,
+): string | null {
+  if (opcoes.some((o) => o.id === valor)) return valor
+  // Casa por nome sem diferenciar maiúsculas: o que veio da URL foi escrito
+  // por um navegador, não escolhido de uma lista.
+  const porNome = opcoes.find((o) => o.nome.toLowerCase() === valor.toLowerCase())
+  return porNome?.id ?? null
+}
+
+/**
  * As opções de filtro, do servidor.
  *
  * A tela montava estas listas a partir das artes que já tinha na mão — o

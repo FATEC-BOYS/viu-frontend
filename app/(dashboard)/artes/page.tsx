@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
 import {
+  idDoFiltro,
   listArtesOverview,
   listFacetasDeArtes,
   type ArteOverview,
@@ -416,7 +417,54 @@ function ArtesPageInner() {
   const [facetas, setFacetas] = useState<FacetasDeArtes>({
     projetos: [], clientes: [], autores: [], tipos: [],
   });
-  useEffect(() => { listFacetasDeArtes().then(setFacetas); }, []);
+  const [facetasCarregadas, setFacetasCarregadas] = useState(false);
+  useEffect(() => {
+    listFacetasDeArtes().then((f) => { setFacetas(f); setFacetasCarregadas(true); });
+  }, []);
+
+  /*
+   * Concilia o que veio na URL com o que existe.
+   *
+   * A URL é memória de longo prazo — link guardado, link mandado, botão
+   * voltar — e estes filtros passaram a guardar id onde guardavam nome. Um
+   * endereço de antes traz "Maria Oliveira" onde se espera um id, e mandá-lo
+   * como `clienteId` devolveria lista vazia com o chip dizendo "Cliente: —".
+   * Pior que o de antes, que ao menos mostrava tudo.
+   *
+   * Vale para todo valor que não dá para reconhecer, não só para o link
+   * antigo: cliente removido, projeto de outra conta, endereço digitado à mão.
+   * Reconhecível vira id; irreconhecível some, porque um filtro que não dá
+   * para honrar não pode ficar de pé esvaziando a lista em silêncio.
+   *
+   * Só depois das facetas chegarem: antes disso as listas estão vazias, e
+   * conciliar contra o vazio apagaria todo filtro legítimo.
+   */
+  useEffect(() => {
+    if (!facetasCarregadas) return;
+
+    const conserto: Record<string, string | undefined> = {};
+    const conciliar = (
+      chave: string,
+      valor: string,
+      opcoes: Array<{ id: string; nome: string }>,
+    ) => {
+      if (valor === "todos") return;
+      const id = idDoFiltro(valor, opcoes);
+      if (id !== valor) conserto[chave] = id ?? "todos";
+    };
+
+    conciliar("projeto", projetoFilter, facetas.projetos);
+    conciliar("cliente", clienteFilter, facetas.clientes);
+    conciliar("autor", autorFilter, facetas.autores);
+    // Tipo sempre foi o próprio valor, então basta existir.
+    if (tipoFilter !== "todos" && !facetas.tipos.includes(tipoFilter)) {
+      conserto.tipo = "todos";
+    }
+
+    if (Object.keys(conserto).length > 0) setParams(conserto);
+    // `setParams` nasce de novo a cada render; incluí-lo aqui seria um laço.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetasCarregadas, facetas, projetoFilter, clienteFilter, autorFilter, tipoFilter]);
 
   const nomeDaFaceta = (lista: Array<{ id: string; nome: string }>, id: string) =>
     id === "todos" ? null : (lista.find((x) => x.id === id)?.nome ?? "—");
