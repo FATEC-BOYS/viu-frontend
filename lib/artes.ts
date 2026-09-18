@@ -29,6 +29,15 @@ export type ArteOverview = {
   autor?: { id: string; nome: string } | null
   projeto_nome?: string | null
   cliente_nome?: string | null
+  /**
+   * O cliente por id, e não só por nome.
+   *
+   * O filtro de cliente da tela de Artes guardava o NOME na URL e o mandava
+   * como se fosse filtro — mas o servidor filtra por id, e nome não é chave:
+   * dois clientes homônimos são duas pessoas. Sem este campo a tela não tinha
+   * o que mandar.
+   */
+  cliente_id?: string | null
   autor_nome?: string | null
   feedbacks_count?: number
   tem_aprovacao_aprovada?: boolean
@@ -144,6 +153,7 @@ function mapArte(a: any): ArteOverview {
     autor: a.autor ?? null,
     projeto_nome: a.projeto?.nome ?? null,
     cliente_nome: a.projeto?.cliente?.nome ?? null,
+    cliente_id: a.projeto?.cliente?.id ?? null,
     autor_nome: a.autor?.nome ?? null,
     feedbacks_count: a._count?.feedbacks ?? 0,
     tem_aprovacao_aprovada:
@@ -151,40 +161,97 @@ function mapArte(a: any): ArteOverview {
   }
 }
 
+export type OrdemDeArtes = 'criado_em' | 'nome' | 'projeto' | 'versao' | 'tamanho'
+
 type ListArtesParams = {
   q?: string
   status?: ArteStatus | 'todos'
   tipo?: string | 'todos'
-  projeto?: string
-  cliente?: string
-  autor?: string
-  orderBy?: 'criado_em' | 'nome' | 'projeto' | 'versao' | 'tamanho'
+  /*
+   * Ids, não nomes.
+   *
+   * Estes três chegavam aqui como nome ("Maria Oliveira") e eram descartados
+   * na desestruturação logo abaixo: o tipo os aceitava, a tela os mandava, e
+   * nada disso saía daqui. Quem filtra é o servidor, e ele filtra por id.
+   */
+  projetoId?: string
+  clienteId?: string
+  autorId?: string
+  orderBy?: OrdemDeArtes
   page?: number
   pageSize?: number
-  projetoId?: string
 }
 
+/**
+ * A listagem de artes, com os filtros da tela.
+ *
+ * O contrato é o do backend — `page` e `limit`, e o total em `pagination`.
+ * Esta função mandava `offset`, que a rota não lê (ela calcula o pulo a partir
+ * de `page`), então toda página pedida devolvia a primeira; e lia o total em
+ * `res.total`, que não existe na resposta, caindo no `data.length` — ou seja,
+ * "3 itens" era "3 nesta página", e a paginação nascia sempre com uma página
+ * só.
+ */
 export async function listArtesOverview({
   q: searchTerm,
   status,
   tipo,
+  projetoId,
+  clienteId,
+  autorId,
+  orderBy,
   page = 1,
   pageSize = 24,
-  projetoId,
-}: ListArtesParams = {}): Promise<{ data: ArteOverview[]; count: number }> {
+}: ListArtesParams = {}): Promise<{
+  data: ArteOverview[]
+  count: number
+  /** Quantas artes por status no conjunto filtrado — não nesta página. */
+  porStatus: Record<string, number>
+}> {
   const qs = new URLSearchParams()
   qs.set('limit', String(pageSize))
-  qs.set('offset', String((page - 1) * pageSize))
+  qs.set('page', String(page))
   if (projetoId) qs.set('projetoId', projetoId)
+  if (clienteId) qs.set('clienteId', clienteId)
+  if (autorId) qs.set('autorId', autorId)
+  if (orderBy) qs.set('orderBy', orderBy)
   if (searchTerm?.trim()) qs.set('search', searchTerm.trim())
   if (status && status !== 'todos') qs.set('status', status)
   if (tipo && tipo !== 'todos') qs.set('tipo', tipo)
 
   const res = await api
-    .get<{ data: any[]; total?: number; count?: number }>(`/artes?${qs}`)
-    .catch(() => ({ data: [] as any[], total: 0 }))
+    .get<{ data: any[]; pagination?: { total?: number }; porStatus?: Record<string, number> }>(
+      `/artes?${qs}`,
+    )
+    .catch(() => ({ data: [] as any[], pagination: { total: 0 }, porStatus: {} }))
   const data = (res.data ?? []).map(mapArte)
-  return { data, count: (res as any).total ?? (res as any).count ?? data.length }
+  return { data, count: res.pagination?.total ?? data.length, porStatus: res.porStatus ?? {} }
+}
+
+/** Os valores por que dá para filtrar — projetos, clientes, autores e tipos. */
+export type FacetasDeArtes = {
+  projetos: Array<{ id: string; nome: string }>
+  clientes: Array<{ id: string; nome: string }>
+  autores: Array<{ id: string; nome: string }>
+  tipos: string[]
+}
+
+const SEM_FACETAS: FacetasDeArtes = { projetos: [], clientes: [], autores: [], tipos: [] }
+
+/**
+ * As opções de filtro, do servidor.
+ *
+ * A tela montava estas listas a partir das artes que já tinha na mão — o
+ * resultado atual, que já vem filtrado e paginado. Filtrar por um cliente
+ * deixava só ele na lista de clientes, então trocar exigia limpar antes; e um
+ * filtro sem resultado esvaziava a lista, fazendo o valor escolhido sumir do
+ * próprio campo — aplicado e invisível.
+ */
+export async function listFacetasDeArtes(): Promise<FacetasDeArtes> {
+  const res = await api
+    .get<{ data: FacetasDeArtes }>('/artes/facetas')
+    .catch(() => null)
+  return res?.data ?? SEM_FACETAS
 }
 
 export async function getArteDetail(arteId: string): Promise<ArteDetail | null> {

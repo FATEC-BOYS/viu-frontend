@@ -3,12 +3,20 @@
 import Thumb from "@/components/layout/Thumb";
 import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 
-import { listArtesOverview, type ArteOverview, type ArteStatus } from "@/lib/artes";
+import {
+  listArtesOverview,
+  listFacetasDeArtes,
+  type ArteOverview,
+  type ArteStatus,
+  type FacetasDeArtes,
+  type OrdemDeArtes,
+} from "@/lib/artes";
+import { ChipOption, ChipPopover } from "@/components/filtros/ChipDeFiltro";
 import { listProjetos } from "@/lib/projects";
 import { ArteQuickLookSheet } from "@/components/artes/ArteQuickLookSheet";
 import { getArtePreviewUrls, getArteDownloadUrl } from "@/lib/storage";
@@ -17,7 +25,6 @@ import ArteWizard from "@/components/artes/ArteWizard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
@@ -29,7 +36,8 @@ import {
 
 import {
   Upload, Search, Calendar, User, FileImage, Loader2, Eye, Download,
-  MessageSquare, CheckCircle2, Clock, XCircle, AlertCircle, Layers3, Filter, SlidersHorizontal
+  MessageSquare, CheckCircle2, Clock, XCircle, AlertCircle, Layers3, Filter,
+  SlidersHorizontal, ChevronsUpDown, FolderOpen, Users
 } from "lucide-react";
 
 /* ===================== Fallback para o Suspense ===================== */
@@ -51,11 +59,21 @@ function useURLHelpers() {
 
   const getParam = (key: string, fallback = "") => params.get(key) ?? fallback;
 
+  /*
+   * Mexer num filtro volta para a primeira página — senão a pessoa filtra
+   * estando na página 3 e recebe uma lista vazia que parece "nada encontrado".
+   *
+   * Mas a página não podia se apagar a si mesma: `p.delete("page")` rodava em
+   * TODA chamada, inclusive na de "Próxima", que é `setParam("page", "2")`.
+   * Ela escrevia o 2 e apagava logo em seguida, então os dois botões de
+   * paginação não saíam do lugar — e ninguém notava porque a contagem também
+   * estava errada e a lista quase nunca passava de uma página.
+   */
   const setParam = (key: string, value?: string) => {
     const p = new URLSearchParams(params.toString());
     if (!value || value === "todos" || value === "") p.delete(key);
     else p.set(key, value);
-    p.delete("page");
+    if (key !== "page") p.delete("page");
     router.push(`?${p.toString()}`);
   };
 
@@ -65,12 +83,34 @@ function useURLHelpers() {
       if (!v || v === "todos" || v === "") p.delete(k);
       else p.set(k, v);
     });
-    p.delete("page");
+    if (!("page" in next)) p.delete("page");
     router.push(`?${p.toString()}`);
   };
 
   return { getParam, setParam, setParams, params };
 }
+
+/* ===================== Rótulos dos filtros ===================== */
+/*
+ * Os rótulos ficam aqui porque agora servem a dois lugares: o que se lê no
+ * chip fechado ("Status: Aprovado") tem que ser o mesmo que se lê dentro dele.
+ * Antes o chip aberto dizia "Aprovado" e o fechado dizia "APROVADO", porque um
+ * era texto e o outro era o valor cru do banco.
+ */
+const STATUS_LABEL: Record<string, string> = {
+  todos: "Todos",
+  EM_ANALISE: "Em análise",
+  APROVADO: "Aprovado",
+  REJEITADO: "Rejeitado",
+};
+
+const ORDEM_LABEL: Record<OrdemDeArtes, string> = {
+  criado_em: "Mais recente",
+  nome: "Nome",
+  projeto: "Projeto",
+  versao: "Versão",
+  tamanho: "Tamanho",
+};
 
 /* ===================== UI Auxiliares ===================== */
 function StatusBadge({ status }: { status: string }) {
@@ -239,10 +279,17 @@ function ArteCard({
           Agora o `truncate` está no botão, que é quem tem o texto.
         */}
         <div className="flex items-center justify-between gap-2 text-xs">
+          {/*
+            Mostra o nome, filtra pelo id.
+
+            Estes três atalhos mandavam o NOME como filtro — e o filtro é por
+            id. Clicar em "Cliente: Maria Oliveira" num cartão mudava a URL e
+            não mudava a lista, do mesmo jeito que o campo lá em cima.
+          */}
           <ValorFiltravel
             rotulo="Projeto"
             valor={arte.projeto_nome}
-            onClick={() => arte.projeto_nome && onFilter("projeto", arte.projeto_nome)}
+            onClick={() => arte.projeto_id && onFilter("projeto", arte.projeto_id)}
           />
           <span className="shrink-0 text-muted-foreground">{formatDate(arte.criado_em)}</span>
         </div>
@@ -251,12 +298,12 @@ function ArteCard({
           <ValorFiltravel
             rotulo="Cliente"
             valor={arte.cliente_nome}
-            onClick={() => arte.cliente_nome && onFilter("cliente", arte.cliente_nome)}
+            onClick={() => arte.cliente_id && onFilter("cliente", arte.cliente_id)}
           />
           <ValorFiltravel
             rotulo="Autor"
             valor={arte.autor_nome}
-            onClick={() => arte.autor_nome && onFilter("autor", arte.autor_nome)}
+            onClick={() => arte.autor_id && onFilter("autor", arte.autor_id)}
           />
         </div>
 
@@ -308,10 +355,16 @@ function ArtesPageInner() {
   const searchTerm   = getParam("q", "");
   const statusFilter = getParam("status", "todos");
   const tipoFilter   = getParam("tipo", "todos");
-  const projetoFilter= getParam("projeto", "todos"); // nome do projeto
+  /*
+   * Ids, e não nomes. Estes três guardavam o nome ("Maria Oliveira") e o
+   * mandavam como filtro — e `listArtesOverview` os descartava, porque o
+   * servidor filtra por id. Ficavam três controles que mudavam a URL e não
+   * mudavam a lista.
+   */
+  const projetoFilter= getParam("projeto", "todos");
   const clienteFilter= getParam("cliente", "todos");
   const autorFilter  = getParam("autor", "todos");
-  const sortBy       = getParam("orderBy", "criado_em") as "criado_em" | "nome" | "projeto" | "versao" | "tamanho";
+  const sortBy       = getParam("orderBy", "criado_em") as OrdemDeArtes;
   const page         = Math.max(1, Number(getParam("page", "1")) || 1);
   const pageSize     = Math.min(96, Math.max(6, Number(getParam("pageSize", "24")) || 24));
 
@@ -319,6 +372,7 @@ function ArtesPageInner() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<ArteOverview[]>([]);
   const [count, setCount] = useState(0);
+  const [porStatus, setPorStatus] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
   // Debounce search
@@ -332,42 +386,55 @@ function ArtesPageInner() {
       q: searchTerm,
       status: statusFilter as ArteStatus | "todos",
       tipo: tipoFilter,
-      projeto: projetoFilter,
-      cliente: clienteFilter,
-      autor: autorFilter,
+      projetoId: projetoFilter === "todos" ? undefined : projetoFilter,
+      clienteId: clienteFilter === "todos" ? undefined : clienteFilter,
+      autorId: autorFilter === "todos" ? undefined : autorFilter,
       orderBy: sortBy,
       page,
       pageSize,
     })
-      .then(({ data, count }) => {
+      .then(({ data, count, porStatus }) => {
         setRows(data);
         setCount(count);
+        setPorStatus(porStatus);
       })
       .catch(() => setError("Não foi possível carregar as artes."))
       .finally(() => setLoading(false));
   }, [searchTerm, statusFilter, tipoFilter, projetoFilter, clienteFilter, autorFilter, sortBy, page, pageSize, recarregar]);
 
-  // Facetas dinâmicas (baseadas no resultado atual)
-  const projetos = useMemo(
-    () => Array.from(new Set(rows.map(a => a.projeto_nome).filter((p): p is string => !!p))).map((nome, i) => ({ id: String(i), nome })),
-    [rows]
-  );
-  const tipos    = useMemo(() => Array.from(new Set(rows.map(a => a.tipo))), [rows]);
-  const clientes = useMemo(
-    () => Array.from(new Set(rows.map(a => a.cliente_nome).filter((c): c is string => !!c))),
-    [rows]
-  );
-  const autores  = useMemo(
-    () => Array.from(new Set(rows.map(a => a.autor_nome).filter((a): a is string => !!a))),
-    [rows]
-  );
+  /*
+   * As opções de filtro vêm do servidor, e não do resultado que está na tela.
+   *
+   * Elas eram montadas a partir de `rows` — a página atual, já filtrada — e
+   * isso se mordia: escolher um cliente reduzia o resultado, e a lista de
+   * clientes passava a ter só ele, então trocar exigia limpar antes. Com
+   * filtro sem resultado a lista nascia vazia e o `Select` perdia o valor
+   * escolhido: o filtro continuava valendo, invisível.
+   *
+   * Não dependem dos filtros, só de quem está olhando — por isso uma vez só.
+   */
+  const [facetas, setFacetas] = useState<FacetasDeArtes>({
+    projetos: [], clientes: [], autores: [], tipos: [],
+  });
+  useEffect(() => { listFacetasDeArtes().then(setFacetas); }, []);
 
-  const estatisticas = useMemo(() => ({
-    total: rows.length,
-    emAnalise: rows.filter(a => a.status === "EM_ANALISE").length,
-    aprovadas: rows.filter(a => a.status === "APROVADO").length,
-    rejeitadas: rows.filter(a => a.status === "REJEITADO").length,
-  }), [rows]);
+  const nomeDaFaceta = (lista: Array<{ id: string; nome: string }>, id: string) =>
+    id === "todos" ? null : (lista.find((x) => x.id === id)?.nome ?? "—");
+
+  /*
+   * Os contadores do topo falam do mesmo conjunto que o "N itens" ao lado —
+   * o filtrado, não a página.
+   *
+   * Eram contados a partir de `rows`, as artes desta página. Com uma página só
+   * os dois números coincidiam e o erro não aparecia; assim que a paginação
+   * passou a funcionar, o cabeçalho passaria a dizer "13 itens" e "4 em
+   * análise" sobre as mesmas artes. Quem sabe as contagens é quem fez o filtro.
+   */
+  const estatisticas = {
+    emAnalise: porStatus.EM_ANALISE ?? 0,
+    aprovadas: porStatus.APROVADO ?? 0,
+    rejeitadas: porStatus.REJEITADO ?? 0,
+  };
 
   // ========= Wizard =========
   const [openWizard, setOpenWizard] = useState(false);
@@ -389,12 +456,9 @@ function ArtesPageInner() {
   async function handleOpenNewArte() {
     let resolvedProjectId: string | null = null;
 
-    if (projetoFilter && projetoFilter !== "todos") {
-      try {
-        const { rows } = await listProjetos({ search: projetoFilter, limit: 1 });
-        if (rows[0]?.id) resolvedProjectId = rows[0].id;
-      } catch { /* noop */ }
-    }
+    // O filtro já É o id do projeto: antes ele guardava o nome, e isto fazia
+    // uma busca por nome para reencontrar o id que a lista de facetas tinha.
+    if (projetoFilter && projetoFilter !== "todos") resolvedProjectId = projetoFilter;
 
     if (!resolvedProjectId) {
       setChoosingProject(true);
@@ -452,7 +516,9 @@ function ArtesPageInner() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Artes ✦</h1>
-          <Badge variant="secondary" className="h-6">{count} itens</Badge>
+          <Badge variant="secondary" className="h-6">
+            {count} {count === 1 ? "arte" : "artes"}
+          </Badge>
           <div className="hidden md:flex items-center gap-1 text-xs">
             {estatisticas.emAnalise > 0 && (
               <Badge variant="outline" className="gap-1" title="Em análise"><Clock className="h-3 w-3" /> {estatisticas.emAnalise}</Badge>
@@ -476,151 +542,163 @@ function ArtesPageInner() {
         </div>
       </div>
 
-      {/* Filtros “chips” + controles */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[260px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por arte, projeto, cliente ou autor…"
-              defaultValue={searchTerm}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-                searchTimeoutRef.current = setTimeout(() => setParam("q", value), 350);
-              }}
-              className="pl-10"
-            />
-          </div>
+      {/*
+        Uma linha de filtros, como em /projetos.
 
-          <Select value={sortBy} onValueChange={(v) => setParam("orderBy", v)}>
-            <SelectTrigger className="w-[170px]">
-              <SelectValue placeholder="Ordenar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="criado_em">Mais Recente</SelectItem>
-              <SelectItem value="nome">Nome</SelectItem>
-              <SelectItem value="projeto">Projeto</SelectItem>
-              <SelectItem value="versao">Versão</SelectItem>
-              <SelectItem value="tamanho">Tamanho</SelectItem>
-            </SelectContent>
-          </Select>
+        Eram quatro: busca e ordenação, chips de status, chips de tipo, e três
+        selects de 220px. Nove controles empilhados antes do primeiro cartão,
+        e quatro deles não faziam nada — projeto, cliente, autor e ordenação
+        mudavam a URL e não mudavam o pedido ao servidor.
 
-          <Select value={String(pageSize)} onValueChange={(v) => setParams({ pageSize: v, page: "1" })}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Itens/página" />
-            </SelectTrigger>
-            <SelectContent>
-              {[12, 24, 48, 96].map((n) => (
-                <SelectItem key={n} value={String(n)}>{n}/página</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" size="sm" onClick={limparFiltrosArte}>
-            <Filter className="h-4 w-4 mr-2" /> Limpar
-          </Button>
+        Agora cada dimensão é um chip que diz o que está valendo. Nada saiu:
+        os mesmos filtros, a um clique. O itens/página desceu para a linha de
+        paginação, que é de onde ele fala.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[260px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por arte, projeto, cliente ou autor…"
+            defaultValue={searchTerm}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+              searchTimeoutRef.current = setTimeout(() => setParam("q", value), 350);
+            }}
+            className="pl-10"
+          />
         </div>
 
-        {/* Linha de chips (status) */}
-        <div className="flex items-center gap-2 overflow-x-auto py-1">
-          {[
-            { key: "todos", label: "Todos" },
-            { key: "EM_ANALISE", label: "Em Análise" },
-            { key: "APROVADO", label: "Aprovado" },
-            { key: "REJEITADO", label: "Rejeitado" },
-          ].map(s => (
-            <Button
-              key={s.key}
-              size="sm"
-              /* `secondary` e não `default`: o chip ativo precisa se
-                 distinguir dos outros, não competir com "Nova Arte" pela
-                 mesma cor. Estado não é ação.
-
-                 Com a borda: só o fundo `secondary` neste tema claro quase
-                 some, e aí nada na linha diz qual filtro está valendo. */
-              variant={statusFilter === s.key ? "secondary" : "outline"}
-              onClick={() => setParam("status", s.key)}
-              className={cn(
-                "rounded-full",
-                statusFilter === s.key && "border border-foreground/25 font-medium",
-              )}
-            >
-              {s.label}
-            </Button>
-          ))}
-        </div>
-
-        {/* Linha de chips (tipos — horizontal scroll) */}
-        {tipos.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto py-1">
-            <Button
-              size="sm"
-              variant={tipoFilter === "todos" ? "secondary" : "outline"}
-              onClick={() => setParam("tipo", "todos")}
-              className={cn(
-                "rounded-full",
-                tipoFilter === "todos" && "border border-foreground/25 font-medium",
-              )}
-            >
-              <Layers3 className="h-4 w-4 mr-1" /> Todos tipos
-            </Button>
-            {tipos.map((t) => (
-              <Button
-                key={t}
-                size="sm"
-                variant={tipoFilter === t ? "secondary" : "outline"}
-                onClick={() => setParam("tipo", t)}
-                className={cn(
-                  "rounded-full",
-                  tipoFilter === t && "border border-foreground/25 font-medium",
-                )}
-              >
-                {t}
-              </Button>
+        <ChipPopover
+          label="Status"
+          valor={statusFilter === "todos" ? null : STATUS_LABEL[statusFilter] ?? statusFilter}
+          icon={<Filter className="h-4 w-4" />}
+        >
+          <div className="grid grid-cols-1 gap-1">
+            {Object.entries(STATUS_LABEL).map(([key, label]) => (
+              <ChipOption
+                key={key}
+                selected={statusFilter === key}
+                onClick={() => setParam("status", key)}
+                label={label}
+              />
             ))}
           </div>
+        </ChipPopover>
+
+        <ChipPopover
+          label="Tipo"
+          valor={tipoFilter === "todos" ? null : tipoFilter}
+          icon={<Layers3 className="h-4 w-4" />}
+        >
+          <div className="grid grid-cols-1 gap-1 max-h-64 overflow-auto pr-1">
+            <ChipOption selected={tipoFilter === "todos"} onClick={() => setParam("tipo", "todos")} label="Todos" />
+            {facetas.tipos.map((t) => (
+              <ChipOption key={t} selected={tipoFilter === t} onClick={() => setParam("tipo", t)} label={t} />
+            ))}
+          </div>
+        </ChipPopover>
+
+        <ChipPopover
+          label="Projeto"
+          valor={nomeDaFaceta(facetas.projetos, projetoFilter)}
+          icon={<FolderOpen className="h-4 w-4" />}
+        >
+          <div className="grid grid-cols-1 gap-1 max-h-64 overflow-auto pr-1">
+            <ChipOption selected={projetoFilter === "todos"} onClick={() => setParam("projeto", "todos")} label="Todos" />
+            {facetas.projetos.map((p) => (
+              <ChipOption key={p.id} selected={projetoFilter === p.id} onClick={() => setParam("projeto", p.id)} label={p.nome} />
+            ))}
+          </div>
+        </ChipPopover>
+
+        <ChipPopover
+          label="Cliente"
+          valor={nomeDaFaceta(facetas.clientes, clienteFilter)}
+          icon={<Users className="h-4 w-4" />}
+        >
+          <div className="grid grid-cols-1 gap-1 max-h-64 overflow-auto pr-1">
+            <ChipOption selected={clienteFilter === "todos"} onClick={() => setParam("cliente", "todos")} label="Todos" />
+            {facetas.clientes.map((c) => (
+              <ChipOption key={c.id} selected={clienteFilter === c.id} onClick={() => setParam("cliente", c.id)} label={c.nome} />
+            ))}
+          </div>
+        </ChipPopover>
+
+        {/* Só faz sentido quando há mais de um autor — num time de uma pessoa
+            é um filtro que sempre devolve a lista inteira. */}
+        {facetas.autores.length > 1 && (
+          <ChipPopover
+            label="Autor"
+            valor={nomeDaFaceta(facetas.autores, autorFilter)}
+            icon={<User className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-1 max-h-64 overflow-auto pr-1">
+              <ChipOption selected={autorFilter === "todos"} onClick={() => setParam("autor", "todos")} label="Todos" />
+              {facetas.autores.map((a) => (
+                <ChipOption key={a.id} selected={autorFilter === a.id} onClick={() => setParam("autor", a.id)} label={a.nome} />
+              ))}
+            </div>
+          </ChipPopover>
         )}
 
-        {/* Facetas compactas (projeto/cliente/autor) */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={projetoFilter} onValueChange={(v) => setParam("projeto", v)}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Projeto" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos Projetos</SelectItem>
-              {projetos.map((p) => <SelectItem key={p.id} value={p.nome}>{p.nome}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        {/* `ativo={false}`: ordenar sempre tem valor e não esconde nada. */}
+        <ChipPopover
+          label="Ordenar"
+          valor={ORDEM_LABEL[sortBy]}
+          ativo={false}
+          icon={<ChevronsUpDown className="h-4 w-4" />}
+        >
+          <div className="grid grid-cols-1 gap-1">
+            {Object.entries(ORDEM_LABEL).map(([key, label]) => (
+              <ChipOption
+                key={key}
+                selected={sortBy === key}
+                onClick={() => setParam("orderBy", key)}
+                label={label}
+              />
+            ))}
+          </div>
+        </ChipPopover>
 
-          <Select value={clienteFilter} onValueChange={(v) => setParam("cliente", v)}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Cliente" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos Clientes</SelectItem>
-              {clientes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={autorFilter} onValueChange={(v) => setParam("autor", v)}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Autor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos Autores</SelectItem>
-              {autores.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Só quando há o que limpar: um botão permanentemente sem efeito
+            ocupa a linha para não fazer nada. */}
+        {temFiltro && (
+          <Button variant="ghost" size="sm" onClick={limparFiltrosArte}>
+            Limpar
+          </Button>
+        )}
       </div>
 
-      {/* Paginação compacta (topo) */}
-      {count > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <div>Mostrando página {page} de {totalPages} • {count} itens</div>
+      {/*
+        Paginação — só quando há mais de uma página.
+
+        Com uma página só, esta faixa repetia a contagem que o cabeçalho já dá
+        ("3 itens") e desenhava dois botões permanentemente desabilitados.
+      */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <div>
+            Página {page} de {totalPages} • {count} {count === 1 ? "arte" : "artes"}
+          </div>
           <div className="flex items-center gap-2">
+            {/* O itens/página desceu da barra de filtros para cá: ele não
+                filtra nada, e só diz algo quando há mais de uma página. */}
+            <Select value={String(pageSize)} onValueChange={(v) => setParams({ pageSize: v, page: "1" })}>
+              {/*
+                O número direto, e não `<SelectValue/>`: a URL aceita de 6 a 96
+                e as opções são quatro, então um valor fora delas (um link
+                guardado com `pageSize=6`) deixava o campo em branco — o
+                placeholder do Radix só aparece com valor vazio, não com valor
+                sem opção correspondente.
+              */}
+              <SelectTrigger className="h-8 w-[120px]">{pageSize}/página</SelectTrigger>
+              <SelectContent>
+                {[12, 24, 48, 96].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}/página</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setParam("page", String(page - 1))}>
               Anterior
             </Button>

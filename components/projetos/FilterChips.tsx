@@ -1,28 +1,12 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon, ChevronsUpDown, Filter, Search, Users } from "lucide-react";
-import { Check } from "lucide-react";
+import { ChipOption, ChipPopover } from "@/components/filtros/ChipDeFiltro";
 import { orderLabel, StatusFiltro } from "./types";
 
-export function ChipPopover({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">{icon}{label}</Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-2">{children}</PopoverContent>
-    </Popover>
-  );
-}
-export function ChipOption({ selected, onClick, label }: { selected?: boolean; onClick: () => void; label: string }) {
-  return (
-    <Button variant={selected ? "secondary" : "ghost"} size="sm" className="justify-start" onClick={onClick}>
-      {selected && <Check className="h-4 w-4 mr-2" />}
-      {label}
-    </Button>
-  );
-}
+/*
+ * Os chips moraram aqui até a tela de Artes precisar dos mesmos. Agora são de
+ * `components/filtros`, e as duas listas grandes do produto filtram igual.
+ */
 
 export default function FilterChips({
   searchTerm, setSearchTerm,
@@ -57,7 +41,7 @@ export default function FilterChips({
       </div>
 
       {/* Status */}
-      <ChipPopover label={`Status: ${statusFilter === "todos" ? "Todos" : statusFilter}`} icon={<Filter className="h-4 w-4" />}>
+      <ChipPopover label="Status" valor={statusFilter === "todos" ? null : statusFilter} icon={<Filter className="h-4 w-4" />}>
         <div className="grid grid-cols-1 gap-2">
           {(["todos", "EM_ANDAMENTO", "CONCLUIDO", "PAUSADO"] as StatusFiltro[]).map((s) => (
             <ChipOption key={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)} label={s === "todos" ? "Todos" : s} />
@@ -66,7 +50,7 @@ export default function FilterChips({
       </ChipPopover>
 
       {/* Prazo */}
-      <ChipPopover label={`Prazo: ${prazoPreset === "todos" ? "Todos" : `Próx. ${prazoPreset} dias`}`} icon={<CalendarIcon className="h-4 w-4" />}>
+      <ChipPopover label="Prazo" valor={prazoPreset === "todos" ? null : `Próx. ${prazoPreset} dias`} icon={<CalendarIcon className="h-4 w-4" />}>
         <div className="grid grid-cols-1 gap-2">
           {(["todos", "7", "30", "90"] as const).map((p) => (
             <ChipOption key={p} selected={prazoPreset === p} onClick={() => setPrazoPreset(p)} label={p === "todos" ? "Todos" : `Próx. ${p} dias`} />
@@ -75,7 +59,7 @@ export default function FilterChips({
       </ChipPopover>
 
       {/* Cliente */}
-      <ChipPopover label={`Cliente: ${clienteFilter === "todos" ? "Todos" : (clientes.find(c => c.id === clienteFilter)?.nome ?? "—")}`} icon={<Users className="h-4 w-4" />}>
+      <ChipPopover label="Cliente" valor={clienteFilter === "todos" ? null : (clientes.find(c => c.id === clienteFilter)?.nome ?? "—")} icon={<Users className="h-4 w-4" />}>
         <div className="grid grid-cols-1 gap-2 max-h-64 overflow-auto pr-1">
           <ChipOption selected={clienteFilter === "todos"} onClick={() => setClienteFilter("todos")} label="Todos" />
           {clientes.map((c) => (
@@ -85,7 +69,8 @@ export default function FilterChips({
       </ChipPopover>
 
       {/* Ordenação */}
-      <ChipPopover label={`Ordenar: ${orderLabel(orderBy)} ${ascending ? "↑" : "↓"}`} icon={<ChevronsUpDown className="h-4 w-4" />}>
+      {/* `ativo={false}`: ordenar sempre tem um valor e não esconde nada da lista. */}
+      <ChipPopover label="Ordenar" valor={`${orderLabel(orderBy)} ${ascending ? "↑" : "↓"}`} ativo={false} icon={<ChevronsUpDown className="h-4 w-4" />}>
         <div className="grid gap-2">
           <ChipOption selected={orderBy === "prazo"} onClick={() => setOrderBy("prazo")} label="Prazo" />
           <ChipOption selected={orderBy === "criado_em"} onClick={() => setOrderBy("criado_em")} label="Criação" />
