@@ -1,5 +1,6 @@
 // lib/projects.ts — usa a API REST do backend
 import { api, getAll, MAX_PAGE_SIZE } from '@/lib/api'
+import { listVersoes } from '@/lib/artes'
 
 // Os cinco status do backend (PROJETO_TRANSITIONS em src/utils/stateMachine.ts).
 // RASCUNHO e CANCELADO faltavam aqui: um projeto criado com convite nasce em
@@ -461,14 +462,66 @@ export interface ArteQuickPeek {
     versao: number
     status: string
     criado_em: string
+    autor: { id: string; nome: string } | null
   }
-  versoes: Array<{ id: string; versao: number; status: string; criado_em: string }>
-  feedbacks: Array<{ id: string; conteudo: string; autor_id: string; criado_em: string }>
+  versoes: Array<{
+    id: string
+    versao: number
+    status: string
+    criado_em: string
+    preview_url: string | null
+  }>
+  feedbacks: Array<{
+    id: string
+    conteudo: string
+    autor: { id: string; nome: string }
+    criado_em: string
+  }>
 }
 
+/**
+ * O que o drawer de espiada rápida mostra sobre uma arte.
+ *
+ * Este mapeador montava a resposta campo a campo e esquecia quatro coisas que
+ * o servidor já mandava — a URL assinada da imagem, os feedbacks, o autor — e
+ * inventava a lista de versões com uma linha só, a própria arte. O resultado
+ * na tela era "Sem preview disponível", "Sem feedbacks", um traço no lugar do
+ * autor e um histórico que nunca crescia, tudo sobre uma arte que tinha as
+ * quatro coisas.
+ *
+ * As versões vêm de `listVersoes`, que já existe e já lê a rota certa. Se ela
+ * falhar, sobra a versão atual da própria arte: é menos do que o ideal, mas
+ * não é mentira — e o drawer não fica vazio por causa de uma consulta a mais.
+ */
 export async function getArteQuickPeek(arteId: string): Promise<ArteQuickPeek> {
-  const res = await api.get<{ data: any }>(`/artes/${arteId}`)
+  const [res, grupos] = await Promise.all([
+    api.get<{ data: any }>(`/artes/${arteId}`),
+    listVersoes(arteId).catch(() => []),
+  ])
   const a = res.data
+  const criadoEm = a.criadoEm ?? a.criado_em ?? ''
+  // `previewUrl` e `arquivo_url` são o mesmo campo com dois nomes na resposta.
+  const previewDaArte: string | null = a.previewUrl ?? a.arquivo_url ?? null
+
+  const versoes = grupos.length
+    ? grupos.map((g) => ({
+        id: `${arteId}-v${g.versao}`,
+        versao: g.versao,
+        // O status é da arte, não da versão: o backend não versiona status.
+        status: a.status,
+        criado_em: g.criado_em ?? criadoEm,
+        preview_url: g.arquivos[0]?.arquivo ?? null,
+      }))
+    : [
+        {
+          id: a.id,
+          versao: a.versao,
+          status: a.status,
+          criado_em: criadoEm,
+          preview_url: previewDaArte,
+        },
+      ]
+
   return {
     arte: {
       id: a.id,
@@ -477,17 +530,16 @@ export async function getArteQuickPeek(arteId: string): Promise<ArteQuickPeek> {
       tipo: a.tipo,
       versao: a.versao,
       status: a.status,
-      criado_em: a.criadoEm ?? a.criado_em ?? '',
+      criado_em: criadoEm,
+      autor: a.autor ? { id: a.autor.id, nome: a.autor.nome } : null,
     },
-    versoes: [
-      {
-        id: a.id,
-        versao: a.versao,
-        status: a.status,
-        criado_em: a.criadoEm ?? a.criado_em ?? '',
-      },
-    ],
-    feedbacks: [],
+    versoes,
+    feedbacks: (a.feedbacks ?? []).map((f: any) => ({
+      id: f.id,
+      conteudo: f.conteudo ?? '',
+      autor: { id: f.autor?.id ?? '', nome: f.autor?.nome ?? 'Alguém' },
+      criado_em: f.criadoEm ?? f.criado_em ?? '',
+    })),
   }
 }
 
