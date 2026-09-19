@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
+import { destinoDaNotificacao, type Notificacao } from '@/lib/notificacoes'
 import { pagamentosApi, SaldoInfo, Assinatura, Fatura } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
@@ -466,14 +467,6 @@ export default function PainelDoDesigner() {
 
   /* ---------- Desde ontem ---------- */
 
-  const DESTINO_POR_TIPO: Record<string, string> = {
-    NOVO_PROJETO: '/projetos',
-    NOVA_ARTE: '/artes',
-    NOVO_FEEDBACK: '/feedbacks',
-    APROVACAO: '/artes',
-    PRAZO: '/prazos',
-  }
-
   const desdeOntem = meiaNoite(1).getTime()
   const eventosDesdeOntem: Evento[] = notificacoes
     .filter((n: any) => new Date(n.criadoEm ?? n.criado_em ?? 0).getTime() >= desdeOntem)
@@ -490,9 +483,16 @@ export default function PainelDoDesigner() {
         hour: '2-digit',
         minute: '2-digit',
       }),
-      // Notificacao não guarda o id do recurso, só o tipo — dá para levar à
-      // tela certa, não à linha certa. Melhor isso que um link que erra o alvo.
-      href: DESTINO_POR_TIPO[n.tipo] ?? null,
+      /*
+       * A notificação agora guarda o que ela está falando (`entidadeTipo` e
+       * `entidadeId`), então o evento leva à linha, não só à tela.
+       *
+       * Antes era um mapa de tipo para rota escrito aqui — e keyed pelo
+       * vocabulário que o sistema havia parado de falar: dos cinco tipos,
+       * só NOVO_FEEDBACK existia de verdade, então todo evento que não fosse
+       * feedback nascia sem link nenhum.
+       */
+      href: destinoDaNotificacao(n as Notificacao),
     }))
 
   /* ---------- Esta semana ---------- */
