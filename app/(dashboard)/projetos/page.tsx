@@ -28,7 +28,11 @@ import BulkBar from "@/components/projetos/BulkBar";
 import BoardView from "@/components/projetos/BoardView";
 import CalendarView from "@/components/projetos/CalendarView";
 import FilterChips from "@/components/projetos/FilterChips";
-import { parseMode, parseStatusFiltro, type Mode, type StatusFiltro } from "@/components/projetos/types";
+import {
+  parseMode, parseStatusFiltro, parsePrazoPreset, parseOrdem, parseAscendente,
+  queryDosFiltros,
+  type Mode, type StatusFiltro, type PrazoPreset, type OrdemProjeto,
+} from "@/components/projetos/types";
 
 const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"];
 
@@ -67,16 +71,33 @@ function ProjetosPageContent() {
   }, []);
   const [editing, setEditing] = useState<Projeto | null>(null);
 
-  // filtros — o estado inicial vem da URL para que voltar do detalhe de um
-  // projeto (ou recarregar a aba) não jogue a pessoa de volta na lista crua.
+  /*
+   * Filtros — TODOS vêm da URL, e todos voltam para ela.
+   *
+   * O comentário aqui dizia que o estado inicial vem da URL "para que voltar
+   * do detalhe de um projeto não jogue a pessoa de volta na lista crua". A
+   * intenção estava certa; a execução guardava metade: busca, status e
+   * visualização iam para a URL, e prazo, cliente e ordenação ficavam só na
+   * memória do componente.
+   *
+   * Então filtrar por um cliente, abrir um projeto e voltar devolvia a lista
+   * inteira — exatamente o que a linha acima prometia evitar. E como o efeito
+   * de sincronia monta a query do zero, um endereço com `?cliente=…` era
+   * APAGADO na montagem: a URL não só esquecia o filtro, ela o removia de um
+   * link que alguém tinha mandado.
+   */
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState<StatusFiltro>(
     parseStatusFiltro(searchParams.get("status")),
   );
-  const [prazoPreset, setPrazoPreset] = useState<"todos" | "7" | "30" | "90">("todos");
-  const [clienteFilter, setClienteFilter] = useState<string | "todos">("todos");
-  const [orderBy, setOrderBy] = useState<"criado_em" | "prazo" | "nome">("criado_em");
-  const [ascending, setAscending] = useState(false);
+  const [prazoPreset, setPrazoPreset] = useState<PrazoPreset>(
+    parsePrazoPreset(searchParams.get("prazo")),
+  );
+  const [clienteFilter, setClienteFilter] = useState<string | "todos">(
+    searchParams.get("cliente") ?? "todos",
+  );
+  const [orderBy, setOrderBy] = useState<OrdemProjeto>(parseOrdem(searchParams.get("ordem")));
+  const [ascending, setAscending] = useState(parseAscendente(searchParams.get("asc")));
 
   // seleção em massa
   const [selectMode, setSelectMode] = useState(false);
@@ -87,12 +108,16 @@ function ProjetosPageContent() {
   // histórico do navegador é para navegação, não para cada tecla digitada.
   const primeiraSincronizacao = useRef(true);
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (searchTerm.trim()) params.set("q", searchTerm.trim());
-    if (statusFilter !== "todos") params.set("status", statusFilter);
-    if (mode !== "cards") params.set("view", mode);
+    const query = queryDosFiltros({
+      busca: searchTerm,
+      status: statusFilter,
+      prazo: prazoPreset,
+      cliente: clienteFilter,
+      ordem: orderBy,
+      ascendente: ascending,
+      modo: mode,
+    });
 
-    const query = params.toString();
     const destino = query ? `/projetos?${query}` : "/projetos";
     const atual = `${window.location.pathname}${window.location.search}`;
 
@@ -101,7 +126,7 @@ function ProjetosPageContent() {
       if (destino === atual) return;
     }
     if (destino !== atual) router.replace(destino, { scroll: false });
-  }, [searchTerm, statusFilter, mode, router]);
+  }, [searchTerm, statusFilter, prazoPreset, clienteFilter, orderBy, ascending, mode, router]);
 
   // loader frases
   useEffect(() => {
@@ -172,12 +197,23 @@ function ProjetosPageContent() {
     setFiltered(sorted);
   }, [rows, searchTerm, statusFilter, prazoPreset, clienteFilter, orderBy, ascending]);
 
-  const estatisticas = useMemo(() => ({
-    total: rows.length,
-    emAndamento: rows.filter((p) => p.status === "EM_ANDAMENTO").length,
-    concluidos: rows.filter((p) => p.status === "CONCLUIDO").length,
-    pausados: rows.filter((p) => p.status === "PAUSADO").length,
-  }), [rows]);
+  /*
+   * A contagem do topo precisa falar do que está na tela.
+   *
+   * Ela era `rows.length` — o total carregado — enquanto a grade desenha
+   * `filtered`. Filtrando por "Concluído" num seed de três projetos, o
+   * cabeçalho dizia "3 projetos" sobre UM cartão. Não é arredondamento: são
+   * dois conjuntos diferentes com o mesmo rótulo, e o número maior é o que
+   * fica em destaque ao lado do título.
+   *
+   * Com filtro, "1 de 3": o que você está vendo, e de quanto. Sem filtro, o
+   * total sozinho — "3 de 3" seria ruído.
+   *
+   * Os outros três campos saíram: `emAndamento`, `concluidos` e `pausados`
+   * não eram lidos em lugar nenhum desta tela.
+   */
+  const total = rows.length;
+  const visiveis = filtered.length;
 
   // CRUD
   const onCreate = async (values: ProjetoInput & { skipBriefingEval?: boolean }) => {
@@ -306,7 +342,11 @@ function ProjetosPageContent() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Projetos ✦</h1>
-          <Badge variant="secondary" className="h-6">{estatisticas.total} projetos</Badge>
+          <Badge variant="secondary" className="h-6">
+            {temFiltroProjeto && visiveis !== total
+              ? `${visiveis} de ${total}`
+              : `${total} ${total === 1 ? "projeto" : "projetos"}`}
+          </Badge>
         </div>
 
         <div className="flex items-center gap-2">
