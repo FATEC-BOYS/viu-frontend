@@ -106,22 +106,33 @@ function Notificacoes() {
 
   const carregar = useCallback(async () => {
     setCarregando(true);
-    try {
-      const [pagina, f] = await Promise.all([
-        listNotificacoes({ tipo: tipo || undefined, canal: canal || undefined, lida, page, limit }),
-        listFacetasDeNotificacoes(),
-      ]);
-      setItens(pagina.itens);
-      setTotal(pagina.total);
-      setNaoLidas(pagina.naoLidas);
-      setPaginas(Math.max(1, pagina.paginas));
-      setFacetas(f);
+    /*
+     * `allSettled`, e não `all`: as facetas são o cromo do filtro, a lista é o
+     * conteúdo. Amarrar as duas faz uma faceta que falhou apagar a caixa de
+     * entrada inteira — inclusive durante um deploy em que a tela sobe antes
+     * de o servidor conhecer `/notificacoes/facetas`. Sem chip dá para ler as
+     * notificações; sem notificação não há tela.
+     */
+    const [resLista, resFacetas] = await Promise.allSettled([
+      listNotificacoes({ tipo: tipo || undefined, canal: canal || undefined, lida, page, limit }),
+      listFacetasDeNotificacoes(),
+    ]);
+
+    if (resLista.status === 'fulfilled') {
+      setItens(resLista.value.itens);
+      setTotal(resLista.value.total);
+      setNaoLidas(resLista.value.naoLidas);
+      setPaginas(Math.max(1, resLista.value.paginas));
       setErro(null);
-    } catch {
+    } else {
       setErro('Não foi possível carregar as notificações.');
-    } finally {
-      setCarregando(false);
     }
+
+    // Sem facetas os chips somem, mas um filtro que já está na URL continua
+    // valendo: quem filtra é o servidor, não a lista de opções.
+    setFacetas(resFacetas.status === 'fulfilled' ? resFacetas.value : { tipos: [], canais: [] });
+
+    setCarregando(false);
   }, [tipo, canal, lida, page, limit]);
 
   useEffect(() => { void carregar(); }, [carregar]);
