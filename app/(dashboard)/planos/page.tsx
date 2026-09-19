@@ -3,7 +3,8 @@
 import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { Check, Zap, Crown, Star, Loader2, AlertCircle } from 'lucide-react'
+import { Check, Zap, Crown, Star, Loader2, AlertCircle, CreditCard } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -163,6 +164,17 @@ export default function PlanosPage() {
   const tipo: 'DESIGNER' | 'CLIENTE' =
     (user as { tipo?: string } | null)?.tipo === 'CLIENTE' ? 'CLIENTE' : 'DESIGNER'
   const usuarioId = (user as { id?: string } | null)?.id
+  /*
+   * O comentário acima dizia "quem chega nesta tela é sempre designer, porque
+   * o Sidebar não mostra /planos para cliente". Era verdade sobre o menu e
+   * falso sobre o produto: o Perfil — que o cliente tem — mostrava um cartão
+   * de Assinatura com "Ver planos". A suposição virou barreira explícita,
+   * porque endereço se guarda e se compartilha.
+   *
+   * Conveniência de navegação, não segurança: o backend continua sendo quem
+   * decide o que cada conta pode assinar.
+   */
+  const ehCliente = (user as { tipo?: string } | null)?.tipo === 'CLIENTE'
 
   useEffect(() => {
     if (!usuarioId) return
@@ -193,6 +205,30 @@ export default function PlanosPage() {
   // `getPlanos` já filtra por tipo no servidor; filtrar de novo aqui protege
   // contra uma resposta em cache do tipo anterior, e custa nada.
   const filteredPlanos = planos.filter(p => p.tipo === tipo)
+
+  if (ehCliente) {
+    return (
+      <div className="mx-auto w-full max-w-3xl p-6">
+        <div className="grid place-items-center rounded-xl border border-dashed bg-muted/20 px-6 py-10 text-center">
+          <div className="max-w-sm space-y-3">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-muted">
+              <CreditCard className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="font-medium">Planos são do designer</h1>
+              <p className="text-sm text-muted-foreground">
+                Quem assina o VIU é quem contrata o trabalho de revisão. Sua
+                conta de cliente não precisa de plano.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="mt-1">
+              <Link href="/dashboard">Voltar ao dashboard</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
