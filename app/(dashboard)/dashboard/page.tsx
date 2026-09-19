@@ -5,6 +5,7 @@ import { FadeIn } from '@/components/layout/Motion'
 import AguardandoVoce from '@/components/dashboard/AguardandoVoce'
 import PainelDoDesigner from '@/components/dashboard/PainelDoDesigner'
 import PainelDoCliente from '@/components/dashboard/PainelDoCliente'
+import PainelDoAdmin from '@/components/dashboard/PainelDoAdmin'
 
 /**
  * O roteador do painel — e a razão de ele existir.
@@ -30,7 +31,25 @@ export default function DashboardPage() {
   }
 
   const ehCliente = user?.tipo === 'CLIENTE'
+  const ehAdmin = user?.tipo === 'ADMIN'
   const primeiroNome = (user?.nome ?? '').trim().split(/\s+/)[0] || 'tudo bem'
+
+  /*
+   * O admin coordena a plataforma; a visão dele é macro.
+   *
+   * A ramificação parava no cliente, então ADMIN caía no `else` e recebia o
+   * painel do designer. E como `getAccessibleProjectIds` devolve `null` para
+   * admin — que significa "sem restrição" —, as consultas por trás dele
+   * devolviam a plataforma inteira, apresentada com as palavras de quem
+   * trabalha: "3 feedbacks esperando você" sobre comentários que esperavam
+   * outra pessoa, "Seus projetos" sobre projetos alheios, e a trilha de
+   * primeiros passos marcada como concluída pelo trabalho dos outros.
+   *
+   * Nenhum número ali era dele. É o mesmo defeito que esta página já tinha
+   * corrigido para o cliente — a correção só não tinha chegado no terceiro
+   * papel.
+   */
+  if (ehAdmin) return <PainelDoAdmin />
 
   /*
    * A fila entra em lugares diferentes de propósito. No painel do cliente ela
