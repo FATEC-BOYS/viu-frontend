@@ -18,7 +18,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { X } from "lucide-react";
 
 type Props = { open: boolean; onOpenChange: (v: boolean) => void; onCreated?: (clienteId: string) => void; };
-type Contato = { nome: string; email: string; telefone: string };
 type ProjetoForm = { nome: string; prazo: string; orcamento: string };
 
 function centsFromBRLString(v?: string) {
@@ -36,11 +35,22 @@ function slugify(s: string) {
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "").slice(0, 40);
 }
 
+/*
+ * Havia um quarto passo, "Contatos (opcional)".
+ *
+ * Ele pedia nome, e-mail e telefone de cada contato, VALIDAVA cada campo — e
+ * no submit não fazia nada, porque não existe endpoint de contatos no
+ * backend. Fazia a pessoa corrigir um dado para então descartá-lo.
+ *
+ * E eram os mesmos três campos do passo 0, que já pede nome, e-mail e
+ * telefone do cliente. Para quem cadastra um cliente, "contatos" separados do
+ * cliente nem é um conceito que este produto tem. Tirar é mais honesto do que
+ * implementar um endpoint que ninguém pediu.
+ */
 const steps = [
   { id: 0, title: "Cliente", desc: "Dados básicos do cliente" },
   { id: 1, title: "Projeto (opcional)", desc: "Configure um projeto inicial" },
-  { id: 2, title: "Contatos (opcional)", desc: "Adicione pessoas de contato" },
-  { id: 3, title: "Revisão", desc: "Confirme e crie" },
+  { id: 2, title: "Revisão", desc: "Confirme e crie" },
 ] as const;
 
 export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) {
@@ -59,14 +69,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   // Step 1 — Projeto (opcional)
   const [criarProjeto, setCriarProjeto] = useState(false);
   const [proj, setProj] = useState<ProjetoForm>({ nome: "", prazo: formatTodayISO(), orcamento: "" });
-
-  // Step 2 — Contatos (opcional — sem endpoint dedicado no backend)
-  const [addContatos, setAddContatos] = useState(false);
-  const [contatos, setContatos] = useState<Contato[]>([]);
-  const addContato = () => setContatos((prev) => [...prev, { nome: "", email: "", telefone: "" }]);
-  const rmContato = (i: number) => setContatos((prev) => prev.filter((_, idx) => idx !== i));
-  const setContato = (i: number, patch: Partial<Contato>) =>
-    setContatos((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
 
   const isLast = step === steps.length - 1;
   const isFirst = step === 0;
@@ -94,12 +96,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
       if (!proj.nome.trim()) return toast.error("Informe o nome do projeto"), false;
       if (proj.prazo && isNaN(new Date(proj.prazo).getTime())) return toast.error("Prazo inválido"), false;
     }
-    if (s === 2 && addContatos) {
-      for (const c of contatos) {
-        if (!c.nome.trim()) return toast.error("Contato sem nome"), false;
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)) return toast.error("Contato com e-mail inválido"), false;
-      }
-    }
     return true;
   }
   const handleNext = () => { if (validateStep(step)) setStep((s) => Math.min(s + 1, steps.length - 1)); };
@@ -107,7 +103,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
   const onSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (submitting) return;
-    if (!validateStep(0) || !validateStep(1) || !validateStep(2)) return;
+    if (!validateStep(0) || !validateStep(1)) return;
 
     try {
       setSubmitting(true);
@@ -153,9 +149,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
         });
       }
 
-      // 3) Contatos opcionais — sem endpoint dedicado no backend ainda
-      // TODO: implementar endpoint POST /contatos quando disponível no backend
-
       /*
        * A frase diz o que aconteceu de verdade. "Cliente criado" seria mentira
        * quando a conta já existia — e é justamente o caso em que o designer
@@ -182,7 +175,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     setNome(""); setEmail(""); setTelefone("");
     setAtivo(true); setCriarProjeto(false);
     setProj({ nome: "", prazo: formatTodayISO(), orcamento: "" });
-    setAddContatos(false); setContatos([]);
   }
 
   return (
@@ -264,44 +256,8 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
             </div>
           )}
 
-          {/* 2 - Contatos */}
+          {/* 2 - Revisão */}
           {step === 2 && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Checkbox id="addContatos" checked={addContatos} onCheckedChange={(v)=>setAddContatos(!!v)} disabled={submitting} />
-                <Label htmlFor="addContatos" className="text-sm">Adicionar contatos</Label>
-              </div>
-
-              {addContatos && (
-                <div className="space-y-3">
-                  {contatos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum contato adicionado ainda.</p>}
-                  {contatos.map((c, idx) => (
-                    <div key={idx} className="rounded-md border p-3 grid gap-3">
-                      <div className="grid gap-2">
-                        <Label>Nome *</Label>
-                        <Input value={c.nome} onChange={(e)=>setContato(idx, { nome: e.target.value })} disabled={submitting} />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>E-mail *</Label>
-                        <Input type="email" value={c.email} onChange={(e)=>setContato(idx, { email: e.target.value })} disabled={submitting} />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>Telefone</Label>
-                        <Input value={c.telefone} onChange={(e)=>setContato(idx, { telefone: e.target.value })} disabled={submitting} />
-                      </div>
-                      <div className="flex justify-end">
-                        <Button type="button" variant="ghost" onClick={()=>rmContato(idx)} disabled={submitting}>Remover</Button>
-                      </div>
-                    </div>
-                  ))}
-                  <Button type="button" variant="outline" onClick={addContato} disabled={submitting}>Adicionar contato</Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 3 - Revisão */}
-          {step === 3 && (
             <div className="space-y-4">
               <div className="rounded-md border p-3">
                 <p className="text-sm font-medium mb-1">Cliente</p>
@@ -326,21 +282,6 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
                 </div>
               )}
 
-              {addContatos && (
-                <div className="rounded-md border p-3">
-                  <p className="text-sm font-medium mb-1">Contatos</p>
-                  <Separator className="mb-2" />
-                  {contatos.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhum contato adicionado.</p>
-                  ) : (
-                    <ul className="text-sm list-disc pl-5">
-                      {contatos.map((c, i) => (
-                        <li key={i}>{c.nome} — {c.email}{c.telefone ? ` • ${c.telefone}` : ""}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
