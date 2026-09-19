@@ -146,10 +146,12 @@ export default function PerfilPage() {
         // payment data — sobrava aqui um `const tipo` que ninguém lia desde
         // que a chamada de faturas saiu desta tela.
         const [assinaturaRes, saldoRes] = await Promise.allSettled([
-          pagamentosApi.getMinhaAssinatura(),
+          // Só designer assina o VIU — mesma condição do saldo, logo abaixo,
+          // que já estava certa.
+          u.tipo === 'DESIGNER' ? pagamentosApi.getMinhaAssinatura() : Promise.resolve(null),
           u.tipo === 'DESIGNER' ? pagamentosApi.getSaldo() : Promise.resolve(null),
         ])
-        if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value.data)
+        if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value?.data ?? null)
         else setAssinatura(null)
         if (saldoRes.status === 'fulfilled' && saldoRes.value) setSaldo(saldoRes.value.data)
       } catch (e: any) {
@@ -435,7 +437,16 @@ export default function PerfilPage() {
             </Card>
           )}
 
-          {/* --- assinatura card --- */}
+          {/*
+            Assinatura é do designer, e só dele.
+
+            Este cartão não tinha guarda nenhuma — ao lado de um cartão de
+            Saldo que já usava `isDesigner`. O cliente via "Nenhuma assinatura
+            ativa" no próprio perfil e um botão "Ver planos" que o levava à
+            tela onde o designer paga o VIU. O menu do cliente exclui Planos e
+            Assinatura de propósito; era por aqui que voltavam.
+          */}
+          {isDesigner && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card>
               <CardHeader className="pb-3">
@@ -479,6 +490,7 @@ export default function PerfilPage() {
               </CardContent>
             </Card>
           </motion.div>
+          )}
 
           {/* --- saldo designer card --- */}
           {isDesigner && (

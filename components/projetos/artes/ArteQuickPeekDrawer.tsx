@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
+import Thumb from "@/components/layout/Thumb";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,28 +9,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getArteQuickPeek } from "@/lib/projects"; 
+import { getArteQuickPeek, type ArteQuickPeek } from "@/lib/projects";
 
-type VersaoItem = {
-  id: string;
-  versao: number;
-  status: string;
-  criado_em: string;
-  preview_url?: string | null;
-};
-
-type PeekData = {
-  arte: {
-    id: string;
-    nome: string;
-    tipo: string;
-    status: string;
-    criado_em: string;
-    autor?: { id: string; nome: string } | null;
-  };
-  versoes: VersaoItem[];
-  feedbacks: { id: string; conteudo: string; autor: { id: string; nome: string }; criado_em: string }[];
-};
+/*
+ * O tipo vem de quem busca os dados.
+ *
+ * Havia uma cópia local do formato aqui, e o `as unknown as PeekData` no
+ * fetch calava a diferença entre ela e o que `getArteQuickPeek` devolvia de
+ * verdade. Era esse cast que deixava a tela dizer "Sem preview disponível" e
+ * "Sem feedbacks" sem ninguém notar: o compilador tinha como saber, e foi
+ * mandado não olhar.
+ */
+type PeekData = ArteQuickPeek;
 
 export default function ArteQuickPeekDrawer({
   open,
@@ -58,7 +48,7 @@ export default function ArteQuickPeekDrawer({
       try {
         const data = await getArteQuickPeek(arteId);
         if (!mounted) return;
-        setPeek(data as unknown as PeekData);
+        setPeek(data);
       } catch (e) {
         console.error("Erro ao carregar quick peek:", e);
         if (mounted) setPeek(null);
@@ -97,7 +87,22 @@ export default function ArteQuickPeekDrawer({
                 Carregando…
               </div>
             ) : last?.preview_url ? (
-              <Image src={last.preview_url} alt={peek?.arte?.nome ?? "preview"} fill className="object-contain" />
+              /*
+                `Thumb` e não `<Image>` cru.
+                
+                O `next/image` ESTOURA quando o host da URL não está em
+                `remotePatterns` — e derruba a tela inteira, não só a imagem.
+                Enquanto `preview_url` vinha sempre vazio isso nunca aconteceu;
+                bastou o campo passar a ser preenchido para o drawer matar a
+                página. `Thumb` usa `unoptimized`, que pula essa checagem, e
+                troca a falha por um ícone: é o que o resto do produto já faz.
+              */
+              <Thumb
+                src={last.preview_url}
+                alt={peek?.arte?.nome ?? "preview"}
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-contain"
+              />
             ) : (
               <div className="h-full grid place-items-center text-xs text-muted-foreground">
                 Sem preview disponível
@@ -122,8 +127,8 @@ export default function ArteQuickPeekDrawer({
                         </div>
                       </div>
                       {v.preview_url ? (
-                        <div className="relative h-10 w-10 rounded overflow-hidden bg-muted">
-                          <Image src={v.preview_url} alt={`v${v.versao}`} fill className="object-cover" />
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded bg-muted">
+                          <Thumb src={v.preview_url} alt={`v${v.versao}`} sizes="40px" iconClassName="h-3 w-3" />
                         </div>
                       ) : null}
                     </li>
