@@ -74,7 +74,7 @@ function LoginContent() {
 
   if (step === '2fa') {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-full max-w-md">
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-2 text-center">
             <div className="flex justify-center mb-2">
@@ -127,15 +127,21 @@ function LoginContent() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
+    <div className="w-full max-w-md">
       <Card className="w-full max-w-md">
+        {/*
+          Aqui havia um "← Voltar" com `router.back()`, e um `<div>` invisível
+          ao lado só para equilibrar o flex.
+
+          Numa aba nova — link de e-mail, favorito, endereço digitado — não há
+          histórico para voltar: o botão levava a `about:blank`. Uma tela em
+          branco como saída de emergência é pior que saída nenhuma, porque
+          parece que funciona.
+
+          O caminho de volta agora é a marca no topo, no layout: existe sempre,
+          não depende de histórico, e diz de que site é esta página.
+        */}
         <CardHeader className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Button type="button" variant="ghost" size="sm" onClick={() => router.back()}>
-              ← Voltar
-            </Button>
-            <div className="opacity-0 pointer-events-none select-none">←</div>
-          </div>
           <CardTitle className="text-2xl">Bem-vindo de volta!</CardTitle>
           <CardDescription>Entre para acessar sua conta.</CardDescription>
         </CardHeader>

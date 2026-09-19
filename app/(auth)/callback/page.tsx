@@ -11,7 +11,7 @@ export default function AuthCallbackPage() {
   }, [router])
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="text-center">
       <p className="text-sm text-muted-foreground">Redirecionando…</p>
     </div>
   )
