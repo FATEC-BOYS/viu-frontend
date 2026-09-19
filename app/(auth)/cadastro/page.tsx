@@ -483,8 +483,8 @@ export default function CadastroPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <form onSubmit={handleSubmit} className="w-full max-w-xl">
+    <div className="w-full max-w-xl">
+      <form onSubmit={handleSubmit} className="w-full">
         <Card className="rounded-xl border bg-card">
           <CardHeader className="space-y-2">
             <CardTitle className="text-2xl">Criar conta</CardTitle>

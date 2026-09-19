@@ -37,7 +37,7 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-full max-w-md">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Link inválido</CardTitle>
@@ -86,7 +86,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
+    <div className="w-full max-w-md">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Definir nova senha</CardTitle>
@@ -149,7 +149,7 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-full max-w-md">
         <p className="text-sm text-muted-foreground">Carregando…</p>
       </div>
     }>
