@@ -1,452 +1,422 @@
 'use client';
 
+/*
+ * A caixa de entrada do VIU.
+ *
+ * Esta tela dizia coisas que o servidor nunca confirmou. Os filtros de tipo
+ * vinham de uma lista escrita à mão, copiada de um enum que o sistema havia
+ * parado de falar: dos seis tipos oferecidos, quatro nenhum serviço emitia —
+ * clicar neles só sabia devolver "sem notificações" — e dez tipos que existiam
+ * de fato não tinham rótulo, então a notificação mais importante do produto
+ * aparecia escrita `APROVACAO_SOLICITADA`. O seed sustentava a ilusão porque
+ * semeava justamente o vocabulário da lista.
+ *
+ * Agora tipo, rótulo e contagem vêm do servidor, e o filtro acontece lá: em
+ * memória, sobre um `?limit=100` fixo, filtrar escondia o que houvesse além da
+ * centésima linha sem avisar que estava escondendo.
+ */
+
 import { FadeIn } from "@/components/layout/Motion";
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ChipPopover, ChipOption } from '@/components/filtros/ChipDeFiltro';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 
 import {
-  Bell, Search, Calendar, CheckCircle2, Circle, Loader2, MessageSquare,
-  Clock, XCircle, CheckCheck, Trash2, Settings, MailOpen, Mail, FolderPlus, ImagePlus,
+  Bell, CheckCheck, Clock, FileText, ImageIcon, Loader2, MessageSquare,
+  Receipt, Trash2, CheckCircle2, XCircle, CreditCard, UserMinus, ChevronRight,
 } from 'lucide-react';
 
-/* ===================== Tipos ===================== */
+import {
+  destinoDaNotificacao, excluirNotificacao, listFacetasDeNotificacoes,
+  listNotificacoes, marcarComoLida, marcarTodasComoLidas,
+  type FacetasDeNotificacoes, type Notificacao,
+} from '@/lib/notificacoes';
 
-interface Notificacao {
-  id: string;
-  titulo: string;
-  conteudo: string;
-  tipo: 'NOVO_PROJETO' | 'NOVA_ARTE' | 'NOVO_FEEDBACK' | 'APROVACAO' | 'PRAZO' | 'SISTEMA' | string;
-  canal: 'SISTEMA' | 'EMAIL' | 'PUSH' | string;
-  lida: boolean;
-  criado_em: string;
-  usuario: { nome: string };
-}
-
-type SortKey = 'criado_em' | 'titulo' | 'tipo' | 'status';
-
-/* ===================== Pequenos helpers ===================== */
-
-const TYPE_ICON: Record<string, { icon: any; label: string; dot: string }> = {
-  NOVO_PROJETO: { icon: FolderPlus, label: 'Novo projeto', dot: 'bg-purple-500' },
-  NOVA_ARTE: { icon: ImagePlus, label: 'Nova arte', dot: 'bg-blue-500' },
-  NOVO_FEEDBACK: { icon: MessageSquare, label: 'Novo feedback', dot: 'bg-sky-500' },
-  APROVACAO: { icon: CheckCircle2, label: 'Aprovação', dot: 'bg-emerald-500' },
-  PRAZO: { icon: Clock, label: 'Prazo', dot: 'bg-amber-500' },
-  SISTEMA: { icon: Settings, label: 'Sistema', dot: 'bg-slate-400' },
+/*
+ * Só o ícone mora aqui — é decisão de apresentação. O nome do tipo vem do
+ * servidor junto com o tipo, que é o que impede a lista de envelhecer sozinha.
+ * Tipo sem entrada cai no sino, sem nada quebrar.
+ */
+const ICONE_POR_TIPO: Record<string, typeof Bell> = {
+  APROVACAO_SOLICITADA: Clock,
+  LEMBRETE_APROVACAO: Clock,
+  ARTE_APROVADA: CheckCircle2,
+  ARTE_REJEITADA: XCircle,
+  NOVO_FEEDBACK: MessageSquare,
+  FATURA_GERADA: Receipt,
+  PAGAMENTO_CONFIRMADO: CreditCard,
+  ESTORNO: Receipt,
+  CLIENTE_RECUSOU_CADASTRO: UserMinus,
+  ASSINATURA_RENOVADA: FileText,
+  ASSINATURA_CANCELADA: FileText,
+  ASSINATURA_PAUSADA: FileText,
+  SISTEMA: Bell,
+  NOVA_ARTE: ImageIcon,
 };
-function typeMeta(tipo: string) {
-  return TYPE_ICON[tipo] ?? { icon: Bell, label: tipo, dot: 'bg-slate-400' };
-}
-function canalLabel(canal: string) {
-  if (canal === 'SISTEMA') return 'Sistema';
-  if (canal === 'EMAIL') return 'Email';
-  if (canal === 'PUSH') return 'Push';
-  return canal;
-}
-function fromNow(s: string) {
-  const d = new Date(s); const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const h = Math.floor(diffMs / (1000*60*60));
-  if (h < 1) return 'agora há pouco';
-  if (h < 24) return `${h}h atrás`;
-  const days = Math.floor(h/24);
-  if (days < 7) return `${days}d atrás`;
+
+function quando(iso: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const horas = Math.floor((Date.now() - d.getTime()) / 3_600_000);
+  if (horas < 1) return 'agora há pouco';
+  if (horas < 24) return `${horas}h atrás`;
+  const dias = Math.floor(horas / 24);
+  if (dias < 7) return `${dias}d atrás`;
   return d.toLocaleDateString('pt-BR');
 }
-function groupLabelForDate(s: string) {
-  const d = new Date(s); const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return 'Hoje';
-  const diff = (now.getTime() - d.getTime()) / (1000*60*60*24);
-  if (diff < 7) return 'Esta semana';
-  return 'Anterior';
-}
 
-/* ===================== Linha de notificação (estilo inbox) ===================== */
+const POR_PAGINA = [20, 50, 100];
 
-function NotificacaoRow({
-  n, onToggleRead, onDelete,
-}: {
-  n: Notificacao;
-  onToggleRead: (id: string, next: boolean) => void;
-  onDelete: (id: string) => void;
-}) {
-  const meta = typeMeta(n.tipo);
-  const Icon = meta.icon;
-  return (
-    <div
-      className={`group grid grid-cols-[20px_1fr_auto] items-start gap-3 rounded-lg border px-3 py-2 transition hover:bg-accent
-        ${!n.lida ? 'border-primary/20 bg-primary/5' : 'border-transparent'}`}
-    >
-      {/* dot do tipo */}
-      <div className={`mt-2 h-2 w-2 rounded-full ${meta.dot}`} />
+function Notificacoes() {
+  const router = useRouter();
+  const params = useSearchParams();
 
-      {/* conteúdo */}
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium">
-            <Icon className="h-3 w-3" />
-            {meta.label}
-          </span>
-          <Badge variant="secondary" className="h-5">
-            {canalLabel(n.canal)}
-          </Badge>
-          {!n.lida && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-primary">
-              <Mail className="h-3 w-3" /> não lida
-            </span>
-          )}
-        </div>
+  const tipo = params.get('tipo') ?? '';
+  const canal = params.get('canal') ?? '';
+  const statusParam = params.get('lida');
+  const lida = statusParam === null ? undefined : statusParam === 'true';
+  const page = Math.max(1, Number(params.get('page') ?? '1') || 1);
+  const limit = Number(params.get('limit') ?? '20') || 20;
 
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className={`truncate text-sm font-medium ${!n.lida ? 'text-foreground' : 'text-foreground/90'}`}>
-              {n.titulo}
-            </div>
-            <p className={`line-clamp-2 text-sm ${!n.lida ? 'text-muted-foreground' : 'text-muted-foreground/90'}`}>
-              {n.conteudo}
-            </p>
-            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <Calendar className="h-3 w-3" />
-              <span>{fromNow(n.criado_em)}</span>
-              {/* sem remetente a linha virava "de —"; melhor não ter a parte */}
-              {n.usuario?.nome && n.usuario.nome !== '—' && (
-                <>
-                  <span className="opacity-50">•</span>
-                  <span>de {n.usuario.nome}</span>
-                </>
-              )}
-            </div>
-          </div>
+  const [itens, setItens] = useState<Notificacao[]>([]);
+  const [total, setTotal] = useState(0);
+  const [naoLidas, setNaoLidas] = useState(0);
+  const [paginas, setPaginas] = useState(1);
+  const [facetas, setFacetas] = useState<FacetasDeNotificacoes>({ tipos: [], canais: [] });
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+  const [aExcluir, setAExcluir] = useState<Notificacao | null>(null);
 
-          {/* ações rápidas */}
-          <div className="flex shrink-0 items-center gap-1 acoes-hover">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              title={n.lida ? 'Marcar como não lida' : 'Marcar como lida'}
-              onClick={() => onToggleRead(n.id, !n.lida)}
-            >
-              {n.lida ? <MailOpen className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-destructive"
-              title="Excluir"
-              onClick={() => onDelete(n.id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
+  const setParam = useCallback((chave: string, valor: string | null) => {
+    const p = new URLSearchParams(params.toString());
+    if (valor === null || valor === '') p.delete(chave);
+    else p.set(chave, valor);
+    // Mudar de filtro volta para a primeira página; mudar de página, não.
+    if (chave !== 'page') p.delete('page');
+    router.replace(`/notificacoes${p.toString() ? `?${p}` : ''}`);
+  }, [params, router]);
 
-      {/* marcador de lido/não-lido (coluna direita compacta) */}
-      <div className="mt-1 hidden sm:block">
-        {n.lida ? (
-          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-            <CheckCheck className="h-3 w-3" /> lida
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] text-primary">
-            <Circle className="h-3 w-3" /> nova
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ===================== Página ===================== */
-
-export default function NotificacoesPage() {
-  const [rows, setRows] = useState<Notificacao[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // filtros
-  const [q, setQ] = useState('');
-  const [tipo, setTipo] = useState<string>('todos');
-  const [status, setStatus] = useState<string>('todos');
-  const [canal, setCanal] = useState<string>('todos');
-  const [sortBy, setSortBy] = useState<SortKey>('criado_em');
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.get<{ data: any[] }>('/notificacoes?limit=100');
-        const mapped: Notificacao[] = (res.data ?? []).map((r: any) => ({
-          id: String(r.id),
-          titulo: String(r.titulo ?? ''),
-          conteudo: String(r.conteudo ?? ''),
-          tipo: String(r.tipo) as Notificacao['tipo'],
-          canal: String(r.canal) as Notificacao['canal'],
-          lida: Boolean(r.lida),
-          criado_em: r.criadoEm ?? r.criado_em ?? '',
-          usuario: { nome: String(r.usuario?.nome ?? '—') },
-        }));
-        setRows(mapped);
-      } catch {
-        setError('Não foi possível carregar as notificações.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const filtered = useMemo(() => {
-    let arr = [...rows];
-
-    if (q) {
-      const s = q.toLowerCase();
-      arr = arr.filter(n =>
-        n.titulo.toLowerCase().includes(s) ||
-        n.conteudo.toLowerCase().includes(s)
-      );
-    }
-    if (tipo !== 'todos') arr = arr.filter(n => n.tipo === tipo);
-    if (status !== 'todos') arr = arr.filter(n => (status === 'lida' ? n.lida : !n.lida));
-    if (canal !== 'todos') arr = arr.filter(n => n.canal === canal);
-
-    arr.sort((a, b) => {
-      switch (sortBy) {
-        case 'titulo': return a.titulo.localeCompare(b.titulo);
-        case 'tipo': return String(a.tipo).localeCompare(String(b.tipo));
-        case 'status': return Number(a.lida) - Number(b.lida);
-        case 'criado_em':
-        default: return +new Date(b.criado_em) - +new Date(a.criado_em);
-      }
-    });
-
-    return arr;
-  }, [rows, q, tipo, status, canal, sortBy]);
-
-  // agrupamento por data
-  const grouped = useMemo(() => {
-    const map = new Map<string, Notificacao[]>();
-    for (const n of filtered) {
-      const g = groupLabelForDate(n.criado_em);
-      const list = map.get(g) ?? [];
-      list.push(n);
-      map.set(g, list);
-    }
-    return Array.from(map.entries()); // [ [label, Notificacao[]], ... ]
-  }, [filtered]);
-
-  const stats = {
-    total: rows.length,
-    unread: rows.filter(n => !n.lida).length,
-  };
-
-  // ações
-  async function toggleRead(id: string, next: boolean) {
+  const carregar = useCallback(async () => {
+    setCarregando(true);
     try {
-      await api.put(`/notificacoes/${id}/lida`, { lida: next });
-      setRows(prev => prev.map(n => (n.id === id ? { ...n, lida: next } : n)));
-    } catch {}
-  }
-  async function deleteOne(id: string) {
+      const [pagina, f] = await Promise.all([
+        listNotificacoes({ tipo: tipo || undefined, canal: canal || undefined, lida, page, limit }),
+        listFacetasDeNotificacoes(),
+      ]);
+      setItens(pagina.itens);
+      setTotal(pagina.total);
+      setNaoLidas(pagina.naoLidas);
+      setPaginas(Math.max(1, pagina.paginas));
+      setFacetas(f);
+      setErro(null);
+    } catch {
+      setErro('Não foi possível carregar as notificações.');
+    } finally {
+      setCarregando(false);
+    }
+  }, [tipo, canal, lida, page, limit]);
+
+  useEffect(() => { void carregar(); }, [carregar]);
+
+  const rotuloDoTipo = useMemo(() => {
+    const m = new Map(facetas.tipos.map((t) => [t.tipo, t.rotulo]));
+    // Sem rótulo conhecido, o próprio valor: sumir seria pior que ficar feio.
+    return (t: string) => m.get(t) ?? t;
+  }, [facetas.tipos]);
+
+  const temFiltro = Boolean(tipo || canal || lida !== undefined);
+
+  async function alternarLida(n: Notificacao) {
+    const proxima = !n.lida;
+    setItens((prev) => prev.map((x) => (x.id === n.id ? { ...x, lida: proxima } : x)));
+    setNaoLidas((v) => Math.max(0, v + (proxima ? -1 : 1)));
     try {
-      await api.delete(`/notificacoes/${id}`);
-      setRows(prev => prev.filter(n => n.id !== id));
-    } catch {}
-  }
-  async function markAllAsRead() {
-    const ids = filtered.filter(n => !n.lida).map(n => n.id);
-    if (!ids.length) return;
-    await Promise.allSettled(ids.map(id => api.put(`/notificacoes/${id}/lida`, { lida: true })));
-    setRows(prev => prev.map(n => (ids.includes(n.id) ? { ...n, lida: true } : n)));
+      await marcarComoLida(n.id, proxima);
+    } catch {
+      // Desfaz: deixar a linha marcada sem o servidor concordar é a mesma
+      // mentira que esta tela tinha, só que mais difícil de perceber.
+      setItens((prev) => prev.map((x) => (x.id === n.id ? { ...x, lida: n.lida } : x)));
+      setNaoLidas((v) => Math.max(0, v + (proxima ? 1 : -1)));
+    }
   }
 
-  /* ===================== Render ===================== */
+  async function marcarTodas() {
+    try {
+      await marcarTodasComoLidas();
+      await carregar();
+    } catch {
+      setErro('Não foi possível marcar todas como lidas.');
+    }
+  }
 
-  if (loading) {
+  async function confirmarExclusao() {
+    const alvo = aExcluir;
+    if (!alvo) return;
+    setAExcluir(null);
+    try {
+      await excluirNotificacao(alvo.id);
+      await carregar();
+    } catch {
+      setErro('Não foi possível excluir a notificação.');
+    }
+  }
+
+  if (carregando && itens.length === 0) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="mr-2 h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="text-muted-foreground">Carregando notificações…</span>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="flex h-[50vh] items-center justify-center text-destructive">
-        {error}
+        <Loader2 className="mr-2 h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Carregando notificações…</span>
       </div>
     );
   }
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 grid gap-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">Notificações ✦ </h1>
-          <Badge variant="secondary" className="h-6">{stats.total} no total</Badge>
-          <Badge className="h-6 gap-1">
-            <Mail className="h-3 w-3" /> {stats.unread} não lidas
-          </Badge>
+    <FadeIn className="mx-auto w-full max-w-5xl space-y-6 p-6">
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">Notificações</h1>
+            <span className="text-sm text-muted-foreground">
+              {/* O número do servidor, não o da página: contar as linhas
+                  carregadas fazia a tela discordar do sino da lateral. */}
+              {temFiltro
+                ? `${total} ${total === 1 ? 'resultado' : 'resultados'}`
+                : `${total} ${total === 1 ? 'notificação' : 'notificações'}`}
+              {naoLidas > 0 && ` · ${naoLidas} não ${naoLidas === 1 ? 'lida' : 'lidas'}`}
+            </span>
+          </div>
+          {naoLidas > 0 && (
+            <Button onClick={marcarTodas}>
+              <CheckCheck className="mr-2 h-4 w-4" />
+              Marcar todas como lidas
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={markAllAsRead}>
-            <CheckCheck className="mr-2 h-4 w-4" />
-            Marcar todas como lidas
-          </Button>
-          <Button variant="outline">
-            <Settings className="mr-2 h-4 w-4" />
-            Preferências
-          </Button>
+        <p className="text-sm text-muted-foreground">
+          Tudo que aconteceu nos seus projetos — aprovações, feedbacks e cobranças.
+        </p>
+      </header>
+
+      {erro && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {erro}
         </div>
+      )}
+
+      {/* Uma linha de chips. As opções vêm do servidor: existe porque há linha. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <ChipPopover label="Tipo" valor={tipo ? rotuloDoTipo(tipo) : null}>
+          <div className="grid">
+            <ChipOption label="Todos os tipos" selected={!tipo} onClick={() => setParam('tipo', null)} />
+            {facetas.tipos.map((t) => (
+              <ChipOption
+                key={t.tipo}
+                label={`${t.rotulo} (${t.total})`}
+                selected={tipo === t.tipo}
+                onClick={() => setParam('tipo', t.tipo)}
+              />
+            ))}
+          </div>
+        </ChipPopover>
+
+        <ChipPopover
+          label="Status"
+          valor={lida === undefined ? null : lida ? 'Lidas' : 'Não lidas'}
+        >
+          <div className="grid">
+            <ChipOption label="Todas" selected={lida === undefined} onClick={() => setParam('lida', null)} />
+            <ChipOption label="Não lidas" selected={lida === false} onClick={() => setParam('lida', 'false')} />
+            <ChipOption label="Lidas" selected={lida === true} onClick={() => setParam('lida', 'true')} />
+          </div>
+        </ChipPopover>
+
+        {/*
+         * Canal só aparece quando há mais de um. Hoje o sistema só entrega
+         * dentro do app, então o filtro antigo tinha duas opções que não
+         * casavam com nada e um selo "Sistema" repetido em toda linha.
+         */}
+        {facetas.canais.length > 1 && (
+          <ChipPopover label="Canal" valor={canal || null}>
+            <div className="grid">
+              <ChipOption label="Todos" selected={!canal} onClick={() => setParam('canal', null)} />
+              {facetas.canais.map((c) => (
+                <ChipOption
+                  key={c.canal}
+                  label={`${c.canal} (${c.total})`}
+                  selected={canal === c.canal}
+                  onClick={() => setParam('canal', c.canal)}
+                />
+              ))}
+            </div>
+          </ChipPopover>
+        )}
+
+        {temFiltro && (
+          <Button variant="ghost" size="sm" onClick={() => router.replace('/notificacoes')}>
+            Limpar filtros
+          </Button>
+        )}
       </div>
 
-      {/* Barra de filtros compacta */}
-      <div className="grid gap-2 rounded-xl border bg-card p-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-            <Input
-              placeholder="Buscar por título ou conteúdo…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Select value={tipo} onValueChange={setTipo}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos tipos</SelectItem>
-                <SelectItem value="NOVO_PROJETO">Novo projeto</SelectItem>
-                <SelectItem value="NOVA_ARTE">Nova arte</SelectItem>
-                <SelectItem value="NOVO_FEEDBACK">Novo feedback</SelectItem>
-                <SelectItem value="APROVACAO">Aprovação</SelectItem>
-                <SelectItem value="PRAZO">Prazo</SelectItem>
-                <SelectItem value="SISTEMA">Sistema</SelectItem>
-              </SelectContent>
-            </Select>
+      {itens.length > 0 ? (
+        <>
+          <ul className="divide-y rounded-xl border">
+            {itens.map((n) => (
+              <LinhaDeNotificacao
+                key={n.id}
+                n={n}
+                onAlternarLida={() => void alternarLida(n)}
+                onExcluir={() => setAExcluir(n)}
+              />
+            ))}
+          </ul>
 
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="nao_lida">Não lidas</SelectItem>
-                <SelectItem value="lida">Lidas</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={canal} onValueChange={setCanal}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Canal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="SISTEMA">Sistema</SelectItem>
-                <SelectItem value="EMAIL">Email</SelectItem>
-                <SelectItem value="PUSH">Push</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortKey)}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="criado_em">Mais recente</SelectItem>
-                <SelectItem value="titulo">Título</SelectItem>
-                <SelectItem value="tipo">Tipo</SelectItem>
-                <SelectItem value="status">Status</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <Separator />
-        {/* chips rápidos */}
-        <div className="flex flex-wrap items-center gap-2">
-          {(['NOVO_PROJETO','NOVA_ARTE','NOVO_FEEDBACK','APROVACAO','PRAZO','SISTEMA'] as const).map(t => {
-            const m = typeMeta(t);
-            return (
-              <Button
-                key={t}
-                size="sm"
-                variant={tipo === t ? 'default' : 'outline'}
-                className="rounded-full"
-                onClick={() => setTipo(tipo === t ? 'todos' : t)}
-              >
-                <span className={`mr-2 inline-block h-2 w-2 rounded-full ${m.dot}`} />
-                {m.label}
-              </Button>
-            );
-          })}
-          <Button
-            size="sm"
-            variant={status === 'nao_lida' ? 'default' : 'outline'}
-            className="rounded-full"
-            onClick={() => setStatus(status === 'nao_lida' ? 'todos' : 'nao_lida')}
-          >
-            <Mail className="mr-2 h-4 w-4" /> Não lidas
-          </Button>
-          <Button
-            size="sm"
-            variant={status === 'lida' ? 'default' : 'outline'}
-            className="rounded-full"
-            onClick={() => setStatus(status === 'lida' ? 'todos' : 'lida')}
-          >
-            <MailOpen className="mr-2 h-4 w-4" /> Lidas
-          </Button>
-        </div>
-      </div>
-
-      {/* Lista agrupada (timeline/inbox) */}
-      {filtered.length > 0 ? (
-        <div className="space-y-6">
-          {grouped.map(([label, items]) => (
-            <section key={label} className="space-y-3">
-              <div className="sticky top-[64px] z-10 -mx-2 bg-background/80 px-2 py-1 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium">
-                  <Calendar className="h-3 w-3" />
-                  {label}
-                  <span className="text-muted-foreground">• {items.length}</span>
-                </div>
+          {paginas > 1 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-muted-foreground">
+                Página {page} de {paginas}
+              </span>
+              <div className="flex items-center gap-2">
+                <Select value={String(limit)} onValueChange={(v) => setParam('limit', v)}>
+                  <SelectTrigger className="h-8 w-[120px]">{limit}/página</SelectTrigger>
+                  <SelectContent>
+                    {POR_PAGINA.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}/página</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" disabled={page <= 1}
+                        onClick={() => setParam('page', String(page - 1))}>
+                  Anterior
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= paginas}
+                        onClick={() => setParam('page', String(page + 1))}>
+                  Próxima
+                </Button>
               </div>
-              <div className="grid gap-2">
-                {items.map((n) => (
-                  <NotificacaoRow
-                    key={n.id}
-                    n={n}
-                    onToggleRead={toggleRead}
-                    onDelete={deleteOne}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+            </div>
+          )}
+        </>
       ) : (
-        <div className="grid place-items-center rounded-xl border p-12 text-center">
-          <Bell className="mb-3 h-10 w-10 text-muted-foreground" />
-          <h3 className="mb-1 text-lg font-semibold">Sem notificações por aqui</h3>
-          <p className="text-sm text-muted-foreground">
-            {q || tipo !== 'todos' || status !== 'todos' || canal !== 'todos'
-              ? 'Tente ajustar os filtros acima.'
-              : 'Quando algo acontecer, eu te aviso por aqui.'}
+        <div className="grid place-items-center rounded-xl border border-dashed p-12 text-center">
+          <Bell className="mb-3 h-8 w-8 text-muted-foreground/60" />
+          <h2 className="mb-1 font-medium">
+            {temFiltro ? 'Nenhuma notificação com esses filtros' : 'Nada por aqui ainda'}
+          </h2>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            {temFiltro
+              ? 'Tente limpar os filtros para ver tudo.'
+              : 'Quando um cliente responder uma arte ou comentar, o aviso aparece aqui.'}
           </p>
         </div>
       )}
+
+      {/*
+       * Excluir some com o aviso para sempre e não tem desfazer. Era um clique
+       * só, do lado de "marcar como lida" — errar de botão custava a linha.
+       */}
+      <AlertDialog open={Boolean(aExcluir)} onOpenChange={(aberto) => !aberto && setAExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir esta notificação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {aExcluir?.titulo} — some da sua lista e não dá para recuperar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmarExclusao()}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FadeIn>
+  );
+}
+
+/**
+ * Duas linhas: o que aconteceu e o detalhe. O resto é meta.
+ *
+ * A linha inteira leva ao que o aviso está falando, quando há destino — antes
+ * a notificação avisava e abandonava, sem caminho até a arte.
+ */
+function LinhaDeNotificacao({
+  n, onAlternarLida, onExcluir,
+}: {
+  n: Notificacao;
+  onAlternarLida: () => void;
+  onExcluir: () => void;
+}) {
+  const Icone = ICONE_POR_TIPO[n.tipo] ?? Bell;
+  const destino = destinoDaNotificacao(n);
+
+  const corpo = (
+    <>
+      <span className={`mt-0.5 shrink-0 rounded-md border p-1.5 ${n.lida ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <Icone className="h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`truncate text-sm ${n.lida ? 'font-normal' : 'font-medium'}`}>{n.titulo}</span>
+          {!n.lida && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-label="não lida" />}
+        </div>
+        <p className="line-clamp-1 text-sm text-muted-foreground">{n.conteudo}</p>
+        {/*
+         * Sem selo de tipo: o título já diz qual é ("Arte aprovada ✅", "Novo
+         * feedback em X"), e repeti-lo logo abaixo é uma terceira linha que não
+         * acrescenta nada. Quem distingue os tipos de relance é o ícone; o
+         * rótulo continua servindo onde faz falta, no filtro.
+         */}
+        <p className="mt-1 text-xs text-muted-foreground">{quando(n.criadoEm)}</p>
+      </div>
+      {destino && <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />}
+    </>
+  );
+
+  return (
+    <li className={`group flex items-start gap-2 px-3 py-3 transition hover:bg-accent/50 ${n.lida ? '' : 'bg-primary/[0.03]'}`}>
+      {destino ? (
+        <Link href={destino} className="flex min-w-0 flex-1 items-start gap-3" onClick={() => !n.lida && onAlternarLida()}>
+          {corpo}
+        </Link>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-start gap-3">{corpo}</div>
+      )}
+
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          size="icon" variant="ghost" className="h-8 w-8"
+          title={n.lida ? 'Marcar como não lida' : 'Marcar como lida'}
+          onClick={onAlternarLida}
+        >
+          <CheckCheck className={`h-4 w-4 ${n.lida ? 'text-muted-foreground' : 'text-primary'}`} />
+        </Button>
+        <Button
+          size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          title="Excluir" onClick={onExcluir}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+/*
+ * `useSearchParams` exige um limite de Suspense, senão a rota inteira vira
+ * render dinâmico — mesmo padrão de /artes e /projetos.
+ */
+export default function NotificacoesPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando notificações…</div>}>
+      <Notificacoes />
+    </Suspense>
   );
 }
