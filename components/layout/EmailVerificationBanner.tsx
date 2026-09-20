@@ -59,31 +59,41 @@ export function EmailVerificationBanner() {
     'h-7 shrink-0 border-yellow-400 bg-transparent px-2 text-xs text-yellow-900 hover:bg-yellow-100 sm:px-3 dark:border-yellow-700 dark:text-yellow-100 dark:hover:bg-yellow-900/50'
 
   return (
-    <div className="flex items-center gap-2 border-b border-yellow-200 bg-yellow-50 px-3 py-2 text-yellow-900 sm:gap-3 sm:px-4 dark:border-yellow-900/60 dark:bg-yellow-950/40 dark:text-yellow-100">
-      <MailWarning className="h-4 w-4 shrink-0" />
+    <div className="flex items-start gap-2 border-b border-yellow-200 bg-yellow-50 px-3 py-2 text-yellow-900 sm:items-center sm:gap-3 sm:px-4 dark:border-yellow-900/60 dark:bg-yellow-950/40 dark:text-yellow-100">
+      <MailWarning className="mt-0.5 h-4 w-4 shrink-0 sm:mt-0" />
 
-      {/* Uma linha, cortada com reticências no celular. Duas versões do texto
-          (curta e longa) alternadas por CSS resolveriam o espaço e fariam o
-          leitor de tela anunciar a mesma coisa duas vezes; o `title` entrega o
-          resto para quem precisar. O começo da frase é o que importa: é onde
-          está o que fazer. */}
-      <p className="min-w-0 flex-1 truncate text-xs sm:text-sm" title={mensagem}>
-        {mensagem}
-      </p>
+      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        {/*
+          No desktop segue uma linha só, cortada com reticências quando não
+          cabe — e o `title` entrega o resto a quem passar o mouse.
 
-      <Button variant="outline" size="sm" className={botao} onClick={conferir} disabled={conferindo}>
-        {conferindo ? 'Conferindo…' : 'Já verifiquei'}
-      </Button>
+          No celular não: com os dois botões e o X disputando a largura,
+          sobravam menos de 150px e a frase virava "Confirme seu e-mail: …",
+          com o dois-pontos pendurado e o endereço — que é o que a pessoa
+          precisa conferir — fora de alcance, porque em tela de toque não há
+          hover para revelar o `title`. Aqui o texto fica com a linha inteira e
+          os botões descem.
+        */}
+        <p className="min-w-0 flex-1 text-xs sm:truncate sm:text-sm" title={mensagem}>
+          {mensagem}
+        </p>
 
-      {!enviado && (
-        <Button variant="outline" size="sm" className={botao} onClick={reenviar} disabled={enviando}>
-          {enviando ? 'Enviando…' : 'Reenviar'}
-        </Button>
-      )}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className={botao} onClick={conferir} disabled={conferindo}>
+            {conferindo ? 'Conferindo…' : 'Já verifiquei'}
+          </Button>
+
+          {!enviado && (
+            <Button variant="outline" size="sm" className={botao} onClick={reenviar} disabled={enviando}>
+              {enviando ? 'Enviando…' : 'Reenviar'}
+            </Button>
+          )}
+        </div>
+      </div>
 
       <button
         onClick={() => setDismissed(true)}
-        className="shrink-0 text-yellow-700 hover:text-yellow-900 dark:text-yellow-300 dark:hover:text-yellow-100"
+        className="mt-0.5 shrink-0 text-yellow-700 hover:text-yellow-900 sm:mt-0 dark:text-yellow-300 dark:hover:text-yellow-100"
         aria-label="Fechar"
       >
         <X className="h-4 w-4" />

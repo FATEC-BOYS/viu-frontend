@@ -92,6 +92,34 @@ pgrep -f "next dev" ; pgrep -f "src/index.ts" ; pgrep -f postgres
 
 Rodar o `subir.sh` de novo remonta só o que faltou.
 
+## Conferindo no celular
+
+Um passe de design inteiro já foi feito a 1280px sem que nenhuma tela fosse
+olhada num telefone. O resultado apareceu num print do usuário: na "Zona de
+perigo" de `/configuracoes`, dois botões somando 280px fixos numa tela de
+390px deixavam a descrição espremida em coluna de duas palavras e cortavam
+"Excluir minha conta" na borda — justamente o botão que ninguém deve apertar
+sem ler.
+
+```bash
+node .claude/skills/rodar-viu/scripts/conferir-mobile.mjs designer@viu.com /projetos /faturas
+```
+
+Sai `ok` ou `TRANSBORDA` por rota, com quem ultrapassou e por quantos pixels.
+Encerra com código 1 se achou algo, então serve em pipeline.
+
+Ele acusa transbordo **mesmo quando a página não rola**: quase sempre há um
+`overflow` acima recortando o excesso, e aí `scrollWidth > clientWidth` não
+denuncia nada — o elemento simplesmente some pela borda. Decoração com
+`pointer-events: none` (brilhos, blobs) é ignorada de propósito: ela vaza por
+design.
+
+`LARGURA=430` troca a largura; `APP` e `SENHA` também são variáveis.
+
+O detector não vê tudo. Texto espremido numa coluna estreita não é transbordo
+— cabe na tela, só ficou ilegível. Para isso não tem jeito senão abrir a
+screenshot e olhar.
+
 ## Dirigindo pelo navegador
 
 Chromium e Playwright já estão instalados. **Não rode `playwright install`.**

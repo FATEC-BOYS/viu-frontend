@@ -154,8 +154,30 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
    * Notificações: as outras 6 eram desperdício e algumas voltam 403, porque
    * tarefas, convites e projetos do designer não são dele.
    */
+  /*
+   * O efeito depende do ID, não do objeto `user`.
+   *
+   * Com `[user, ...]` a lista mudava sempre que o contexto trocava a
+   * referência — e ele troca no mount: a tela nasce com o perfil em cache do
+   * localStorage e o `/auth/me` chega logo depois com um objeto novo. Cada
+   * troca refazia a leva inteira de contadores, que são NOVE chamadas.
+   *
+   * Medido: uma carga de /projetos disparava 20 requisições ao backend, com
+   * `GET /projetos` cinco vezes. Depois desta linha, 11 — e o limite de
+   * produção é 100 por 15 minutos, então cada tela custava 20% da cota.
+   *
+   * É a mesma correção que a tela de /faturas já documentava: "depende do id
+   * e não do objeto `user`, porque o contexto devolve uma referência nova a
+   * cada render". Aqui ela não tinha chegado.
+   *
+   * A trava `emVoo` não pegava isto: ela mora dentro do efeito, então cada
+   * execução tem a sua — serve para o tique de 5 minutos não se sobrepor, não
+   * para impedir uma segunda execução do efeito.
+   */
+  const usuarioId = user?.id;
+
   useEffect(() => {
-    if (!user) return;
+    if (!usuarioId) return;
     let alive = true;
     /**
      * A trava de "já tem uma busca em voo" vive dentro do efeito, não em um
@@ -226,7 +248,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
       alive = false;
       clearInterval(interval);
     };
-  }, [user, ehCliente]);
+  }, [usuarioId, ehCliente]);
 
   /**
    * O menu segue o papel de quem está olhando.

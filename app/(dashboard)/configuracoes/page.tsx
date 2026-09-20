@@ -186,16 +186,24 @@ function TwoFactorSection() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+      {/*
+        O selo anda com o título, não com o bloco inteiro.
+        
+        Era `justify-between` com o texto de um lado e o selo do outro: num
+        telefone o título quebrava em duas linhas e o selo ficava centralizado
+        contra o bloco todo, flutuando ao lado do "(2FA)". Colado ao título ele
+        diz o que veio dizer — o estado daquilo — em qualquer largura.
+      */}
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-medium">Autenticação de dois fatores (2FA)</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Proteja sua conta exigindo um código adicional no login.
-          </p>
+          <Badge variant={enabled ? 'default' : 'secondary'}>
+            {enabled ? 'Ativado' : 'Desativado'}
+          </Badge>
         </div>
-        <Badge variant={enabled ? 'default' : 'secondary'}>
-          {enabled ? 'Ativado' : 'Desativado'}
-        </Badge>
+        <p className="text-xs text-muted-foreground">
+          Proteja sua conta exigindo um código adicional no login.
+        </p>
       </div>
 
       {/* idle — botões de ação */}
@@ -564,14 +572,23 @@ export default function ConfiguracoesPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-destructive">Zona de perigo</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-between gap-4">
+        {/*
+          Empilha no celular.
+          
+          Era uma linha só, com os dois botões à direita somando quase 280px de
+          largura fixa (`whitespace-nowrap`). Num telefone de 390px isso não
+          sobrava nada para o texto: a descrição virava uma coluna de duas
+          palavras e "Excluir minha conta" era cortado na borda da tela —
+          justamente o botão que ninguém deve apertar sem ler.
+        */}
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm">
             <p className="font-medium">Resetar configurações</p>
             <p className="text-muted-foreground">
               Volta tudo para os valores padrão. Excluir a conta é definitivo.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 sm:shrink-0">
             <Button variant="outline" size="sm" onClick={() => setShowResetDialog(true)}>
               <RefreshCw className="h-4 w-4 mr-2" /> Resetar
             </Button>

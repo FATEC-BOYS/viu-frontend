@@ -67,14 +67,29 @@ describe('já verifiquei', () => {
 })
 
 /**
- * O e-mail longo esticava a faixa e empurrava os botões para uma segunda e
- * terceira linha no celular, comendo a altura da tela inicial.
+ * Uma linha no desktop; no celular, a frase inteira.
+ *
+ * O `truncate` nasceu de um problema real: e-mail longo esticava a faixa e
+ * empurrava os botões para uma segunda e terceira linha no celular, comendo a
+ * altura da tela inicial. Truncar resolveu a altura — e criou outro problema,
+ * que só apareceu quando alguém finalmente abriu o app num telefone: com os
+ * dois botões e o X disputando os 390px, sobravam menos de 150px e a mensagem
+ * virava "Confirme seu e-mail: …". O dois-pontos ficava pendurado nas
+ * reticências e o endereço — que é o que a pessoa confere para saber se foi
+ * para a caixa certa — saía de alcance, porque em tela de toque não existe o
+ * hover que revela o `title`.
+ *
+ * A troca: no celular o texto fica com a linha inteira e os botões descem, ao
+ * custo de uma linha a mais de altura. No desktop nada muda — `sm:truncate` e
+ * o `title` seguem valendo, que é onde o hover existe.
  */
-it('mantém a mensagem numa linha só, com o texto inteiro disponível', () => {
+it('trunca a partir do desktop, e no celular mostra a frase inteira', () => {
   render(<EmailVerificationBanner />)
 
   const texto = screen.getByText(/confirme seu e-mail/i)
-  expect(texto).toHaveClass('truncate')
+  // `sm:truncate` e não `truncate`: cortar já na menor largura é onde doía.
+  expect(texto).toHaveClass('sm:truncate')
+  expect(texto).not.toHaveClass('truncate')
   expect(texto).toHaveAttribute('title', expect.stringContaining('ana@estudio.com'))
 })
 
