@@ -24,7 +24,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { pagamentosApi, Assinatura, SaldoInfo } from '@/lib/pagamentos'
+import { pagamentosApi, type Vigencia, SaldoInfo } from '@/lib/pagamentos'
+import { situacaoDaAssinatura } from '@/lib/assinatura'
 
 interface UsuarioPerfil {
   id: string
@@ -70,14 +71,6 @@ function StatCard({ title, value, subtitle, icon: Icon }: {
   )
 }
 
-const STATUS_ASSINATURA_CFG: Record<string, { label: string; cls: string }> = {
-  ATIVA: { label: 'Ativa', cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 border-emerald-500/20' },
-  PENDENTE: { label: 'Pendente', cls: 'bg-amber-400/10 text-amber-400 border-amber-400/20' },
-  CANCELADA: { label: 'Cancelada', cls: 'bg-red-400/10 text-red-400 border-red-400/20' },
-  PAUSADA: { label: 'Pausada', cls: 'bg-blue-400/10 text-blue-400 border-blue-400/20' },
-  EXPIRADA: { label: 'Expirada', cls: 'bg-muted text-muted-foreground border-border' },
-}
-
 function getInitials(name: string) {
   return name.split(' ').filter(Boolean).map(n => n[0]?.toUpperCase()).join('').slice(0, 2)
 }
@@ -113,7 +106,7 @@ export default function PerfilPage() {
   })
 
   // payment state
-  const [assinatura, setAssinatura] = useState<Assinatura | null | undefined>(undefined)
+  const [assinatura, setAssinatura] = useState<Vigencia | null | undefined>(undefined)
   const [saldo, setSaldo] = useState<SaldoInfo | null>(null)
 
   useEffect(() => {
@@ -232,8 +225,9 @@ export default function PerfilPage() {
     )
   }
 
-  const assinaturaStatus = assinatura?.status ?? null
-  const assinaturaCfg = assinaturaStatus ? STATUS_ASSINATURA_CFG[assinaturaStatus] : null
+  // A situação sai de `situacaoDaAssinatura`, que é a mesma leitura de
+  // /assinaturas — o rótulo e a cor estavam escritos duas vezes e já divergiam.
+  const situacao = assinatura ? situacaoDaAssinatura(assinatura) : null
   const isDesigner = usuario.tipo === 'DESIGNER'
 
   return (
@@ -460,20 +454,23 @@ export default function PerfilPage() {
                   <div className="flex justify-center py-2">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
-                ) : !assinatura ? (
+                ) : !assinatura?.plano ? (
+                  /* Só cai aqui se a leitura falhar ou não houver plano
+                     Gratuito cadastrado — e aí o certo é dizer que não deu
+                     para carregar, não afirmar que a pessoa não tem plano. */
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Nenhuma assinatura ativa.</p>
+                    <p className="text-sm text-muted-foreground">Não foi possível carregar seu plano.</p>
                     <Button asChild size="sm" className="w-full">
                       <Link href="/planos">Ver planos</Link>
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium">{assinatura.plano.nome}</p>
-                      {assinaturaCfg && (
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${assinaturaCfg.cls}`}>
-                          {assinaturaCfg.label}
+                      {situacao && (
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${situacao.classe}`}>
+                          {situacao.rotulo}
                         </span>
                       )}
                     </div>
@@ -482,6 +479,9 @@ export default function PerfilPage() {
                         ? 'Grátis'
                         : `${assinatura.plano.precoMensalFormatado}/mês`}
                     </p>
+                    {situacao?.detalhe && (
+                      <p className="text-xs text-muted-foreground">{situacao.detalhe}</p>
+                    )}
                     <Button asChild size="sm" variant="outline" className="w-full gap-1">
                       <Link href="/assinaturas">Gerenciar <ArrowRight className="h-3 w-3" /></Link>
                     </Button>

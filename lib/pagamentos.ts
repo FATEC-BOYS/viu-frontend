@@ -35,6 +35,22 @@ export type PlanoEntrada = {
 
 export type AssinaturaStatus = 'PENDENTE' | 'ATIVA' | 'CANCELADA' | 'PAUSADA' | 'EXPIRADA'
 
+/**
+ * O plano em vigor para uma pessoa, com ou sem assinatura registrada.
+ *
+ * `assinatura: null` significa "está no Gratuito sem ter assinado", e não
+ * "está sem plano" — é a mesma regra que a taxa da fatura e o teto de recursos
+ * seguem no servidor.
+ */
+export type Vigencia = {
+  assinatura: Assinatura | null
+  /** Nunca nulo na prática; só se não houver plano Gratuito cadastrado. */
+  plano: Plano | null
+  /** Cancelada, valendo até esta data. Null quando não é o caso. */
+  vigenteAte?: string | null
+  cancelada: boolean
+}
+
 export type Assinatura = {
   id: string
   status: AssinaturaStatus
@@ -208,8 +224,17 @@ export const pagamentosApi = {
   atualizarPlano: (id: string, dados: Partial<PlanoEntrada>) =>
     api.put<{ data: Plano }>(`/planos/${id}`, dados),
 
+  /**
+   * O que vale para esta pessoa agora — não só a linha assinada.
+   *
+   * Respondia `Assinatura | null`, e o `null` chegava tanto para quem nunca
+   * assinou quanto para quem acabou de cancelar. A tela lia isso como "não tem
+   * plano" e convidava a escolher um — inclusive quem o resto do sistema já
+   * tratava como assinante do Gratuito. Agora o servidor diz qual plano está
+   * em vigor, com ou sem linha.
+   */
   getMinhaAssinatura: () =>
-    api.get<{ data: Assinatura | null }>('/assinaturas/minha'),
+    api.get<{ data: Vigencia }>('/assinaturas/minha'),
 
   assinar: (planoId: string) =>
     api.post<{ data: { assinatura?: Assinatura; checkoutUrl?: string } }>('/assinaturas', { planoId }),

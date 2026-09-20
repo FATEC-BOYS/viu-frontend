@@ -8,74 +8,112 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2, XCircle, Clock, PauseCircle, AlertCircle,
-  Loader2, CreditCard, Calendar, RefreshCw, Zap
+  Loader2, CreditCard, Calendar, RefreshCw, Zap, FolderKanban, Image
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { pagamentosApi, Assinatura, AssinaturaStatus, formatReais } from '@/lib/pagamentos'
+import { pagamentosApi, type Vigencia, formatReais } from '@/lib/pagamentos'
+import { situacaoDaAssinatura, type Situacao } from '@/lib/assinatura'
+import { formatarDia } from '@/lib/diaDeCalendario'
 
-const STATUS_CONFIG: Record<AssinaturaStatus, {
-  label: string
-  icon: React.ElementType
-  className: string
-}> = {
-  ATIVA: { label: 'Ativa', icon: CheckCircle2, className: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
-  PENDENTE: { label: 'Pendente', icon: Clock, className: 'text-amber-400 bg-amber-400/10' },
-  CANCELADA: { label: 'Cancelada', icon: XCircle, className: 'text-red-400 bg-red-400/10' },
-  PAUSADA: { label: 'Pausada', icon: PauseCircle, className: 'text-blue-400 bg-blue-400/10' },
-  EXPIRADA: { label: 'Expirada', icon: AlertCircle, className: 'text-muted-foreground bg-muted' },
+/**
+ * A pílula de situação. O rótulo e a cor vêm de `lib/assinatura`, que é a
+ * mesma fonte que /perfil usa: estavam escritos duas vezes e já divergiam —
+ * aqui "Pendente" era `text-amber-400` puro, que some sobre fundo claro, e
+ * "Ativa" trazia `dark:text-emerald-400` declarado duas vezes.
+ */
+const ICONE: Record<string, React.ElementType> = {
+  Ativa: CheckCircle2,
+  Pendente: Clock,
+  Cancelada: XCircle,
+  Pausada: PauseCircle,
+  Expirada: AlertCircle,
 }
 
-function StatusBadge({ status }: { status: AssinaturaStatus }) {
-  const cfg = STATUS_CONFIG[status]
-  const Icon = cfg.icon
+function StatusBadge({ situacao }: { situacao: Situacao }) {
+  const Icon = ICONE[situacao.rotulo] ?? AlertCircle
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cfg.className}`}>
+    <span className={`inline-flex w-fit shrink-0 self-start items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${situacao.classe}`}>
       <Icon className="h-3.5 w-3.5" />
-      {cfg.label}
+      {situacao.rotulo}
     </span>
   )
 }
 
+/** `null` no plano significa sem teto — é decisão de produto, não descuido. */
+function limite(n: number | null | undefined) {
+  return n === null || n === undefined ? 'Ilimitado' : String(n)
+}
+
 function fmt(iso: string | null | undefined) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  // Pelo dia de calendário, não pelo instante: data guardada como meia-noite
+  // UTC andava um dia para trás para quem está no Brasil.
+  return formatarDia(iso, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export default function AssinaturaPage() {
   const router = useRouter()
-  const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
+  const [vigencia, setVigencia] = useState<Vigencia | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [canceling, setCanceling] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  useEffect(() => {
-    pagamentosApi.getMinhaAssinatura()
-      .then(res => setAssinatura(res.data))
-      .catch(console.error)
+  /*
+   * Falha de leitura precisa aparecer COMO falha.
+   *
+   * Era `.catch(console.error)`: o estado ficava nulo, e nulo desenhava "Você
+   * ainda não tem uma assinatura ativa — escolha um plano". Uma oscilação de
+   * rede dizia a um assinante que ele não assina nada, e o convidava a
+   * contratar o plano que já paga.
+   */
+  const carregar = () => {
+    setLoading(true)
+    setErro(null)
+    pagamentosApi
+      .getMinhaAssinatura()
+      .then((res) => setVigencia(res.data))
+      .catch((e: any) => setErro(e?.message ?? 'Não foi possível carregar sua assinatura.'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(carregar, [])
 
   async function handleCancelar() {
-    if (!assinatura) return
+    const linha = vigencia?.assinatura
+    if (!linha) return
     setCanceling(true)
     try {
-      await pagamentosApi.cancelarAssinatura(assinatura.id)
-      setAssinatura(prev => prev ? { ...prev, status: 'CANCELADA' } : null)
+      /*
+       * O estado novo vem do servidor, não de um remendo local.
+       *
+       * A tela gravava `status: 'CANCELADA'` por conta própria e mantinha o
+       * resto como estava — então uma assinatura recém-cancelada continuava
+       * anunciando "Renovação automática: Ativada" e "Próxima cobrança: 17 de
+       * out.", enquanto o servidor já tinha desligado a renovação. Quem sabe
+       * o que aconteceu é quem escreveu.
+       */
+      await pagamentosApi.cancelarAssinatura(linha.id)
+      const atual = await pagamentosApi.getMinhaAssinatura()
+      setVigencia(atual.data)
       toast.success('Assinatura cancelada.')
-    } catch {
-      toast.error('Erro ao cancelar assinatura.')
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao cancelar assinatura.')
     } finally {
       setCanceling(false)
       setConfirmOpen(false)
     }
   }
+
+  const situacao = vigencia ? situacaoDaAssinatura(vigencia) : null
+  const plano = vigencia?.plano ?? null
+  const linha = vigencia?.assinatura ?? null
 
   return (
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
@@ -90,19 +128,15 @@ export default function AssinaturaPage() {
             className="flex justify-center py-20">
             <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
           </motion.div>
-        ) : !assinatura ? (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-          >
+        ) : erro || !plano ? (
+          /* Falha de leitura é falha, e não "você não tem plano". */
+          <motion.div key="erro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <EmptyState
-              icon={CreditCard}
-              title="Você ainda não tem uma assinatura ativa"
-              description="Escolha um plano para liberar os limites da sua conta."
-              actionLabel="Ver planos disponíveis"
-              onAction={() => router.push('/planos')}
+              icon={AlertCircle}
+              title="Não foi possível carregar sua assinatura"
+              description={erro ?? 'Tente de novo em instantes.'}
+              actionLabel="Tentar de novo"
+              onAction={carregar}
             />
           </motion.div>
         ) : (
@@ -112,62 +146,87 @@ export default function AssinaturaPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-            className="rounded-2xl border border-border/60 overflow-hidden"
+            className="overflow-hidden rounded-2xl border border-border/60"
           >
             {/* Header card */}
             <div className="bg-primary/5 p-6">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-center gap-3">
                   <motion.div
-                    className="p-2.5 rounded-xl bg-primary/20"
+                    className="rounded-xl bg-primary/20 p-2.5"
                     whileHover={{ rotate: 15 }}
                     transition={{ type: 'spring', stiffness: 400 }}
                   >
                     <Zap className="h-5 w-5 text-primary" />
                   </motion.div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Plano atual</p>
-                    <h2 className="text-lg font-bold">{assinatura.plano.nome}</h2>
+                    <p className="mb-0.5 text-xs text-muted-foreground">Plano atual</p>
+                    <h2 className="text-lg font-bold">{plano.nome}</h2>
                   </div>
                 </div>
-                <StatusBadge status={assinatura.status} />
+                {situacao && <StatusBadge situacao={situacao} />}
               </div>
 
               <Separator className="my-4" />
 
               <div className="text-3xl font-bold tabular-nums">
-                {assinatura.plano.precoMensal === 0
-                  ? 'Grátis'
-                  : `${formatReais(assinatura.plano.precoMensal)}/mês`}
+                {plano.precoMensal === 0 ? 'Grátis' : `${formatReais(plano.precoMensal)}/mês`}
               </div>
+
+              {/* A frase que explica a pílula — "cancelada" sozinha não diz
+                  até quando o plano ainda vale. */}
+              {situacao?.detalhe && (
+                <p className="mt-2 text-sm text-muted-foreground">{situacao.detalhe}</p>
+              )}
             </div>
 
             {/* Details */}
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <InfoItem
-                  icon={Calendar}
-                  label="Início"
-                  value={fmt(assinatura.periodoInicio)}
-                />
-                <InfoItem
-                  icon={Calendar}
-                  label="Próxima cobrança"
-                  value={fmt(assinatura.periodoFim)}
-                />
-                <InfoItem
-                  icon={RefreshCw}
-                  label="Renovação automática"
-                  value={assinatura.renovacaoAutomatica ? 'Ativada' : 'Desativada'}
-                />
+            <div className="space-y-4 p-6">
+              {/*
+               * O que se mostra depende de haver contratação.
+               *
+               * Sem linha assinada — que é o caso de quem está no Gratuito —
+               * três dos quatro campos eram "—" ou "Não se aplica": data de
+               * início de nada, próxima cobrança de nada, renovação de nada.
+               * O que interessa a quem está no Gratuito é onde ele esbarra, e
+               * isso o plano diz.
+               */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {linha ? (
+                  <>
+                    <InfoItem icon={Calendar} label="Início" value={fmt(linha.periodoInicio)} />
+                    {/*
+                     * O rótulo segue o que a data significa. Era sempre
+                     * "Próxima cobrança", inclusive numa assinatura cancelada
+                     * — a tela anunciava uma cobrança que não vai acontecer.
+                     */}
+                    <InfoItem
+                      icon={Calendar}
+                      label={linha.renovacaoAutomatica ? 'Próxima cobrança' : 'Vale até'}
+                      value={fmt(linha.periodoFim)}
+                    />
+                    <InfoItem
+                      icon={RefreshCw}
+                      label="Renovação automática"
+                      value={linha.renovacaoAutomatica ? 'Ativada' : 'Desativada'}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <InfoItem icon={FolderKanban} label="Projetos" value={limite(plano.limitesProjetos)} />
+                    <InfoItem icon={Image} label="Artes" value={limite(plano.limitesArtes)} />
+                  </>
+                )}
                 <InfoItem
                   icon={CreditCard}
                   label="Taxa da plataforma"
-                  value={assinatura.plano.taxaPlataformaFormatada}
+                  value={plano.taxaPlataformaFormatada}
                 />
               </div>
 
-              {(assinatura.status === 'ATIVA' || assinatura.status === 'PENDENTE') && (
+              {/* Só quando há de fato uma contratação para encerrar: o
+                  Gratuito é o piso da conta, não algo que se cancela. */}
+              {situacao?.podeCancelar && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -184,6 +243,14 @@ export default function AssinaturaPage() {
                   </Button>
                 </motion.div>
               )}
+
+              {/* Quem está no Gratuito não tem o que cancelar — tem para onde
+                  subir, e essa era a única coisa que a tela não oferecia. */}
+              {!linha && (
+                <Button size="sm" variant="outline" className="rounded-xl" onClick={() => router.push('/planos')}>
+                  Ver planos disponíveis
+                </Button>
+              )}
             </div>
           </motion.div>
         )}
@@ -195,8 +262,11 @@ export default function AssinaturaPage() {
           <DialogHeader>
             <DialogTitle>Cancelar assinatura</DialogTitle>
             <DialogDescription>
-              Ao cancelar, você perderá acesso aos recursos premium ao final do período pago.
-              Esta ação não pode ser desfeita.
+              {/* A promessa e o código agora dizem a mesma coisa: o servidor
+                  desliga a renovação e mantém o plano até a data paga. */}
+              {linha?.periodoFim
+                ? `A renovação é desligada e seu plano continua valendo até ${fmt(linha.periodoFim)}. Depois disso você volta ao Gratuito.`
+                : 'A renovação é desligada e você volta ao plano Gratuito.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

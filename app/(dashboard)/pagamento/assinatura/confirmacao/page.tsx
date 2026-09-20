@@ -9,7 +9,7 @@ import PageHeader from '@/components/layout/PageHeader'
 import { FadeIn } from '@/components/layout/Motion'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { pagamentosApi, type Assinatura } from '@/lib/pagamentos'
+import { pagamentosApi, type Assinatura, type Vigencia } from '@/lib/pagamentos'
 
 /**
  * Retorno do checkout do Mercado Pago (`back_url` de POST /assinaturas).
@@ -29,6 +29,7 @@ function ConfirmacaoAssinatura() {
   const statusMP = searchParams.get('status') ?? searchParams.get('collection_status')
 
   const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
+  const [plano, setPlano] = useState<Vigencia['plano']>(null)
   const [tentativas, setTentativas] = useState(0)
   const [verificando, setVerificando] = useState(true)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -37,8 +38,11 @@ function ConfirmacaoAssinatura() {
     setVerificando(true)
     try {
       const res = await pagamentosApi.getMinhaAssinatura()
-      setAssinatura(res.data ?? null)
-      return res.data ?? null
+      // A linha assinada é o que esta tela espera nascer; o plano em vigor
+      // vem junto e é o que dá nome ao que foi contratado.
+      setAssinatura(res.data?.assinatura ?? null)
+      setPlano(res.data?.plano ?? null)
+      return res.data?.assinatura ?? null
     } catch {
       return null
     } finally {
@@ -97,7 +101,7 @@ function ConfirmacaoAssinatura() {
         <div className="min-w-0 flex-1 space-y-3">
           <p className="text-sm">
             {ativa
-              ? `Plano ${assinatura?.plano?.nome ?? 'contratado'} ativo.`
+              ? `Plano ${assinatura?.plano?.nome ?? plano?.nome ?? 'contratado'} ativo.`
               : falhou
                 ? 'Nenhuma cobrança foi concluída. Você pode tentar de novo a partir da página de planos.'
                 : 'Aguardando a confirmação do pagamento.'}
