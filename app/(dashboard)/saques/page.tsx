@@ -21,14 +21,14 @@ import {
 import { toast } from 'sonner'
 import {
   pagamentosApi, SaldoInfo, Saque, ChavePix, SaqueStatus,
-  CHAVE_PIX_LABELS, STATUS_LABELS
+  CHAVE_PIX_LABELS
 } from '@/lib/pagamentos'
 import SaldoCard from '@/components/saques/SaldoCard'
 
 const STATUS_SAQUE_CFG: Record<SaqueStatus, { label: string; icon: React.ElementType; cls: string }> = {
   SOLICITADO: { label: 'Solicitado', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
   PROCESSANDO: { label: 'Processando', icon: Loader2, cls: 'text-blue-400 bg-blue-400/10' },
-  CONCLUIDO: { label: 'Concluído', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
+  CONCLUIDO: { label: 'Concluído', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
   REJEITADO: { label: 'Rejeitado', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
 }
 
@@ -132,21 +132,44 @@ export default function SaquesPage() {
 
   async function handleSolicitarSaque() {
     const valor = Math.round(parseFloat(saqueValor.replace(',', '.')) * 100)
-    if (!saqueChaveId || isNaN(valor) || valor < 500) {
-      toast.error('Valor mínimo de R$ 5,00 e chave PIX obrigatória.')
+    // O mínimo é o que o servidor disse junto do saldo, não um 500 escrito aqui.
+    if (!saqueChaveId || isNaN(valor) || (saldo && valor < saldo.valorMinimo)) {
+      toast.error(
+        `Valor mínimo de ${saldo?.valorMinimoFormatado ?? ''} e chave PIX obrigatória.`.replace('  ', ' '),
+      )
       return
     }
     setSavingSaque(true)
     try {
       const res = await pagamentosApi.solicitarSaque(saqueChaveId, valor)
       setSaques(prev => [res.data, ...prev])
-      setSaldo(prev => prev ? { ...prev, saldo: prev.saldo - valor } : prev)
+
+      /*
+       * O saldo volta a ser lido do servidor, não recalculado aqui.
+       *
+       * Era `{ ...prev, saldo: prev.saldo - valor }`: mexia no NÚMERO e deixava
+       * as strings do servidor para trás. O card mostra o saldo a partir do
+       * número, mas "Total recebido" e "Total sacado" a partir das strings —
+       * então depois de sacar R$ 1.000 a tela dizia saldo R$ 6.200, recebido
+       * R$ 7.200 e sacado R$ 0,00. A conta não fechava, e some dinheiro sem
+       * contrapartida à vista. Conferido no app antes do conserto.
+       *
+       * Quem sabe o saldo é o servidor: ele soma faturas pagas, subtrai saques
+       * ativos e o que está travado em disputa. Reproduzir essa conta na tela é
+       * abrir uma segunda fonte para o número que mais importa aqui.
+       */
+      const atualizado = await pagamentosApi.getSaldo()
+      setSaldo(atualizado.data)
+
       toast.success('Saque solicitado!')
       setSaqueOpen(false)
       setSaqueValor('')
       setSaqueChaveId('')
-    } catch {
-      toast.error('Erro ao solicitar saque. Verifique seu saldo.')
+    } catch (erro) {
+      // A frase do servidor diz qual das regras barrou — saldo, mínimo, chave
+      // inativa. "Verifique seu saldo" mandava olhar o lugar errado.
+      const mensagem = erro instanceof Error ? erro.message : ''
+      toast.error(mensagem || 'Não foi possível solicitar o saque.')
     } finally {
       setSavingSaque(false)
     }
@@ -164,8 +187,15 @@ export default function SaquesPage() {
       toast.success('Chave PIX cadastrada!')
       setChaveOpen(false)
       setChaveForm({ tipo: '', chave: '', titular: '' })
-    } catch {
-      toast.error('Erro ao cadastrar chave PIX.')
+    } catch (erro) {
+      /*
+       * O servidor agora confere o formato da chave contra o tipo declarado, e
+       * a recusa vem com o motivo: "CPF inválido", "Telefone inválido — use
+       * DDD + celular". Um "Erro ao cadastrar chave PIX" genérico deixava a
+       * pessoa relendo o formulário sem saber qual campo corrigir.
+       */
+      const mensagem = erro instanceof Error ? erro.message : ''
+      toast.error(mensagem || 'Não foi possível cadastrar a chave PIX.')
     } finally {
       setSavingChave(false)
     }
@@ -192,14 +222,26 @@ export default function SaquesPage() {
           <p className="text-sm text-muted-foreground">Receba seus ganhos via PIX.</p>
         </div>
         {saldo && saldo.saldo > 0 && (
-          <Button
-            className="rounded-xl gap-2"
-            onClick={() => setSaqueOpen(true)}
-            disabled={chaves.length === 0}
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            Sacar
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              className="rounded-xl gap-2"
+              onClick={() => setSaqueOpen(true)}
+              disabled={chaves.length === 0}
+            >
+              <ArrowDownToLine className="h-4 w-4" />
+              Sacar
+            </Button>
+            {/*
+              Um botão desabilitado sem motivo ao lado só diz "não". A razão
+              existia — não há chave cadastrada — mas ficava numa seção abaixo,
+              que quem olha o botão não está lendo.
+            */}
+            {chaves.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Cadastre uma chave PIX para sacar.
+              </p>
+            )}
+          </div>
         )}
       </motion.div>
 
@@ -310,7 +352,7 @@ export default function SaquesPage() {
               />
               {saldo && (
                 <p className="text-xs text-muted-foreground">
-                  Disponível: {saldo.saldoFormatado} · Mínimo R$ 5,00
+                  Disponível: {saldo.saldoFormatado} · Mínimo {saldo.valorMinimoFormatado}
                 </p>
               )}
             </div>

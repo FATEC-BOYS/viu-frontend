@@ -102,8 +102,33 @@ export interface ApiError extends Error {
   body: unknown
 }
 
+/**
+ * Quando a validação recusa campo a campo, é isso que a pessoa precisa ler.
+ *
+ * O backend responde `{ message: 'Dados da requisição inválidos', errors: [{
+ * field, message }] }`. A frase do topo é a mesma para qualquer recusa; a útil
+ * — "CPF inválido", "Telefone inválido — use DDD + celular" — está em
+ * `errors`. Como todo `toast.error(erro.message)` do app lia só o topo, a
+ * pessoa recebia sempre "Dados da requisição inválidos" e tinha que adivinhar
+ * qual campo corrigir.
+ *
+ * Aqui, e não em cada tela: o funil é um só, e corrigir em um lugar faz a
+ * frase certa chegar em todas.
+ */
+function mensagemDeValidacao(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null
+  const erros = (body as { errors?: unknown }).errors
+  if (!Array.isArray(erros) || erros.length === 0) return null
+
+  const frases = erros
+    .map((e) => (e && typeof e === 'object' ? (e as { message?: unknown }).message : null))
+    .filter((m): m is string => typeof m === 'string' && m.length > 0)
+
+  return frases.length > 0 ? frases.join(' · ') : null
+}
+
 function erroDeApi(mensagem: string, status: number, body: unknown): ApiError {
-  const err = new Error(mensagem) as ApiError
+  const err = new Error(mensagemDeValidacao(body) ?? mensagem) as ApiError
   err.status = status
   err.body = body
   return err

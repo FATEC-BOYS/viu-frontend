@@ -125,6 +125,15 @@ export type SaldoInfo = {
   // encolher sem motivo aparente.
   saldoBloqueado: number
   saldoBloqueadoFormatado: string
+  /*
+   * O mínimo de saque, dito pelo servidor.
+   *
+   * A tela tinha a própria cópia (`valor < 500`) e a própria frase ("Mínimo
+   * R$ 5,00"). Duas fontes para uma regra só: mudar lá deixaria a tela
+   * recusando um valor que o servidor aceita, ou prometendo um que ele recusa.
+   */
+  valorMinimo: number
+  valorMinimoFormatado: string
 }
 
 /**
