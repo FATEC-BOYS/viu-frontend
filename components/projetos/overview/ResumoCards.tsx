@@ -2,6 +2,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { Calendar, Users, DollarSign, BarChart3 } from "lucide-react";
 import { formatBRLFromCents } from "@/lib/projects";
 import ProgressoBar from "./ProgressoBar";
@@ -59,7 +60,7 @@ export default function ResumoCards({ resumo }: { resumo: ProjetoResumoUI }) {
             Entrega:{" "}
             <span className="font-medium">
               {resumo.prazoProjeto
-                ? new Date(resumo.prazoProjeto).toLocaleDateString("pt-BR")
+                ? formatarDia(resumo.prazoProjeto)
                 : "Sem prazo"}
             </span>
           </div>

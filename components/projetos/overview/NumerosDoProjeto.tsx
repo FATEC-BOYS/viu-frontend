@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar, Users, DollarSign, BarChart3 } from "lucide-react";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { Button } from "@/components/ui/button";
 import { formatBRLFromCents } from "@/lib/projects";
 import ProgressoBar from "./ProgressoBar";
@@ -65,7 +66,7 @@ export default function NumerosDoProjeto({
       <Bloco icone={Calendar} rotulo="Entrega">
         {resumo.prazoProjeto ? (
           <span className="font-medium">
-            {new Date(resumo.prazoProjeto).toLocaleDateString("pt-BR")}
+            {formatarDia(resumo.prazoProjeto)}
           </span>
         ) : (
           <Button variant="link" className="h-auto p-0 text-sm" onClick={onDefinirPrazo}>

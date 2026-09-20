@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { TarefaCard } from "@/lib/projects"; // id, titulo, responsavel_nome?, prazo?
@@ -78,7 +79,7 @@ export default function MicroKanbanColumn({
               <div className="font-medium line-clamp-1">{t.titulo}</div>
               <div className="text-xs text-muted-foreground flex justify-between">
                 <span>{t.responsavel_nome ?? "—"}</span>
-                <span>{t.prazo ? new Date(t.prazo).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
+                <span>{t.prazo ? formatarDia(t.prazo) : "Sem prazo"}</span>
               </div>
             </li>
           ))}

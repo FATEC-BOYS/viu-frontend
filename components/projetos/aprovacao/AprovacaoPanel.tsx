@@ -1,6 +1,7 @@
 "use client";
 
 import Thumb from "@/components/layout/Thumb";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -194,7 +195,7 @@ function PilhaDeAprovadores({ aprovadores }: { aprovadores: AprovadorChip[] }) {
                 <p className="text-xs">
                   {ap.nome} — {DITO[ap.status]}
                   {ap.status === "PENDENTE" && ap.prazo
-                    ? ` (prazo: ${new Date(ap.prazo).toLocaleDateString("pt-BR")})`
+                    ? ` (prazo: ${formatarDia(ap.prazo)})`
                     : ap.comentario
                       ? `: ${ap.comentario}`
                       : ""}

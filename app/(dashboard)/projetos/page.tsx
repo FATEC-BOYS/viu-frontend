@@ -1,6 +1,7 @@
 "use client";
 
 import { FadeIn } from "@/components/layout/Motion";
+import { diasAte } from '@/lib/diaDeCalendario';
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -177,9 +178,11 @@ function ProjetosPageContent() {
     }
     if (statusFilter !== "todos") f = f.filter(p => p.status === statusFilter);
     if (prazoPreset !== "todos") {
+      // Em dias de calendário: `new Date(prazo).getTime()` resolvia a data no
+      // fuso de quem olha, e um projeto que vence no limite entrava ou saía do
+      // filtro por causa das três horas de diferença.
       const days = Number(prazoPreset);
-      const until = new Date().getTime() + days * 24 * 60 * 60 * 1000;
-      f = f.filter(p => (p.prazo ? new Date(p.prazo).getTime() <= until : false));
+      f = f.filter(p => (p.prazo ? diasAte(p.prazo) <= days : false));
     }
     if (clienteFilter !== "todos") f = f.filter(p => p.cliente?.id === clienteFilter);
 

@@ -32,8 +32,8 @@ import {
   PINO,
   ROTULO,
   agrupar,
+  diaDo,
   meiaNoite,
-  mesmoDia,
   quandoPorExtenso,
   recadoDaAgenda,
   type Compromisso,
@@ -116,15 +116,15 @@ export default function PrazosPage() {
   }, [usuarioId, ehDesigner]);
 
   /** Os dias que têm alguma coisa — é o que o calendário marca. */
-  const diasComItem = useMemo(
-    () => itens.map((i) => meiaNoite(new Date(i.quando))),
-    [itens],
-  );
+  const diasComItem = useMemo(() => itens.map(diaDo), [itens]);
 
   const visiveis = useMemo(
     () =>
       diaEscolhido
-        ? itens.filter((i) => mesmoDia(new Date(i.quando), diaEscolhido))
+        // O dia escolhido vem do calendário, já em meia-noite local; o do item
+        // vem de `diaDo`, que lê a data como dia. Comparar os dois pelo
+        // instante só funciona porque ambos estão no mesmo referencial.
+        ? itens.filter((i) => diaDo(i).getTime() === meiaNoite(diaEscolhido).getTime())
         : itens,
     [itens, diaEscolhido],
   );

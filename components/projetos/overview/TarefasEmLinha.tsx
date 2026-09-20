@@ -1,6 +1,7 @@
 "use client";
 
 import type { TarefasKanban, TarefaCard } from "@/lib/projects";
+import { formatarDia } from '@/lib/diaDeCalendario';
 
 /**
  * As tarefas do projeto como lista, para a Visão Geral.
@@ -37,7 +38,7 @@ function segundaLinha(tarefa: TarefaCard, coluna: Coluna): string {
   if (tarefa.responsavel_nome) partes.push(tarefa.responsavel_nome);
   partes.push(
     tarefa.prazo
-      ? new Date(tarefa.prazo).toLocaleDateString("pt-BR")
+      ? formatarDia(tarefa.prazo)
       : "sem prazo",
   );
   return partes.join(" · ");

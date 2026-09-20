@@ -9,6 +9,8 @@
  * roda. Ficar num módulo também é o que deixa estas funções serem testadas.
  */
 
+import { diaDeCalendario, hojeLocal } from './diaDeCalendario';
+
 export type Tipo = 'projeto' | 'tarefa' | 'fatura';
 
 export type Compromisso = {
@@ -47,20 +49,31 @@ export function mesmoDia(a: Date, b: Date) {
   return meiaNoite(a).getTime() === meiaNoite(b).getTime();
 }
 
+/*
+ * O dia do compromisso, lido como dia e não como instante.
+ *
+ * `meiaNoite(new Date(iso))` resolvia a data no fuso de quem olha: no Brasil,
+ * a meia-noite de 15/09 em UTC é 21h de 14/09 local, e a agenda inteira
+ * andava um dia para trás. Conferido no navegador nos dois fusos.
+ */
+export function diaDo(item: { quando: string }) {
+  return diaDeCalendario(item.quando);
+}
+
 function diasAte(iso: string) {
-  return Math.round((meiaNoite(new Date(iso)).getTime() - meiaNoite().getTime()) / 86400000);
+  return Math.round((diaDeCalendario(iso).getTime() - hojeLocal().getTime()) / 86400000);
 }
 
 /** A frase de quando, escrita como se fala. */
 export function quandoPorExtenso(iso: string): string {
   const d = diasAte(iso);
-  const data = new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const data = diaDeCalendario(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   if (d < -1) return `atrasado há ${-d} dias · ${data}`;
   if (d === -1) return `atrasado desde ontem · ${data}`;
   if (d === 0) return `hoje`;
   if (d === 1) return `amanhã · ${data}`;
   if (d <= 7) return `em ${d} dias · ${data}`;
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+  return diaDeCalendario(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
 }
 
 export type Faixa = { chave: string; titulo: string; itens: Compromisso[] };
@@ -72,16 +85,16 @@ export type Faixa = { chave: string; titulo: string; itens: Compromisso[] };
  * para resolver; o de um ano atrás é história.
  */
 export function agrupar(itens: Compromisso[]): Faixa[] {
-  const hoje = meiaNoite();
+  const hoje = hojeLocal();
   const fimDaSemana = new Date(hoje.getTime() + 7 * 86400000);
 
-  const atrasados = itens.filter((i) => meiaNoite(new Date(i.quando)) < hoje);
-  const deHoje = itens.filter((i) => mesmoDia(new Date(i.quando), hoje));
+  const atrasados = itens.filter((i) => diaDo(i) < hoje);
+  const deHoje = itens.filter((i) => diaDo(i).getTime() === hoje.getTime());
   const daSemana = itens.filter((i) => {
-    const d = meiaNoite(new Date(i.quando));
+    const d = diaDo(i);
     return d > hoje && d <= fimDaSemana;
   });
-  const depois = itens.filter((i) => meiaNoite(new Date(i.quando)) > fimDaSemana);
+  const depois = itens.filter((i) => diaDo(i) > fimDaSemana);
 
   const porData = (a: Compromisso, b: Compromisso) => a.quando.localeCompare(b.quando);
 
@@ -96,8 +109,8 @@ export function agrupar(itens: Compromisso[]): Faixa[] {
 /** A frase do topo: o próximo compromisso, ou o atraso mais recente. */
 export function recadoDaAgenda(itens: Compromisso[]): string {
   if (itens.length === 0) return 'Nada com data marcada.';
-  const hoje = meiaNoite();
-  const atrasados = itens.filter((i) => meiaNoite(new Date(i.quando)) < hoje);
+  const hoje = hojeLocal();
+  const atrasados = itens.filter((i) => diaDo(i) < hoje);
   if (atrasados.length > 0) {
     return atrasados.length === 1
       ? '1 compromisso passou da data.'
