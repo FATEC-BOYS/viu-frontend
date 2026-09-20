@@ -1,6 +1,7 @@
 "use client";
 
 import type { TarefasKanban, TarefaCard } from "@/lib/projects";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,7 @@ function Col({
               <div className="font-medium line-clamp-1">{t.titulo}</div>
               <div className="text-xs text-muted-foreground flex justify-between">
                 <span>{t.responsavel_nome ?? "—"}</span>
-                <span>{t.prazo ? new Date(t.prazo).toLocaleDateString("pt-BR") : "Sem prazo"}</span>
+                <span>{t.prazo ? formatarDia(t.prazo) : "Sem prazo"}</span>
               </div>
             </li>
           ))}

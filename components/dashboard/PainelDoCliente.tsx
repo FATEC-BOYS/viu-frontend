@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { diasAte } from '@/lib/diaDeCalendario'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
@@ -53,7 +54,14 @@ const TOM_STATUS: Record<string, 'atencao' | 'neutro' | 'feito'> = {
 
 function prazoEmPalavras(prazo: string | null): string | null {
   if (!prazo) return null
-  const dias = Math.ceil((new Date(prazo).getTime() - Date.now()) / 86400000)
+  /*
+   * Em dias de calendário, não na diferença bruta contra `Date.now()`.
+   *
+   * Prazo é dia guardado como meia-noite UTC. Subtrair o instante de agora
+   * fazia um prazo de HOJE virar "prazo passou há 1 dia" para quem está no
+   * Brasil, porque a meia-noite UTC já passou às 21h do dia anterior local.
+   */
+  const dias = diasAte(prazo)
   if (!Number.isFinite(dias)) return null
   if (dias < 0) return `prazo passou há ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'}`
   if (dias === 0) return 'prazo é hoje'

@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { formatarDia } from '@/lib/diaDeCalendario';
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { listClientes, listDesigners } from "@/lib/projects";
@@ -303,7 +304,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       .map((id) => clientes.find((c) => c.id === id)?.nome || id);
     const statusLabel = statusLabelProjeto(formData.status);
     const orcFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(formData.orcamento || 0);
-    const prazoFmt = formData.prazo ? new Date(formData.prazo).toLocaleDateString("pt-BR") : undefined;
+    // O campo de data devolve "2026-09-15", que `new Date` lê como meia-noite
+    // UTC — e a prévia mostrava o dia anterior para quem está no Brasil.
+    const prazoFmt = formData.prazo ? formatarDia(formData.prazo) : undefined;
     return {
       nome: formData.nome, cliente: nomeCliente, prazo: prazoFmt, orcamento: orcFmt,
       status: statusLabel, designersAdicionais: designersAd, clientesAdicionais: clientesAd,

@@ -1,3 +1,5 @@
+import { formatarDia } from '@/lib/diaDeCalendario';
+
 export const statusLabel: Record<string, string> = {
   PENDENTE: "Pendente",
   EM_ANDAMENTO: "Em andamento",
@@ -22,5 +24,12 @@ export function daysDiffFromToday(dateISO: string | null) {
 export const prioridadeOrder: Record<string, number> = { ALTA: 3, MEDIA: 2, BAIXA: 1 };
 export const statusOrder: Record<string, number> = { PENDENTE: 1, EM_ANDAMENTO: 2, CONCLUIDA: 3, CANCELADA: 4 };
 
+/**
+ * Prazo de tarefa é dia, não instante.
+ *
+ * `new Date(iso).toLocaleDateString` resolvia a data no fuso de quem olha, e
+ * no Brasil a meia-noite UTC de 15/09 é 21h de 14/09 local — a tarefa
+ * aparecia vencendo um dia antes.
+ */
 export const formatDateBR = (dateISO: string | null) =>
-  dateISO ? new Date(dateISO).toLocaleDateString("pt-BR") : "Sem prazo";
+  dateISO ? formatarDia(dateISO) : "Sem prazo";

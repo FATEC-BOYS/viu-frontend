@@ -9,6 +9,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
 import { destinoDaNotificacao, type Notificacao } from '@/lib/notificacoes'
+import { formatarDia } from '@/lib/diaDeCalendario'
 import { pagamentosApi, SaldoInfo, Assinatura, Fatura } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
@@ -412,7 +413,7 @@ export default function PainelDoDesigner() {
         titulo: p.nome,
         apoio:
           dias < 0
-            ? `Passou do prazo em ${new Date(p.prazo as string).toLocaleDateString('pt-BR')}`
+            ? `Passou do prazo em ${formatarDia(p.prazo as string)}`
             : dias === 0
               ? 'Entrega hoje'
               : `Entrega em ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
@@ -521,7 +522,7 @@ export default function PainelDoDesigner() {
     proximaFatura: proximaFatura
       ? {
           id: proximaFatura.id,
-          vence: new Date(proximaFatura.dataVencimento as string).toLocaleDateString('pt-BR', {
+          vence: formatarDia(proximaFatura.dataVencimento as string, {
             day: '2-digit',
             month: '2-digit',
           }),
@@ -678,7 +679,7 @@ export default function PainelDoDesigner() {
                           · {projeto._count?.artes ?? 0}{' '}
                           {(projeto._count?.artes ?? 0) === 1 ? 'arte' : 'artes'}
                           {projeto.prazo
-                            ? ` · entrega ${new Date(projeto.prazo).toLocaleDateString('pt-BR')}`
+                            ? ` · entrega ${formatarDia(projeto.prazo)}`
                             : ''}
                         </span>
                       </Link>
