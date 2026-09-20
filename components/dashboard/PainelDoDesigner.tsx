@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
 import { destinoDaNotificacao, type Notificacao } from '@/lib/notificacoes'
 import { formatarDia } from '@/lib/diaDeCalendario'
-import { pagamentosApi, SaldoInfo, Assinatura, Fatura } from '@/lib/pagamentos'
+import { pagamentosApi, SaldoInfo, type Vigencia, Fatura } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
 import PainelDoDia from '@/components/dashboard/PainelDoDia'
@@ -67,10 +67,41 @@ function FinanceiroCard({
   isDesigner: boolean
   faturasPendentes: Fatura[]
   saldo: SaldoInfo | null
-  assinatura: Assinatura | null
+  assinatura: Vigencia | null
 }) {
-  const assinaturaAlerta =
-    !assinatura || assinatura.status === 'CANCELADA' || assinatura.status === 'EXPIRADA'
+  /*
+   * O aviso só aparece quando há o que fazer.
+   *
+   * Antes disparava para TODO designer: a condição era `!assinatura`, e
+   * assinatura era `null` para quem não tinha linha — ou seja, para todo mundo
+   * que se cadastrou antes de o produto passar a criar a do Gratuito. O painel
+   * abria com "Sem assinatura ativa — Escolha um plano para continuar usando o
+   * VIU" de forma permanente, enquanto a taxa e os limites já vinham do
+   * Gratuito. Alarme que toca sempre é alarme que ninguém escuta.
+   *
+   * Estar no Gratuito não é problema. Problema é a cobrança ter parado
+   * (PAUSADA), o checkout não ter fechado (PENDENTE) ou a assinatura estar
+   * correndo para o fim depois de cancelada.
+   */
+  const linha = assinatura?.assinatura ?? null
+  const aviso: { titulo: string; texto: string } | null = assinatura?.cancelada
+    ? {
+        titulo: 'Assinatura cancelada',
+        texto: assinatura.vigenteAte
+          ? `Seu plano vale até ${formatarDia(assinatura.vigenteAte, { day: '2-digit', month: 'short', year: 'numeric' })}. Depois disso você volta ao Gratuito.`
+          : 'Você volta ao plano Gratuito ao fim do período pago.',
+      }
+    : linha?.status === 'PAUSADA'
+      ? {
+          titulo: 'Assinatura pausada',
+          texto: 'A cobrança recorrente parou. Revise o pagamento para continuar no plano.',
+        }
+      : linha?.status === 'PENDENTE'
+        ? {
+            titulo: 'Assinatura aguardando pagamento',
+            texto: 'O checkout ainda não foi concluído. Termine para ativar o plano.',
+          }
+        : null
 
   return (
     <Card className="gap-0 py-0">
@@ -80,22 +111,20 @@ function FinanceiroCard({
           Financeiro
         </h2>
         {/* assinatura alert */}
-        {assinaturaAlerta && (
+        {aviso && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"
           >
-            <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-amber-300">
-                {!assinatura ? 'Sem assinatura ativa' : `Assinatura ${assinatura.status.toLowerCase()}`}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Escolha um plano para continuar usando o VIU.
-              </p>
+            {/* `amber-400` sozinho é claro demais sobre o cartão branco: a
+                variante escura entra só no tema escuro. */}
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{aviso.titulo}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{aviso.texto}</p>
             </div>
-            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-amber-300 hover:text-amber-200 flex-shrink-0">
+            <Button asChild size="sm" variant="ghost" className="h-7 flex-shrink-0 px-2 text-amber-700 hover:text-amber-800 dark:text-amber-300 dark:hover:text-amber-200">
               <Link href="/planos">Ver planos</Link>
             </Button>
           </motion.div>
@@ -228,7 +257,7 @@ export default function PainelDoDesigner() {
   const [aprovacoes, setAprovacoes] = useState<any[]>([])
 
   // financial state
-  const [assinatura, setAssinatura] = useState<Assinatura | null>(null)
+  const [assinatura, setAssinatura] = useState<Vigencia | null>(null)
   const [saldo, setSaldo] = useState<SaldoInfo | null>(null)
   const [faturasPendentes, setFaturasPendentes] = useState<Fatura[]>([])
 
