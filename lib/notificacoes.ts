@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
  * aplicação, então a tradução mora aqui. Sem destino a linha não vira link —
  * é melhor não ser clicável do que levar a lugar nenhum.
  */
-export type EntidadeNotificacao = 'ARTE' | 'PROJETO' | 'FATURA' | 'ASSINATURA'
+export type EntidadeNotificacao = 'ARTE' | 'PROJETO' | 'FATURA' | 'ASSINATURA' | 'DISPUTA'
 
 export type Notificacao = {
   id: string
@@ -144,6 +144,10 @@ export function destinoDaNotificacao(n: Notificacao): string | null {
     case 'ASSINATURA':
       // Não há tela por assinatura; a lista é o lugar certo.
       return '/assinaturas'
+    case 'DISPUTA':
+      // Idem: não há tela por disputa, e a lista mostra tanto quem abriu
+      // quanto o outro lado — que é quem costuma receber este aviso.
+      return '/disputas'
     default:
       return null
   }

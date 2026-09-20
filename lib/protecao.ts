@@ -1,4 +1,5 @@
 import { api } from './api'
+import type { Fatura } from './pagamentos'
 
 export type DisputaTipo = 'CALOTE' | 'ENTREGA_INCOMPLETA' | 'FRAUDE' | 'OUTRO'
 export type DisputaStatus = 'ABERTA' | 'EM_ANALISE' | 'RESOLVIDA_DESIGNER' | 'RESOLVIDA_CLIENTE' | 'ESCALADA'
@@ -211,4 +212,62 @@ export function frasedoDesfecho(
   return estorno.viaGateway
     ? `Disputa encerrada e ${valor} estornados ao cliente pelo Mercado Pago.`
     : `Disputa encerrada. ${valor} baixados nos registros, mas esta fatura não passou pelo Mercado Pago — a devolução ao cliente precisa ser feita por fora.`
+}
+
+
+/*
+ * O valor de uma disputa é a fatura — e a pergunta não era feita.
+ *
+ * O backend congela `fatura.valorLiquidoDesigner` em `saldoBloqueado` quando
+ * recebe `faturaId`, e nenhuma tela mandava `faturaId`. Conferido no app:
+ * fatura PAGA de R$ 10.800, disputa de CALOTE aberta como a tela abria,
+ * `saldoBloqueado: 0`. Ou seja, o desconto no saldo, a trava do saque, o bloco
+ * "Bloqueado em disputa" e o estorno da resolução eram mecanismo inteiro que a
+ * interface do produto não alcançava.
+ *
+ * Agora a fatura é escolhida no modal, com o efeito escrito embaixo: dinheiro
+ * não pode ficar retido sem a pessoa ter apontado para ele.
+ */
+
+/** O valor do "nenhuma" no seletor. Radix não aceita `value=""`. */
+export const SEM_FATURA = 'nenhuma'
+
+/** O estado da fatura na linha do seletor — `PAGA` é o que muda o efeito. */
+export function rotuloDoStatusDaFatura(status: string): string {
+  const map: Record<string, string> = {
+    PENDENTE: 'não paga',
+    PAGA: 'paga',
+    CANCELADA: 'cancelada',
+    ESTORNADA: 'estornada',
+  }
+  return map[status] ?? status
+}
+
+/**
+ * O que vai acontecer com o dinheiro, dito antes de acontecer.
+ *
+ * A regra é do servidor — só fatura PAGA tem o que reter, porque o saldo do
+ * designer só soma faturas pagas. Aqui a frase apenas conta a mesma regra; se
+ * as duas discordarem, quem manda é o servidor.
+ *
+ * Mora neste módulo e não na página porque arquivo de página do Next não pode
+ * exportar nada além do componente — e função que não se exporta não se testa.
+ */
+export function frasedaRetencao(fatura: Fatura | null, souOCliente: boolean): string {
+  if (!fatura) {
+    return 'Nenhum valor fica retido. A disputa é registrada e analisada do mesmo jeito.'
+  }
+  if (fatura.status !== 'PAGA') {
+    return 'Esta fatura não foi paga, então não há valor a reter. A disputa é registrada do mesmo jeito.'
+  }
+  /*
+   * O líquido do designer não vem na resposta do cliente — o servidor o remove
+   * de propósito, para quem paga não ler quanto o VIU cobra e quanto o designer
+   * embolsa. Então para o cliente a frase diz o efeito sem o número, em vez de
+   * inventar um valor a partir do total.
+   */
+  if (souOCliente || !fatura.valorLiquidoDesignerFormatado) {
+    return 'O valor que o designer receberia por esta fatura fica retido até a disputa ser resolvida.'
+  }
+  return `${fatura.valorLiquidoDesignerFormatado} ficam retidos do seu saldo até a disputa ser resolvida.`
 }

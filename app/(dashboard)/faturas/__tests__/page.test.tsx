@@ -7,10 +7,9 @@ vi.mock('@/components/layout/Motion', () => ({
 vi.mock('@/components/layout/PageHeader', () => ({
   default: ({ title, description }: any) => <div><h1>{title}</h1><p>{description}</p></div>,
 }))
-vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, { get: () => ({ children, ...p }: any) => <div {...p}>{children}</div> }),
-  AnimatePresence: ({ children }: any) => <>{children}</>,
-}))
+vi.mock('framer-motion', async () =>
+  (await import('@/test-utils/framerMotion')).mockDeFramerMotion(),
+)
 
 const useAuth = vi.fn()
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => useAuth() }))
