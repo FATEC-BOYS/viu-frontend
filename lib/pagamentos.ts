@@ -46,21 +46,48 @@ export type Assinatura = {
 
 export type FaturaStatus = 'PENDENTE' | 'PAGA' | 'CANCELADA' | 'ESTORNADA'
 
+export type TentativaDePagamento = {
+  id: string
+  status: 'PENDENTE' | 'PROCESSANDO' | 'APROVADO' | 'REJEITADO' | 'CANCELADO' | 'ESTORNADO'
+  metodoPagamento?: string | null
+  expiraEm?: string | null
+}
+
 export type Fatura = {
   id: string
   valor: number
   valorFormatado: string
-  taxaPlataforma: number
-  taxaPlataformaFormatada: string
-  valorLiquidoDesigner: number
-  valorLiquidoDesignerFormatado: string
+  /*
+   * A quebra entre taxa e líquido é opcional porque o servidor só a manda para
+   * quem ela diz respeito: designer e admin. Para o cliente, que paga o total,
+   * os campos não vêm — e é por isso que são opcionais aqui em vez de a tela
+   * escondê-los: escondido no componente, o número continuaria na resposta.
+   */
+  taxaPlataforma?: number
+  taxaPlataformaFormatada?: string
+  valorLiquidoDesigner?: number
+  valorLiquidoDesignerFormatado?: string
   status: FaturaStatus
   dataVencimento?: string | null
   dataPagamento?: string | null
+  /*
+   * Datas já formatadas pelo servidor. A tela reimplementava `toLocaleDateString`
+   * por cima de `dataVencimento` enquanto estas vinham prontas e ignoradas.
+   */
+  dataVencimentoFormatada?: string | null
+  dataPagamentoFormatada?: string | null
+  /*
+   * Prazo estourado e ninguém pagou. Vem do servidor, que tem a data e o
+   * relógio: comparar no navegador é comparar com um relógio que pode estar em
+   * outro fuso ou simplesmente errado.
+   */
+  vencida?: boolean
   descricao?: string | null
   projeto: { id: string; nome: string }
   cliente: { id: string; nome: string }
   designer: { id: string; nome: string }
+  /** Tentativas de pagamento, da mais recente para a mais antiga. */
+  pagamentos?: TentativaDePagamento[]
 }
 
 export type ChavePixTipo = 'CPF' | 'EMAIL' | 'TELEFONE' | 'ALEATORIA'
@@ -120,7 +147,13 @@ export type PixPaymentResult = {
   pagamentoId: string
   qrCode: string
   qrCodeText: string
-  expiraEm: string
+  /*
+   * Quando o QR deixa de valer, como o gateway informou — nulo para tentativas
+   * antigas, anteriores a o prazo passar a ser guardado. Era recalculado como
+   * `agora + 24h` a cada resposta, então quem reabria a tela lia sempre um
+   * prazo novo, independentemente de quando o QR nasceu.
+   */
+  expiraEm: string | null
 }
 
 export function formatReais(centavos: number): string {

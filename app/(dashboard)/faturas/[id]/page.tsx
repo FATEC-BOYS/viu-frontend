@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
   ArrowLeft, CheckCircle2, Clock, Copy, Loader2,
-  QrCode, Smartphone, Zap, AlertCircle, XCircle
+  Smartphone, Zap, AlertCircle, XCircle, AlertTriangle, RefreshCw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -126,7 +127,7 @@ function QrCodeDisplay({ qrCode, qrCodeText }: { qrCode: string; qrCodeText: str
                   exit={{ scale: 0 }}
                   transition={{ type: 'spring', stiffness: 400 }}
                 >
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 </motion.span>
               ) : (
                 <motion.span key="copy"
@@ -169,7 +170,7 @@ function SuccessAnimation() {
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 18 }}
         >
-          <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
+          <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
         </motion.div>
       </div>
       <motion.div
@@ -195,7 +196,8 @@ export default function FaturaDetailPage() {
   const [cpf, setCpf] = useState('')
   const [paying, setPaying] = useState(false)
   const [pix, setPix] = useState<PixPaymentResult | null>(null)
-  const [polling, setPolling] = useState(false)
+  const [erroPagamento, setErroPagamento] = useState<string | null>(null)
+  const [qrExpirado, setQrExpirado] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -205,15 +207,35 @@ export default function FaturaDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
-  // Poll for payment confirmation
+  /*
+   * Pergunta ao servidor se o pagamento caiu — e para quando não faz mais
+   * sentido perguntar.
+   *
+   * Antes não parava nunca: passado o prazo do QR, a tela seguia dizendo
+   * "Verificando pagamento automaticamente…" de quatro em quatro segundos, para
+   * um código que o banco do cliente já recusa. Ficava esperando por algo que
+   * não ia acontecer, sem oferecer o que resolve — gerar outro.
+   */
+  const faturaId = fatura?.id
+  const expiraEm = pix?.expiraEm
   useEffect(() => {
-    if (step !== 'qr' || !fatura) return
+    if (step !== 'qr' || !faturaId) return
+
+    function expirou() {
+      return Boolean(expiraEm) && new Date(expiraEm!).getTime() <= Date.now()
+    }
+    if (expirou()) { setQrExpirado(true); return }
 
     pollRef.current = setInterval(async () => {
+      if (expirou()) {
+        if (pollRef.current) clearInterval(pollRef.current)
+        setQrExpirado(true)
+        return
+      }
       try {
-        const res = await pagamentosApi.getFatura(fatura.id)
+        const res = await pagamentosApi.getFatura(faturaId)
         if (res.data.status === 'PAGA') {
-          clearInterval(pollRef.current!)
+          if (pollRef.current) clearInterval(pollRef.current)
           setFatura(res.data)
           setStep('success')
         }
@@ -221,7 +243,7 @@ export default function FaturaDetailPage() {
     }, 4000)
 
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [step, fatura])
+  }, [step, faturaId, expiraEm])
 
   function formatCpf(v: string) {
     return v.replace(/\D/g, '').slice(0, 11)
@@ -237,12 +259,24 @@ export default function FaturaDetailPage() {
       return
     }
     setPaying(true)
+    setErroPagamento(null)
     try {
       const res = await pagamentosApi.pagarPix(id, rawCpf)
       setPix(res.data)
+      setQrExpirado(false)
       setStep('qr')
-    } catch {
-      toast.error('Erro ao gerar PIX. Tente novamente.')
+    } catch (erro) {
+      /*
+       * A frase do servidor, não um "tente novamente" genérico.
+       *
+       * O backend distingue "já existe um pagamento em andamento" de "esta
+       * fatura já foi paga" — situações com saídas diferentes —, e o `catch`
+       * jogava as duas fora para mandar repetir. Quando havia tentativa morta,
+       * repetir nunca funcionava: era um convite a tentar para sempre.
+       */
+      const mensagem = erro instanceof Error ? erro.message : ''
+      setErroPagamento(mensagem || 'Não foi possível gerar o PIX.')
+      toast.error(mensagem || 'Não foi possível gerar o PIX.')
     } finally {
       setPaying(false)
     }
@@ -283,9 +317,16 @@ export default function FaturaDetailPage() {
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between"
       >
-        <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-          Faturas
+        {/*
+          Um botão rotulado com um destino tem que ir ao destino. Era
+          `router.back()`: quem chega por link direto — de uma notificação de
+          fatura, por exemplo — voltava para fora do app.
+        */}
+        <Button variant="ghost" size="sm" className="gap-1.5" asChild>
+          <Link href="/faturas">
+            <ArrowLeft className="h-4 w-4" />
+            Faturas
+          </Link>
         </Button>
         {/* O indicador 1-2-3-4 é do fluxo de pagamento. Para quem não paga
             esta fatura não há fluxo nenhum — a tela é um recibo. */}
@@ -314,15 +355,47 @@ export default function FaturaDetailPage() {
                   <span className="text-sm text-muted-foreground">Valor total</span>
                   <span className="text-sm font-semibold tabular-nums">{fatura.valorFormatado}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Taxa plataforma</span>
-                  <span className="text-sm tabular-nums">{fatura.taxaPlataformaFormatada}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Designer recebe</span>
-                  <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 dark:text-emerald-400">{fatura.valorLiquidoDesignerFormatado}</span>
-                </div>
+
+                {/*
+                  A quebra entre taxa e líquido só chega no payload de quem ela
+                  diz respeito — designer e admin. O cliente paga o total; ver a
+                  margem do designer é informação do outro lado do balcão.
+                */}
+                {fatura.taxaPlataformaFormatada && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Taxa plataforma</span>
+                    <span className="text-sm tabular-nums">{fatura.taxaPlataformaFormatada}</span>
+                  </div>
+                )}
+                {fatura.valorLiquidoDesignerFormatado && (
+                  <>
+                    <Separator />
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Designer recebe</span>
+                      <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {fatura.valorLiquidoDesignerFormatado}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {/*
+                  O vencimento não aparecia aqui — só na lista. Esta é a tela
+                  onde se decide pagar, e era a que não dizia até quando.
+                */}
+                {fatura.dataVencimentoFormatada && (
+                  <>
+                    <Separator />
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        {fatura.vencida ? 'Venceu em' : 'Vence em'}
+                      </span>
+                      <span className={`text-sm tabular-nums ${fatura.vencida ? 'font-medium text-red-600 dark:text-red-400' : ''}`}>
+                        {fatura.dataVencimentoFormatada}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <Separator />
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
@@ -370,7 +443,7 @@ export default function FaturaDetailPage() {
             )}
             {fatura.status !== 'PENDENTE' && (
               <div className={`flex items-center gap-2 p-3 rounded-xl text-sm ${
-                fatura.status === 'PAGA' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
+                fatura.status === 'PAGA' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'
               }`}>
                 {fatura.status === 'PAGA' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 {fatura.status === 'PAGA' ? 'Esta fatura já foi paga.' : `Fatura ${fatura.status.toLowerCase()}.`}
@@ -406,6 +479,13 @@ export default function FaturaDetailPage() {
               />
             </div>
 
+            {erroPagamento && (
+              <div className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>{erroPagamento}</p>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setStep('detail')}>
                 Voltar
@@ -431,23 +511,57 @@ export default function FaturaDetailPage() {
             transition={{ type: 'spring', stiffness: 300, damping: 26 }}
             className="space-y-5"
           >
-            <div>
-              <h2 className="text-lg font-bold">Pague com PIX</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                QR válido até {new Date(pix.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
-                Aguardando confirmação...
-              </p>
-            </div>
-            <QrCodeDisplay qrCode={pix.qrCode} qrCodeText={pix.qrCodeText} />
-            <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
-              <motion.div
-                animate={{ opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              >
-                <Clock className="h-3.5 w-3.5" />
-              </motion.div>
-              Verificando pagamento automaticamente...
-            </div>
+            {qrExpirado ? (
+              /*
+               * Antes a tela nunca chegava aqui: seguia "verificando" para
+               * sempre um código que o banco do cliente já recusa. Agora diz o
+               * que houve e oferece o que resolve — antes, gerar outro nem era
+               * possível: a fatura ficava impedida de ser paga para sempre.
+               */
+              <div className="space-y-4">
+                <div className="flex items-start gap-2 rounded-xl bg-muted p-3 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <p className="text-muted-foreground">
+                    O prazo deste QR acabou. Gere outro para pagar — a fatura continua aberta.
+                  </p>
+                </div>
+                <Button
+                  className="w-full rounded-xl gap-2"
+                  onClick={() => { setPix(null); setQrExpirado(false); setStep('cpf') }}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Gerar novo QR
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <h2 className="text-lg font-bold">Pague com PIX</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {/*
+                      O prazo que o QR realmente tem. Vinha recalculado como
+                      `agora + 24h` a cada resposta, então quem gerava às 10h e
+                      voltava às 23h lia "válido até 23h" — treze horas a mais
+                      que a verdade.
+                    */}
+                    {pix.expiraEm
+                      ? `QR válido até ${new Date(pix.expiraEm).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}. `
+                      : ''}
+                    Aguardando confirmação...
+                  </p>
+                </div>
+                <QrCodeDisplay qrCode={pix.qrCode} qrCodeText={pix.qrCodeText} />
+                <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
+                  <motion.div
+                    animate={{ opacity: [1, 0.3, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                  </motion.div>
+                  Verificando pagamento automaticamente...
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 

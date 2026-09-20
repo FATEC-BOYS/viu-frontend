@@ -7,17 +7,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import {
   Receipt, CheckCircle2, Clock, XCircle, RotateCcw,
-  Loader2, AlertCircle, ChevronRight, Filter
+  Loader2, AlertCircle, ChevronRight, AlertTriangle
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { pagamentosApi, Fatura, FaturaStatus } from '@/lib/pagamentos'
+import { pagamentosApi, formatReais, Fatura, FaturaStatus } from '@/lib/pagamentos'
 import { useAuth } from '@/contexts/AuthContext'
 
 const STATUS_CFG: Record<FaturaStatus, { label: string; icon: React.ElementType; cls: string }> = {
   PENDENTE: { label: 'Pendente', icon: Clock, cls: 'text-amber-400 bg-amber-400/10' },
-  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 bg-emerald-500/10' },
+  PAGA: { label: 'Paga', icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10' },
   CANCELADA: { label: 'Cancelada', icon: XCircle, cls: 'text-red-400 bg-red-400/10' },
   ESTORNADA: { label: 'Estornada', icon: RotateCcw, cls: 'text-purple-400 bg-purple-400/10' },
 }
@@ -32,12 +29,8 @@ function StatusChip({ status }: { status: FaturaStatus }) {
   )
 }
 
-function fmt(iso: string | null | undefined) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
 function FaturaRow({ fatura, index, tipo }: { fatura: Fatura; index: number; tipo: 'cliente' | 'designer' }) {
+  const vencida = Boolean(fatura.vencida)
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }}
@@ -53,18 +46,44 @@ function FaturaRow({ fatura, index, tipo }: { fatura: Fatura; index: number; tip
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <p className="text-sm font-medium truncate">{fatura.projeto.nome}</p>
-              <StatusChip status={fatura.status} />
+              {/*
+                Vencida no lugar de "Pendente": são a mesma linha do banco, mas
+                não a mesma situação para quem lê. Antes a tela dizia "Pendente"
+                e, em cinza, "Vence 15 de set." — cinco dias depois do dia 15.
+              */}
+              {vencida ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-600 dark:text-red-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  Vencida
+                </span>
+              ) : (
+                <StatusChip status={fatura.status} />
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {tipo === 'cliente' ? `Designer: ${fatura.designer.nome}` : `Cliente: ${fatura.cliente.nome}`}
-              {fatura.dataVencimento ? ` · Vence ${fmt(fatura.dataVencimento)}` : ''}
+              {fatura.dataVencimentoFormatada && (
+                <>
+                  {' · '}
+                  <span className={vencida ? 'text-red-600 dark:text-red-400' : undefined}>
+                    {vencida ? 'Venceu' : 'Vence'} {fatura.dataVencimentoFormatada}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
           <div className="text-right flex-shrink-0">
             <p className="text-sm font-semibold tabular-nums">{fatura.valorFormatado}</p>
-            {tipo === 'designer' && fatura.status === 'PAGA' && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 mt-0.5">Líquido: {fatura.valorLiquidoDesignerFormatado}</p>
+            {/*
+              O líquido só existe no payload de quem ele diz respeito — o
+              servidor não o manda para o cliente. Testar a presença é mais
+              honesto que testar o papel de quem olha.
+            */}
+            {fatura.status === 'PAGA' && fatura.valorLiquidoDesignerFormatado && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                Líquido: {fatura.valorLiquidoDesignerFormatado}
+              </p>
             )}
           </div>
 
@@ -119,6 +138,17 @@ export default function FaturasPage() {
   const pagas = faturas.filter(f => f.status === 'PAGA')
   const outras = faturas.filter(f => f.status !== 'PENDENTE' && f.status !== 'PAGA')
 
+  /*
+   * Quanto, e não só quantas.
+   *
+   * "O que você tem a pagar" não dizia o quanto: com cinco faturas abertas,
+   * somar era trabalho de quem lê. E as vencidas saem separadas porque são a
+   * parte da conta que já passou da hora.
+   */
+  const totalPendente = pendentes.reduce((soma, f) => soma + f.valor, 0)
+  const vencidas = pendentes.filter(f => f.vencida)
+  const totalVencido = vencidas.reduce((soma, f) => soma + f.valor, 0)
+
   return (
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
       {/* O rótulo passa a ser sobre dinheiro, não sobre identidade: era
@@ -128,6 +158,27 @@ export default function FaturasPage() {
         title="Faturas"
         description={ehDesigner ? 'O que você tem a receber.' : 'O que você tem a pagar.'}
       />
+
+      {pendentes.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-xl border border-border/60 bg-card px-4 py-3">
+          <div>
+            <p className="text-xs text-muted-foreground">
+              {ehDesigner ? 'A receber' : 'A pagar'}
+            </p>
+            <p className="text-xl font-semibold tabular-nums">{formatReais(totalPendente)}</p>
+          </div>
+          {vencidas.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">
+                {vencidas.length === 1 ? '1 vencida' : `${vencidas.length} vencidas`}
+              </p>
+              <p className="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+                {formatReais(totalVencido)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {loading ? (
