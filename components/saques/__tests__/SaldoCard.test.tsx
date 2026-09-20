@@ -21,6 +21,8 @@ function saldo(over: Partial<SaldoInfo> = {}): SaldoInfo {
     totalSacadoFormatado: 'R$ 0,00',
     saldoBloqueado: 0,
     saldoBloqueadoFormatado: 'R$ 0,00',
+    valorMinimo: 500,
+    valorMinimoFormatado: 'R$ 5,00',
     ...over,
   }
 }
