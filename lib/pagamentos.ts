@@ -225,8 +225,13 @@ export const pagamentosApi = {
    * Faturas passou a abrir sempre no lado de quem paga. Sem default: quem
    * chama decide, e erra alto.
    */
-  getFaturas: (tipo: 'cliente' | 'designer') =>
-    api.get<{ data: Fatura[] }>(`/faturas?tipo=${tipo}`),
+  getFaturas: (tipo: 'cliente' | 'designer', projetoId?: string) => {
+    const p = new URLSearchParams({ tipo })
+    // `projetoId` estreita no servidor. Filtrar a lista inteira no navegador
+    // esconderia o que não coubesse nela sem dizer que estava escondendo.
+    if (projetoId) p.set('projetoId', projetoId)
+    return api.get<{ data: Fatura[] }>(`/faturas?${p.toString()}`)
+  },
 
   getFatura: (id: string) =>
     api.get<{ data: Fatura }>(`/faturas/${id}`),
