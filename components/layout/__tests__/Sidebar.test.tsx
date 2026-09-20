@@ -14,7 +14,17 @@ import { Sidebar } from '../Sidebar'
  * Estes testes fixam o que cada papel vê, e principalmente o que NÃO vê.
  */
 
-const mockUser = vi.hoisted(() => ({ atual: null as { tipo: string } | null }))
+/*
+ * O usuário do fixture precisa de `id`.
+ *
+ * Ele tinha só `tipo`, e isso descrevia um estado que não existe: tanto
+ * `POST /auth/login` quanto `GET /auth/me` devolvem `id`. A falta passou
+ * despercebida enquanto o efeito dos contadores dependia do OBJETO `user` —
+ * qualquer objeto servia. Quando ele passou a depender de `user.id` (para não
+ * refazer nove chamadas a cada troca de referência do contexto), o fixture
+ * virou um usuário sem identidade e os contadores pararam de ser buscados.
+ */
+const mockUser = vi.hoisted(() => ({ atual: null as { id: string; tipo: string } | null }))
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ user: mockUser.atual }),
@@ -31,7 +41,7 @@ vi.mock('@/lib/convites', () => ({
 import { api } from '@/lib/api'
 
 function renderComo(tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN') {
-  mockUser.atual = { tipo }
+  mockUser.atual = { id: 'cusuario00000001', tipo }
   return render(<Sidebar />)
 }
 
@@ -255,7 +265,7 @@ describe('itens que dependem de conteúdo', () => {
    */
   it('tranca também quando o efeito é remontado em série (StrictMode)', async () => {
     contaCom({ projetos: 0, artes: 0 })
-    mockUser.atual = { tipo: 'DESIGNER' }
+    mockUser.atual = { id: 'cusuario00000001', tipo: 'DESIGNER' }
     render(
       <StrictMode>
         <Sidebar />
@@ -263,5 +273,33 @@ describe('itens que dependem de conteúdo', () => {
     )
 
     await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
+  })
+
+  /*
+   * A leva de contadores é NOVE chamadas. Ela não pode sair de novo só porque
+   * o contexto de autenticação devolveu outro objeto para a mesma pessoa.
+   *
+   * O `AuthProvider` monta um `value` novo a cada render e troca o `user`
+   * quando o `/auth/me` chega por cima do perfil em cache do localStorage.
+   * Com o OBJETO na lista de dependências, cada troca repetia tudo: medido no
+   * app, uma carga de /projetos disparava 20 requisições ao backend, contra 11
+   * depois do conserto. Com limite de 100 por 15 minutos em produção, isso é a
+   * diferença entre travar na terceira tela e na décima oitava — que foi
+   * exatamente o "preciso esperar 15 minutos" relatado por quem usa.
+   */
+  it('não refaz os contadores quando o contexto troca a referência da mesma pessoa', async () => {
+    contaCom({ projetos: 1, artes: 1 })
+    mockUser.atual = { id: 'cusuario00000001', tipo: 'DESIGNER' }
+    const { rerender } = render(<Sidebar />)
+
+    await waitFor(() => expect(api.get).toHaveBeenCalled())
+    const chamadasIniciais = vi.mocked(api.get).mock.calls.length
+
+    // Mesma pessoa, objeto novo — é o que o contexto faz o tempo todo.
+    mockUser.atual = { id: 'cusuario00000001', tipo: 'DESIGNER' }
+    rerender(<Sidebar />)
+    await waitFor(() => expect(api.get).toHaveBeenCalled())
+
+    expect(vi.mocked(api.get).mock.calls.length).toBe(chamadasIniciais)
   })
 })
