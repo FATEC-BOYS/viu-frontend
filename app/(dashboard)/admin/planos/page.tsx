@@ -127,6 +127,18 @@ export default function AdminPlanosPage() {
   }
 
   const precoCentavos = reaisParaCentavos(rascunho.precoMensalReais);
+  /*
+   * O plano que está sendo editado é o piso do produto?
+   *
+   * O piso é o gratuito de designer ativo — é dele que saem a taxa e o teto de
+   * quem não assina nada. Editar o piso tem consequência que editar um plano
+   * pago não tem, e a tela precisa dizer isso enquanto a pessoa edita.
+   */
+  const ehOPiso =
+    editando !== null &&
+    editando.tipo === 'DESIGNER' &&
+    editando.precoMensal === 0 &&
+    editando.ativo;
   const taxaPct = Number(rascunho.taxaPercentual.replace(',', '.'));
   const taxaValida = Number.isFinite(taxaPct) && taxaPct >= 0 && taxaPct <= 100;
   const podeSalvar = rascunho.nome.trim().length >= 2 && taxaValida && !salvando;
@@ -376,9 +388,18 @@ export default function AdminPlanosPage() {
                 />
               </div>
             </div>
+            {/*
+              * O texto dizia "nada no produto lê estes números por enquanto".
+              * Era verdade e deixou de ser: o teto de projetos e artes agora
+              * sai daqui para todo designer que assina este plano — e, no caso
+              * do Gratuito, para todo designer que não assina nada. Dizer a um
+              * administrador que a edição dele é inerte é o convite para
+              * editar sem olhar.
+              */}
             <p className="text-xs text-muted-foreground">
-              Campo em branco significa sem limite. Nada no produto lê estes números por
-              enquanto — eles ficam registrados no plano.
+              Estes números são o teto de verdade: o produto recusa criar projeto ou arte acima
+              deles. Campo em branco significa <strong>sem limite</strong>.
+              {ehOPiso && ' Como este é o plano gratuito, eles valem também para quem não assina nada.'}
             </p>
 
             <div className="space-y-2">
@@ -397,6 +418,10 @@ export default function AdminPlanosPage() {
                 <p className="text-sm font-medium">Disponível para assinar</p>
                 <p className="text-xs text-muted-foreground">
                   Desligado, o plano some da tela de Planos. Quem já assinou continua como está.
+                  {/* O servidor recusa com 409, mas quem está prestes a clicar
+                      merece saber antes, e não depois do erro. */}
+                  {ehOPiso &&
+                    ' Este é o plano gratuito, o piso de quem não assina nada — o servidor não deixa desligá-lo sem que exista outro gratuito ativo.'}
                 </p>
               </div>
               <Switch
