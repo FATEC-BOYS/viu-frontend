@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { pagamentosApi, type Vigencia, SaldoInfo } from '@/lib/pagamentos'
 import { situacaoDaAssinatura } from '@/lib/assinatura'
+import DadosFiscaisCard from '@/components/perfil/DadosFiscaisCard'
 
 interface UsuarioPerfil {
   id: string
@@ -356,6 +357,10 @@ export default function PerfilPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Logo depois de "Informações Pessoais": dado fiscal é identidade,
+              só que a identidade que uma cobrança precisa. */}
+          <DadosFiscaisCard />
 
           <Card>
             <CardHeader>
