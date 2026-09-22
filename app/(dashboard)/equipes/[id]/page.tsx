@@ -16,6 +16,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { equipesApi, formatPapel, type Equipe, type EquipeMembro, type PapelEquipe } from '@/lib/equipes'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
@@ -26,7 +30,7 @@ const PAPEL_COLOR: Record<PapelEquipe, string> = {
   LIDER: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
   DESIGNER: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
   REVISOR: 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400',
-  CLIENTE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-600 dark:text-emerald-400',
+  CLIENTE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
 }
 
 function PapelBadge({ papel }: { papel: PapelEquipe }) {
@@ -288,16 +292,45 @@ export default function EquipeDetailPage() {
 
   const [equipe, setEquipe] = useState<Equipe | null>(null)
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
   const [modalMembro, setModalMembro] = useState(false)
   const [modalProjeto, setModalProjeto] = useState(false)
   const [editandoPapel, setEditandoPapel] = useState<string | null>(null)
+  /*
+   * As duas confirmações destrutivas eram `confirm()` do navegador — sem
+   * estilo, sem foco gerenciado, e bloqueando a aba inteira. O resto do
+   * produto usa AlertDialog; não havia motivo para estas duas destoarem.
+   */
+  const [removendo, setRemovendo] = useState<EquipeMembro | null>(null)
+  const [desvinculando, setDesvinculando] = useState<{ id: string; nome: string } | null>(null)
 
-  useEffect(() => {
-    equipesApi.get(id)
+  /*
+   * Equipe que não existe é uma coisa; rede que oscilou é outra.
+   *
+   * Qualquer falha mandava de volta para /equipes com "Erro ao carregar
+   * equipe" — então uma conexão instável tirava a pessoa da página que ela
+   * pediu, e recarregar significava navegar de novo até lá. Só 404 e 403
+   * justificam devolver: nesses dois a página não vai existir por insistência.
+   */
+  const carregar = () => {
+    setLoading(true)
+    setErro(null)
+    equipesApi
+      .get(id)
       .then(setEquipe)
-      .catch(() => { toast.error('Erro ao carregar equipe'); router.push('/equipes') })
+      .catch((e: any) => {
+        const status = e?.status
+        if (status === 404 || status === 403) {
+          toast.error(status === 403 ? 'Você não faz parte desta equipe.' : 'Equipe não encontrada.')
+          router.push('/equipes')
+          return
+        }
+        setErro(e?.message ?? 'Não foi possível carregar a equipe.')
+      })
       .finally(() => setLoading(false))
-  }, [id, router])
+  }
+
+  useEffect(carregar, [id, router])
 
   if (loading) {
     return (
@@ -307,15 +340,27 @@ export default function EquipeDetailPage() {
     )
   }
 
+  if (erro) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-3 p-6 text-center">
+        <p className="text-sm text-muted-foreground">{erro}</p>
+        <div className="flex justify-center gap-2">
+          <Button size="sm" onClick={carregar}>Tentar de novo</Button>
+          <Button size="sm" variant="outline" onClick={() => router.push('/equipes')}>
+            Voltar para equipes
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!equipe) return null
 
   const membros = equipe.membros ?? []
   const projetos = equipe.projetos ?? []
   const isLider = membros.find((m) => m.usuarioId === user?.id)?.papel === 'LIDER'
-  const isDono = equipe.donoPrincipalId === user?.id
 
   const handleRemoverMembro = async (membro: EquipeMembro) => {
-    if (!confirm(`Remover ${membro.usuario.nome} da equipe?`)) return
     try {
       await equipesApi.removerMembro(equipe.id, membro.usuarioId)
       toast.success('Membro removido')
@@ -325,6 +370,8 @@ export default function EquipeDetailPage() {
       })
     } catch (e: any) {
       toast.error(e?.message ?? 'Erro ao remover membro')
+    } finally {
+      setRemovendo(null)
     }
   }
 
@@ -345,8 +392,7 @@ export default function EquipeDetailPage() {
     }
   }
 
-  const handleDesvincularProjeto = async (projetoId: string, nome: string) => {
-    if (!confirm(`Desvincular "${nome}"?`)) return
+  const handleDesvincularProjeto = async (projetoId: string) => {
     try {
       await equipesApi.desvincularProjeto(equipe.id, projetoId)
       toast.success('Projeto desvinculado')
@@ -356,6 +402,8 @@ export default function EquipeDetailPage() {
       })
     } catch (e: any) {
       toast.error(e?.message ?? 'Erro ao desvincular projeto')
+    } finally {
+      setDesvinculando(null)
     }
   }
 
@@ -422,11 +470,28 @@ export default function EquipeDetailPage() {
                   {m.usuario.nome.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{m.usuario.nome}</p>
-                  <p className="text-xs text-muted-foreground truncate">{m.usuario.email}</p>
+                  <p className="truncate text-sm font-medium">
+                    {m.usuario.nome}
+                    {/*
+                      * O dono não pode ser removido nem ter o papel alterado —
+                      * o servidor recusa as duas coisas. A tela respeitava a
+                      * regra escondendo os botões, o que deixava a linha do
+                      * dono parecendo um bug: as outras têm ações, essa não.
+                      * Dizer quem é resolve a pergunta antes dela nascer.
+                      */}
+                    {m.usuarioId === equipe.donoPrincipalId && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">· dono</span>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{m.usuario.email}</p>
                 </div>
 
-                {editandoPapel === m.usuarioId && isDono && m.usuarioId !== equipe.donoPrincipalId ? (
+                {/* `isLider`, não `isDono`: o servidor deixa qualquer líder
+                    trocar papéis (`atualizarPapel` exige LIDER), e as outras
+                    duas ações desta mesma linha já usavam essa regra. A tela
+                    era mais restrita que o servidor, então um líder que não
+                    fosse dono não conseguia fazer o trabalho dele. */}
+                {editandoPapel === m.usuarioId && isLider && m.usuarioId !== equipe.donoPrincipalId ? (
                   <Select
                     value={m.papel}
                     onValueChange={(v) => handleAlterarPapel(m.usuarioId, v as PapelEquipe)}
@@ -445,7 +510,7 @@ export default function EquipeDetailPage() {
                 )}
 
                 <div className="flex items-center gap-1 acoes-hover">
-                  {isDono && m.usuarioId !== equipe.donoPrincipalId && (
+                  {isLider && m.usuarioId !== equipe.donoPrincipalId && (
                     <button
                       onClick={() => setEditandoPapel(editandoPapel === m.usuarioId ? null : m.usuarioId)}
                       className="rounded p-1 text-muted-foreground hover:text-foreground"
@@ -456,7 +521,7 @@ export default function EquipeDetailPage() {
                   )}
                   {(isLider && m.usuarioId !== equipe.donoPrincipalId) && (
                     <button
-                      onClick={() => handleRemoverMembro(m)}
+                      onClick={() => setRemovendo(m)}
                       className="rounded p-1 text-muted-foreground hover:text-destructive"
                       aria-label="Remover membro"
                     >
@@ -516,7 +581,7 @@ export default function EquipeDetailPage() {
                   <Badge variant="outline" className="text-xs shrink-0">{p.status.replace(/_/g, ' ')}</Badge>
                   {isLider && (
                     <button
-                      onClick={() => handleDesvincularProjeto(p.id, p.nome)}
+                      onClick={() => setDesvinculando({ id: p.id, nome: p.nome })}
                       className="rounded p-1 text-muted-foreground hover:text-destructive acoes-hover"
                       aria-label="Desvincular projeto"
                     >
@@ -529,6 +594,48 @@ export default function EquipeDetailPage() {
           </div>
         )}
       </motion.section>
+
+      {/*
+        * Remover membro tira o acesso dele aos projetos da equipe — e a frase
+        * precisa dizer isso, senão "remover da equipe" soa administrativo
+        * quando na verdade é uma porta que fecha.
+        */}
+      <AlertDialog open={removendo !== null} onOpenChange={(v) => !v && setRemovendo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {removendo?.usuario.nome} da equipe?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removendo?.usuario.nome} perde o acesso que tinha pelos projetos desta equipe.
+              A conta dele continua, e você pode adicioná-lo de volta depois.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter na equipe</AlertDialogCancel>
+            <AlertDialogAction onClick={() => removendo && handleRemoverMembro(removendo)}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Desvincular não apaga: é a informação que muda o peso do clique. */}
+      <AlertDialog open={desvinculando !== null} onOpenChange={(v) => !v && setDesvinculando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desvincular &ldquo;{desvinculando?.nome}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O projeto sai desta equipe e deixa de ser visível por ela. Nada do projeto é
+              apagado, e dá para vinculá-lo de novo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter vinculado</AlertDialogCancel>
+            <AlertDialogAction onClick={() => desvinculando && handleDesvincularProjeto(desvinculando.id)}>
+              Desvincular
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AdicionarMembroModal
         equipeId={equipe.id}
