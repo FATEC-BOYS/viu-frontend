@@ -4,14 +4,18 @@ import EmptyState from "@/components/layout/EmptyState";
 import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users2, Plus, Loader2, UserCheck, FolderOpen, ChevronRight, Trash2 } from 'lucide-react'
+import { Users2, Plus, Loader2, UserCheck, FolderOpen, ChevronRight, Trash2, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { equipesApi, type Equipe } from '@/lib/equipes'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { equipesApi, oQueSePerdeAoExcluir, type Equipe } from '@/lib/equipes'
 import { useAuth } from '@/contexts/AuthContext'
 
 // Gera slug a partir do nome
@@ -132,11 +136,9 @@ function EquipeCard({
   isOwner: boolean
 }) {
   const [deletando, setDeletando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!confirm(`Excluir "${equipe.nome}"? Esta ação é irreversível.`)) return
+  const handleDelete = async () => {
     setDeletando(true)
     try {
       await equipesApi.deletar(equipe.id)
@@ -146,52 +148,81 @@ function EquipeCard({
       toast.error(err?.message ?? 'Erro ao excluir equipe')
     } finally {
       setDeletando(false)
+      setConfirmar(false)
     }
   }
+
+  const membros = equipe._count?.membros ?? 0
+  const projetos = equipe._count?.projetos ?? 0
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, type: 'spring', stiffness: 280, damping: 24 }}
+      /*
+       * O cartão inteiro era um `<Link>` com o botão de excluir dentro dele.
+       * Botão dentro de âncora é HTML inválido, e só não quebrava porque o
+       * clique chamava `preventDefault`. Agora o link envolve o que leva à
+       * equipe, e o botão fica ao lado — cada um respondendo por si.
+       */
+      className="group relative flex items-center gap-2 rounded-xl border bg-card p-5 shadow-sm card-interativo"
     >
-      <Link href={`/equipes/${equipe.id}`} className="group block rounded-xl border bg-card p-5 shadow-sm card-interativo">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <Users2 className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold truncate">{equipe.nome}</p>
-              <p className="text-xs text-muted-foreground truncate">/{equipe.slug}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <UserCheck className="h-3.5 w-3.5" />
-                {equipe._count?.membros ?? 0}
-              </span>
-              <span className="flex items-center gap-1">
-                <FolderOpen className="h-3.5 w-3.5" />
-                {equipe._count?.projetos ?? 0}
-              </span>
-            </div>
-            {isOwner && (
-              <button
-                onClick={handleDelete}
-                disabled={deletando}
-                className="rounded p-1 text-muted-foreground hover:text-destructive acoes-hover"
-                aria-label="Excluir equipe"
-              >
-                {deletando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </button>
-            )}
-            <ChevronRight className="h-4 w-4 text-muted-foreground acoes-hover" />
-          </div>
+      <Link href={`/equipes/${equipe.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <Users2 className="h-5 w-5 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{equipe.nome}</p>
+          <p className="truncate text-xs text-muted-foreground">/{equipe.slug}</p>
         </div>
       </Link>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1" title={`${membros} ${membros === 1 ? 'membro' : 'membros'}`}>
+            <UserCheck className="h-3.5 w-3.5" />
+            {membros}
+          </span>
+          <span className="flex items-center gap-1" title={`${projetos} ${projetos === 1 ? 'projeto' : 'projetos'}`}>
+            <FolderOpen className="h-3.5 w-3.5" />
+            {projetos}
+          </span>
+        </div>
+        {isOwner && (
+          <button
+            onClick={() => setConfirmar(true)}
+            disabled={deletando}
+            className="acoes-hover rounded p-1 text-muted-foreground hover:text-destructive"
+            aria-label={`Excluir equipe ${equipe.nome}`}
+          >
+            {deletando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        )}
+        <ChevronRight aria-hidden className="acoes-hover h-4 w-4 text-muted-foreground" />
+      </div>
+
+      {/*
+       * Era um `confirm()` do navegador dizendo só "Esta ação é irreversível".
+       * Os dois números que ele omitia estão desenhados a três centímetros do
+       * botão: conferido no app, excluir uma equipe com 1 membro e 1 projeto
+       * apaga o membro e devolve o projeto para fora de qualquer equipe, sem
+       * dizer nada.
+       */}
+      <AlertDialog open={confirmar} onOpenChange={setConfirmar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir &ldquo;{equipe.nome}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {oQueSePerdeAoExcluir(membros, projetos)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Manter equipe</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   )
 }
@@ -199,16 +230,29 @@ function EquipeCard({
 export default function EquipesPage() {
   const { user } = useAuth()
   const [equipes, setEquipes] = useState<Equipe[]>([])
+  const [erro, setErro] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
 
-  useEffect(() => {
+  /*
+   * Falha de carga precisa aparecer COMO falha.
+   *
+   * O `catch` só levantava um toast e deixava a lista vazia — e lista vazia
+   * desenha "Nenhuma equipe ainda. Crie uma equipe para começar a colaborar",
+   * com botão de criar. Uma oscilação de rede dizia a quem tem cinco equipes
+   * que ele não tem nenhuma, e o convidava a criar a sexta.
+   */
+  const carregar = () => {
     setLoading(true)
-    equipesApi.listar()
+    setErro(null)
+    equipesApi
+      .listar()
       .then(setEquipes)
-      .catch(() => toast.error('Erro ao carregar equipes'))
+      .catch((e: any) => setErro(e?.message ?? 'Não foi possível carregar suas equipes.'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(carregar, [])
 
   return (
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
@@ -216,7 +260,10 @@ export default function EquipesPage() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-        className="flex items-start justify-between gap-4"
+        /* Empilha no telefone: lado a lado, o botão come a largura e a frase
+           de apoio desce em coluna de três palavras. Cabe, então o detector de
+           transbordo não acusa — mas ninguém lê. */
+        className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
       >
         <div>
           <div className="flex items-center gap-3">
@@ -229,31 +276,36 @@ export default function EquipesPage() {
             Organize designers, revisores e clientes em equipes para compartilhar projetos.
           </p>
         </div>
-        <Button onClick={() => setModalOpen(true)} className="shrink-0">
-          <Plus className="h-4 w-4 mr-2" />
+        <Button onClick={() => setModalOpen(true)} className="w-full sm:w-auto sm:shrink-0">
+          <Plus className="mr-2 h-4 w-4" />
           Nova equipe
         </Button>
       </motion.div>
 
-      {!loading && equipes.length > 0 && (
+      {/*
+        * Duas estatísticas viraram uma.
+        *
+        * "Equipes: 3" ficava logo acima de uma lista com três linhas — contar
+        * para a pessoa o que ela consegue contar sozinha é ruído com moldura.
+        * "Projetos vinculados" é o único número que a lista não entrega de
+        * imediato, porque está espalhado por todos os cartões.
+        */}
+      {!loading && !erro && equipes.length > 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.08 }}
-          className="grid grid-cols-2 gap-3"
+          className="rounded-xl border bg-card px-4 py-3"
         >
-          {[
-            { label: 'Equipes', value: equipes.length },
-            {
-              label: 'Projetos vinculados',
-              value: equipes.reduce((acc, e) => acc + (e._count?.projetos ?? 0), 0),
-            },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-xl border bg-card p-4 text-center">
-              <p className="text-2xl font-bold">{stat.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
-            </div>
-          ))}
+          <p className="text-sm text-muted-foreground">
+            <strong className="font-semibold text-foreground">
+              {equipes.reduce((acc, e) => acc + (e._count?.projetos ?? 0), 0)}
+            </strong>{' '}
+            {equipes.reduce((acc, e) => acc + (e._count?.projetos ?? 0), 0) === 1
+              ? 'projeto compartilhado'
+              : 'projetos compartilhados'}{' '}
+            {equipes.length === 1 ? 'nesta equipe' : `entre suas ${equipes.length} equipes`}.
+          </p>
         </motion.div>
       )}
 
@@ -263,6 +315,15 @@ export default function EquipesPage() {
             <div key={i} className="h-20 rounded-xl border bg-muted/30 animate-pulse" />
           ))}
         </div>
+      ) : erro ? (
+        /* Falha é falha, e não "você não tem equipes". */
+        <EmptyState
+          icon={AlertCircle}
+          title="Não foi possível carregar suas equipes"
+          description={erro}
+          actionLabel="Tentar de novo"
+          onAction={carregar}
+        />
       ) : equipes.length === 0 ? (
         <EmptyState
           icon={Users2}
