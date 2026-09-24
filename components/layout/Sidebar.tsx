@@ -356,6 +356,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
               { title: 'Usuários', href: '/admin/usuarios', icon: ShieldCheck },
               // Sem plano cadastrado ninguém assina, e cadastrar só existia
               // pela API — esta é a porta que faltava.
+              { title: 'Financeiro', href: '/admin/financeiro', icon: Receipt },
               { title: 'Planos (cadastro)', href: '/admin/planos', icon: Layers },
               { title: 'Saques (moderação)', href: '/admin/saques', icon: ArrowDownToLine },
               // Disputa travava o saldo do designer e o produto não tinha onde

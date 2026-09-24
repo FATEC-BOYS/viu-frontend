@@ -8,6 +8,10 @@ import { toast } from 'sonner'
 import PageHeader from '@/components/layout/PageHeader'
 import EmptyState from '@/components/layout/EmptyState'
 import { FadeIn } from '@/components/layout/Motion'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
@@ -30,6 +34,11 @@ export default function ConvitesPage() {
   const [equipes, setEquipes] = useState<ConviteEquipe[]>([])
   const [carregando, setCarregando] = useState(true)
   const [respondendo, setRespondendo] = useState<Respondendo>(null)
+  /** Quais listagens não vieram — vazio quando as duas chegaram. */
+  const [naoCarregou, setNaoCarregou] = useState<string[]>([])
+  const [recusando, setRecusando] = useState<
+    { tipo: 'projeto'; convite: ConviteProjeto } | { tipo: 'equipe'; convite: ConviteEquipe } | null
+  >(null)
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login?next=/convites')
@@ -46,9 +55,21 @@ export default function ConvitesPage() {
       ])
       if (resProjetos.status === 'fulfilled') setProjetos(resProjetos.value)
       if (resEquipes.status === 'fulfilled') setEquipes(resEquipes.value)
-      if (resProjetos.status === 'rejected' && resEquipes.status === 'rejected') {
-        toast.error('Não foi possível carregar seus convites')
-      }
+
+      /*
+       * Falha parcial precisa aparecer.
+       *
+       * O aviso só saía quando as DUAS listagens falhavam. Se só a de equipes
+       * caísse, a tela mostrava os convites de projeto e ficava calada sobre o
+       * resto — e quem estava esperando um convite de equipe concluía que ele
+       * não chegou. Uma lista que faltou não se distingue de uma lista vazia
+       * se ninguém disser qual é o caso.
+       */
+      const falharam = [
+        resProjetos.status === 'rejected' ? 'de projeto' : null,
+        resEquipes.status === 'rejected' ? 'de equipe' : null,
+      ].filter(Boolean) as string[]
+      setNaoCarregou(falharam)
     } finally {
       setCarregando(false)
     }
@@ -66,7 +87,8 @@ export default function ConvitesPage() {
         toast.success(`Você entrou no projeto "${convite.projeto.nome}"`)
       } else {
         await convitesApi.recusarPorId(convite.id)
-        toast.success('Convite recusado')
+        // Diz o efeito, porque ele não é óbvio pelo nome do botão.
+        toast.success(`Convite recusado. O projeto "${convite.projeto.nome}" foi cancelado.`)
       }
       setProjetos((atual) => atual.filter((c) => c.id !== convite.id))
     } catch (e: unknown) {
@@ -102,6 +124,23 @@ export default function ConvitesPage() {
         title="Convites"
         description="Convites de projeto e de equipe aguardando sua resposta."
       />
+
+      {/*
+        * Dito acima das listas, e não num toast que some: a ausência de uma
+        * listagem é uma informação que continua valendo enquanto a pessoa
+        * olha a tela.
+        */}
+      {naoCarregou.length > 0 && !carregando && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="flex-1 text-sm text-amber-700 dark:text-amber-300">
+            Não foi possível carregar seus convites {naoCarregou.join(' e ')}. O que está abaixo
+            pode estar incompleto.
+          </p>
+          <Button size="sm" variant="outline" onClick={carregar}>
+            Tentar de novo
+          </Button>
+        </div>
+      )}
 
       {carregando || authLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -146,7 +185,7 @@ export default function ConvitesPage() {
                     <AcoesConvite
                       ocupado={respondendo?.id === convite.id ? respondendo.acao : null}
                       onAceitar={() => responderProjeto(convite, 'aceitar')}
-                      onRecusar={() => responderProjeto(convite, 'recusar')}
+                      onRecusar={() => setRecusando({ tipo: 'projeto', convite })}
                     />
                   </li>
                 ))}
@@ -184,7 +223,7 @@ export default function ConvitesPage() {
                     <AcoesConvite
                       ocupado={respondendo?.id === convite.id ? respondendo.acao : null}
                       onAceitar={() => responderEquipe(convite, 'aceitar')}
-                      onRecusar={() => responderEquipe(convite, 'recusar')}
+                      onRecusar={() => setRecusando({ tipo: 'equipe', convite })}
                     />
                   </li>
                 ))}
@@ -193,6 +232,44 @@ export default function ConvitesPage() {
           )}
         </div>
       )}
+      {/*
+        * Recusar um convite de PROJETO cancela o projeto de quem convidou, e
+        * não dá para desfazer: conferido no app, convidar de novo responde
+        * "Convite só pode ser criado para projetos em rascunho". Um botão de
+        * uma palavra colado no "Aceitar" não pode carregar esse efeito calado.
+        *
+        * Convite de equipe não tem esse peso — a equipe continua lá, e quem
+        * convidou pode convidar de novo. A frase muda com o caso.
+        */}
+      <AlertDialog open={recusando !== null} onOpenChange={(v) => !v && setRecusando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {recusando?.tipo === 'projeto'
+                ? `Recusar o convite de "${recusando.convite.projeto.nome}"?`
+                : `Recusar o convite de "${recusando?.tipo === 'equipe' ? recusando.convite.equipe.nome : ''}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {recusando?.tipo === 'projeto'
+                ? 'O projeto é cancelado junto, e quem convidou vai precisar criar outro para tentar de novo. Não dá para desfazer.'
+                : 'Você não entra na equipe. Quem convidou pode te convidar de novo depois.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!recusando) return
+                if (recusando.tipo === 'projeto') responderProjeto(recusando.convite, 'recusar')
+                else responderEquipe(recusando.convite, 'recusar')
+                setRecusando(null)
+              }}
+            >
+              Recusar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FadeIn>
   )
 }

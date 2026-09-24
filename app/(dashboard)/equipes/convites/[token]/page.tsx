@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Check, Loader2, Users2, X } from 'lucide-react'
@@ -35,14 +35,36 @@ export default function ConviteEquipePorTokenPage() {
 
   const [convite, setConvite] = useState<ConviteEquipe | null>(null)
   const [carregando, setCarregando] = useState(true)
+  /*
+   * Convite que não existe é uma coisa; rede que oscilou é outra.
+   *
+   * A busca não tinha `.catch`: qualquer falha deixava o estado nulo, e nulo
+   * desenha "Convite inválido — este convite não existe". Quem chegou pelo
+   * link do e-mail não tem outro caminho, então uma oscilação de rede
+   * encerrava o assunto: a pessoa conclui que perdeu o convite e vai embora.
+   */
+  const [erroDeRede, setErroDeRede] = useState<string | null>(null)
   const [respondendo, setRespondendo] = useState<'aceitar' | 'recusar' | null>(null)
 
-  useEffect(() => {
+  const carregar = useCallback(() => {
     let ativo = true
+    setCarregando(true)
+    setErroDeRede(null)
     convitesEquipeApi
       .getPorToken(token)
       .then((c) => {
         if (ativo) setConvite(c)
+      })
+      .catch((e: unknown) => {
+        if (!ativo) return
+        const status = (e as { status?: number })?.status
+        /*
+         * 404 e 410 são o convite mesmo: inexistente ou já respondido. Aí a
+         * tela de "convite inválido" é a verdade. Qualquer outra falha é da
+         * viagem, e tentar de novo resolve.
+         */
+        if (status === 404 || status === 410) return
+        setErroDeRede((e as Error)?.message ?? 'Não foi possível carregar o convite.')
       })
       .finally(() => {
         if (ativo) setCarregando(false)
@@ -51,6 +73,8 @@ export default function ConviteEquipePorTokenPage() {
       ativo = false
     }
   }, [token])
+
+  useEffect(carregar, [carregar])
 
   async function responder(acao: 'aceitar' | 'recusar') {
     setRespondendo(acao)
@@ -76,6 +100,23 @@ export default function ConviteEquipePorTokenPage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           Carregando convite…
+        </div>
+      </FadeIn>
+    )
+  }
+
+  if (erroDeRede) {
+    return (
+      <FadeIn className="space-y-4 p-6">
+        <PageHeader
+          title="Não foi possível carregar o convite"
+          description={erroDeRede}
+        />
+        <div className="flex gap-2">
+          <Button onClick={carregar}>Tentar de novo</Button>
+          <Button asChild variant="outline">
+            <Link href="/convites">Ver meus convites</Link>
+          </Button>
         </div>
       </FadeIn>
     )

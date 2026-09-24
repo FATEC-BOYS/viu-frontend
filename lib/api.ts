@@ -1,4 +1,6 @@
-const BASE_URL =
+/* Exportado porque o download de arquivo não passa por `api.get`: ele precisa
+   do corpo cru (CSV), não de JSON. */
+export const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 /**
