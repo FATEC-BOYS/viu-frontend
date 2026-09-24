@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { quandoPorExtenso } from '@/lib/prazos';
 
 /**
@@ -18,7 +19,11 @@ export type ProjetoDoCliente = {
   status: ProjetoStatus;
   orcamento: number | null;
   prazo?: string | null;
-  criado_em: string;
+  /* `criadoEm` é o que o servidor manda; `criado_em` sobreviveu do tempo em
+     que a tela montava o objeto à mão. Os dois ficam opcionais para a
+     transição não exigir tocar em tudo de uma vez. */
+  criadoEm?: string;
+  criado_em?: string;
 };
 
 /** A cor segue a do resto do produto: menta anda, pêssego espera, cinza acabou. */
@@ -77,3 +82,45 @@ export function recadoDoCliente(projetos: ProjetoDoCliente[]): string {
   }
   return abertos.length === 1 ? 'Um projeto em aberto, sem prazo marcado.' : `${abertos.length} projetos em aberto, sem prazo marcado.`;
 }
+
+
+// ===== A CARTEIRA, VINDA DO SERVIDOR =====
+
+/**
+ * As duas telas de cliente montavam a carteira no navegador, a partir de
+ * `getAll('/projetos')` — que pagina de cem em cem até vinte páginas. Para
+ * desenhar uma lista de cinco pessoas, o app baixava todos os projetos do
+ * designer, e `getAll` parava na vigésima página sem avisar: passando de dois
+ * mil projetos, um cliente sumia da carteira e `/clientes/[id]` afirmava
+ * "Cliente não encontrado na sua carteira" sobre alguém que está lá.
+ *
+ * Agora quem responde é o banco, que tem o índice. A regra do que é "meu
+ * cliente" — ter projeto comigo — continua a mesma; mudou quem a executa.
+ */
+
+export type Cliente = {
+  id: string;
+  nome: string;
+  email: string;
+  telefone: string | null;
+  avatar: string | null;
+  /** Laço rompido vem resolvido do servidor — era uma segunda requisição
+   *  e um Set montado na tela. */
+  vinculado: boolean;
+  criadoEm: string;
+  projetos: ProjetoDoCliente[];
+};
+
+export const clientesApi = {
+  listar: () => api.get<{ data: Cliente[] }>('/clientes').then((r) => r.data ?? []),
+
+  /**
+   * 404 quando não há projeto em comum: para este designer, esse cliente não
+   * existe. O erro sobe com `status`, e a tela distingue isso de uma falha de
+   * rede — que é a diferença entre "não é seu cliente" e "tente de novo".
+   */
+  get: (id: string) => api.get<{ data: Cliente }>(`/clientes/${id}`).then((r) => r.data),
+
+  romperVinculo: (clienteId: string) => api.put(`/vinculos/${clienteId}/romper`, {}),
+  restaurarVinculo: (clienteId: string) => api.put(`/vinculos/${clienteId}/restaurar`, {}),
+};
