@@ -6,48 +6,34 @@ import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { api, getAll } from "@/lib/api";
+import { clientesApi, type Cliente, type ProjetoDoCliente } from "@/lib/clientes";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Plus, Loader2, Settings2, Phone, Mail, Calendar, CheckCircle2, ChevronRight, Trash2, Undo2, Pencil, UserRound,
+  Plus, Loader2, Settings2, Phone, Mail, Calendar, ChevronRight, Trash2, Undo2, Pencil, UserRound,
 } from "lucide-react";
 import EmptyState from "@/components/layout/EmptyState";
 
 import ClienteWizard from "@/components/clientes/ClienteWizard";
 
 /* ============================== Tipos ============================== */
-type ArteStatus = "EM_ANALISE" | "APROVADO" | "REJEITADO";
-type ProjetoStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
 
-type Arte = { id: string; status: ArteStatus };
-type Projeto = {
-  id: string; nome: string; descricao?: string | null;
-  status: ProjetoStatus;
-  orcamento: number | null;
-  prazo?: string | null;
-  artes: Arte[];
-};
-type Cliente = {
-  id: string;
-  email: string;
-  nome: string;
-  telefone: string | null;
-  avatar: string | null;
-  tipo: "DESIGNER" | "CLIENTE";
-  // Vínculo com o designer, não status da conta do cliente. Romper tira o
-  // cliente da carteira sem apagar nada do que já foi trocado.
-  vinculado: boolean;
-  criado_em: string;
-  atualizado_em: string;
-  projetos: Projeto[];
-};
+/*
+ * O tipo vem de `lib/clientes`, que é onde a carteira passou a ser definida.
+ *
+ * A cópia local trazia `tipo`, `criadoEm` e `atualizado_em` — campos que esta
+ * tela montava a partir dos projetos e nunca desenhava. Descrever de novo, aqui,
+ * uma forma que o servidor já entrega é o começo de duas verdades sobre o que é
+ * um cliente.
+ *
+ * `vinculado` é vínculo com o designer, não status da conta: romper tira o
+ * cliente da carteira sem apagar nada do que já foi trocado.
+ */
 
 /* ============================== Helpers ============================== */
 const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"] as const;
@@ -86,8 +72,6 @@ function ClienteCard({
   const totalProjetos = c.projetos.length;
   const concluidos = c.projetos.filter((p) => p.status === "CONCLUIDO").length;
   const ativos = c.projetos.filter((p) => p.status === "EM_ANDAMENTO").length;
-  const totalArtes = c.projetos.reduce((acc, p) => acc + (p.artes?.length || 0), 0);
-  const aprovadas = c.projetos.reduce((acc, p) => acc + (p.artes?.filter(a => a.status === "APROVADO").length || 0), 0);
   const orcamentoTotal = c.projetos.reduce((acc, p) => acc + (p.orcamento || 0), 0);
   const proxPrazo = c.projetos
     .filter((p) => p.prazo && p.status === "EM_ANDAMENTO")
@@ -166,16 +150,16 @@ function ClienteCard({
         <div><div className="text-lg font-bold">{ativos}</div><p className="text-[11px] text-muted-foreground">Ativos</p></div>
       </div>
 
-      {totalArtes > 0 && (
-        <div className="mt-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />Artes aprovadas</span>
-            <span className="font-medium">{aprovadas}/{totalArtes}</span>
-          </div>
-          <Progress className="mt-1" value={Math.round((aprovadas / totalArtes) * 100) || 0} />
-        </div>
-      )}
-
+      {/*
+        * Saiu daqui uma barra de "Artes aprovadas X/Y".
+        *
+        * Ela estava atrás de `totalArtes > 0`, e `totalArtes` somava `p.artes`
+        * — que o `reload` sempre preenchia com `[]`. A condição nunca foi
+        * verdadeira: ninguém jamais viu essa barra. Trazer a contagem do
+        * servidor era possível, mas seria uma quarta métrica num cartão que já
+        * tem projetos, orçamento e prazo — o caminho oposto ao que a tela de
+        * detalhe tomou, onde cinco cartões de número viraram uma frase.
+        */}
       {/* `gap-2` e valores que não encolhem: sem isso o rótulo encostava no
           número — lia-se "OrçamentoR$ 8.000,00" — e "Próximo prazo" quebrava
           em duas linhas para caber. */}
@@ -246,7 +230,7 @@ export default function ClientesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFiltro>("todos");
   const [prazoPreset, setPrazoPreset] = useState<"todos" | "7" | "30" | "90">("todos");
-  const [orderBy, setOrderBy] = useState<"criado_em" | "nome">("criado_em");
+  const [orderBy, setOrderBy] = useState<"criadoEm" | "nome">("criadoEm");
   const [ascending, setAscending] = useState(false);
 
   // seleção em massa
@@ -267,47 +251,17 @@ export default function ClientesPage() {
   const reload = async () => {
     setLoading(true);
     try {
-      // GET /usuarios é restrito a ADMIN, então a carteira do designer é montada
-      // a partir dos clientes dos seus próprios projetos — que é exatamente o
-      // escopo que ele pode enxergar.
-      const [projetos, rompidosRes] = await Promise.all([
-        getAll<any>('/projetos'),
-        api.get<{ data: any[] }>('/vinculos/rompidos').catch(() => ({ data: [] as any[] })),
-      ]);
-      const rompidos = new Set((rompidosRes.data ?? []).map((v: any) => v.clienteId ?? v.cliente?.id));
-
-      const porCliente = new Map<string, Cliente>();
-      for (const p of projetos) {
-        const c = p.cliente;
-        if (!c?.id) continue;
-
-        if (!porCliente.has(c.id)) {
-          porCliente.set(c.id, {
-            id: c.id,
-            email: c.email,
-            nome: c.nome,
-            telefone: c.telefone ?? null,
-            avatar: c.avatar ?? null,
-            tipo: 'CLIENTE',
-            vinculado: !rompidos.has(c.id),
-            criado_em: c.criadoEm ?? c.criado_em ?? '',
-            atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
-            projetos: [],
-          });
-        }
-
-        porCliente.get(c.id)!.projetos.push({
-          id: p.id,
-          nome: p.nome,
-          descricao: p.descricao ?? null,
-          status: p.status,
-          orcamento: p.orcamento ?? null,
-          prazo: p.prazo ?? null,
-          artes: [],
-        });
-      }
-
-      setRows([...porCliente.values()]);
+      /*
+       * Uma requisição, respondida pelo banco.
+       *
+       * Eram duas: `getAll('/projetos')` — que pagina de cem em cem até vinte
+       * páginas — mais `/vinculos/rompidos`, e o agrupamento por pessoa
+       * acontecia aqui em memória. Para desenhar uma lista de cinco clientes,
+       * o app baixava todos os projetos do designer; e `getAll` parava na
+       * vigésima página em silêncio, então passando de dois mil projetos um
+       * cliente sumia da carteira sem que nada dissesse que sumiu.
+       */
+      setRows(await clientesApi.listar());
       setError(null);
     } catch (e: any) {
       setError({ mensagem: e?.message ?? "Erro ao carregar clientes", status: e?.status ?? -1 });
@@ -315,7 +269,9 @@ export default function ClientesPage() {
       setLoading(false);
     }
   };
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, []);
+  // A supressão que havia aqui deixou de ser necessária quando `reload`
+  // passou a ser uma chamada só, sem as dependências que o lint reclamava.
+  useEffect(() => { void reload(); }, []);
 
   // filtros client-side
   useEffect(() => {
@@ -345,8 +301,8 @@ export default function ClientesPage() {
 
     const sorted = [...f].sort((a, b) => {
       if (orderBy === "nome") return a.nome.localeCompare(b.nome) * (ascending ? 1 : -1);
-      const at = new Date(a.criado_em).getTime();
-      const bt = new Date(b.criado_em).getTime();
+      const at = new Date(a.criadoEm).getTime();
+      const bt = new Date(b.criadoEm).getTime();
       return (bt - at) * (ascending ? -1 : 1);
     });
 
@@ -372,7 +328,7 @@ export default function ClientesPage() {
     const acao = vinculado ? "restaurar" : "romper";
     try {
       setRows((prev) => prev.map((c) => selectedIds.includes(c.id) ? { ...c, vinculado } : c));
-      await Promise.all(selectedIds.map((id) => api.put(`/vinculos/${id}/${acao}`, {})));
+      await Promise.all(selectedIds.map((id) => (acao === 'romper' ? clientesApi.romperVinculo(id) : clientesApi.restaurarVinculo(id))));
       toast.success(vinculado ? "Vínculos restaurados." : "Vínculos rompidos.");
     } catch (e: any) {
       toast.error(e?.message ?? `Erro ao ${acao} vínculo`);
@@ -382,7 +338,7 @@ export default function ClientesPage() {
 
   // calendar items
   const calendarItems = useMemo(() => {
-    const items: { when: number; label: string; cliente: Cliente; projeto: Projeto }[] = [];
+    const items: { when: number; label: string; cliente: Cliente; projeto: ProjetoDoCliente }[] = [];
     filtered.forEach((c) => {
       c.projetos.forEach((p) => {
         if (p.prazo) items.push({ when: new Date(p.prazo).getTime(), label: p.nome, cliente: c, projeto: p });
@@ -496,7 +452,7 @@ export default function ClientesPage() {
         <Select value={orderBy} onValueChange={(v: any) => setOrderBy(v)}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Ordenar por" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="criado_em">Mais recente</SelectItem>
+            <SelectItem value="criadoEm">Mais recente</SelectItem>
             <SelectItem value="nome">Nome</SelectItem>
           </SelectContent>
         </Select>
@@ -570,7 +526,7 @@ export default function ClientesPage() {
                       <Button size="sm" variant="outline" onClick={async () => {
                         setRows(prev => prev.map(x => x.id === c.id ? { ...x, vinculado: false } : x));
                         try {
-                          await api.put(`/vinculos/${c.id}/romper`, {});
+                          await clientesApi.romperVinculo(c.id);
                         } catch (e: any) {
                           toast.error(e?.message ?? "Falhou");
                           await reload();
@@ -592,7 +548,7 @@ export default function ClientesPage() {
                       <Button size="sm" variant="outline" onClick={async () => {
                         setRows(prev => prev.map(x => x.id === c.id ? { ...x, vinculado: true } : x));
                         try {
-                          await api.put(`/vinculos/${c.id}/restaurar`, {});
+                          await clientesApi.restaurarVinculo(c.id);
                         } catch (e: any) {
                           toast.error(e?.message ?? "Falhou");
                           await reload();

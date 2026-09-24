@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, getAll } from '@/lib/api';
+import { api } from '@/lib/api';
 import { createProjeto } from '@/lib/projects';
 import { toast } from 'sonner';
 
@@ -15,45 +15,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import EmptyState from '@/components/layout/EmptyState';
 import { FadeIn } from '@/components/layout/Motion';
-import { PINO, ROTULO, recadoDoCliente } from '@/lib/clientes';
+import { PINO, ROTULO, recadoDoCliente, clientesApi, type Cliente } from '@/lib/clientes';
 import { quandoPorExtenso } from '@/lib/prazos';
 import { ArrowLeft, ArrowUpRight, Mail, Phone, Plus, Search, Users } from 'lucide-react';
 
 /* =========================
    Tipos
    ========================= */
-type ArteStatus = 'EM_ANALISE' | 'APROVADO' | 'REJEITADO';
-type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
 
-type Arte = {
-  id: string;
-  status: ArteStatus;
-};
 
-type Projeto = {
-  id: string;
-  nome: string;
-  descricao?: string | null;
-  status: ProjetoStatus;
-  orcamento: number | null;
-  prazo?: string | null;
-  criado_em: string;
-  artes: Arte[];
-};
-
-type Cliente = {
-  id: string;
-  email: string;
-  nome: string;
-  telefone: string | null;
-  avatar: string | null;
-  tipo: 'DESIGNER' | 'CLIENTE';
-  // Vínculo com o designer, não status da conta do cliente.
-  vinculado: boolean;
-  criado_em: string;
-  atualizado_em: string;
-  projetos: Projeto[];
-};
+/*
+ * As formas locais de `Projeto` e `Cliente` saíram daqui.
+ *
+ * Descreviam o que esta tela montava à mão a partir de `/projetos`, com campos
+ * que ela nunca desenhava (`tipo`, `atualizado_em`) e um `artes: Arte[]` que o
+ * código preenchia sempre com lista vazia. Agora a carteira vem pronta do
+ * servidor, e repetir a forma aqui seria o começo de duas verdades sobre o que
+ * é um cliente.
+ */
 
 /* =========================
    Helpers
@@ -87,10 +66,8 @@ export default function ClienteDetailPage() {
     email: '',
     telefone: null,
     avatar: null,
-    tipo: 'CLIENTE',
     vinculado: true,
-    criado_em: '',
-    atualizado_em: '',
+    criadoEm: '',
     projetos: [],
   };
 
@@ -106,48 +83,20 @@ export default function ClienteDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      // GET /usuarios/:id exige ownership, então um designer não lê o cadastro
-      // do próprio cliente. Os dados vêm dos projetos em comum, mesmo escopo
-      // que a listagem usa.
-      const [todosProjetos, rompidosRes] = await Promise.all([
-        getAll<any>('/projetos'),
-        api.get<{ data: any[] }>('/vinculos/rompidos').catch(() => ({ data: [] as any[] })),
-      ]);
-      const rompido = (rompidosRes.data ?? []).some(
-        (v: any) => (v.clienteId ?? v.cliente?.id) === clienteId
-      );
-
-      const c = todosProjetos.find((p: any) => p.cliente?.id === clienteId)?.cliente;
-      if (!c) {
-        setError('Cliente não encontrado na sua carteira.');
-        setCliente(null);
-        return;
-      }
-      const projetos: Projeto[] = todosProjetos
-        .filter((p: any) => p.cliente?.id === clienteId || p.clienteId === clienteId)
-        .map((p: any) => ({
-          id: p.id,
-          nome: p.nome,
-          descricao: p.descricao ?? null,
-          status: p.status,
-          orcamento: p.orcamento ?? null,
-          prazo: p.prazo ?? null,
-          criado_em: p.criadoEm ?? p.criado_em ?? '',
-          artes: [],
-        }));
-
-      setCliente({
-        id: c.id,
-        email: c.email,
-        nome: c.nome,
-        telefone: c.telefone ?? null,
-        avatar: c.avatar ?? null,
-        tipo: 'CLIENTE',
-        vinculado: !rompido,
-        criado_em: c.criadoEm ?? c.criado_em ?? '',
-        atualizado_em: c.atualizadoEm ?? c.atualizado_em ?? '',
-        projetos,
-      });
+      /*
+       * Uma requisição, estreitada no banco.
+       *
+       * A tela baixava TODOS os projetos do designer (`getAll('/projetos')`,
+       * cem por página até vinte páginas) e procurava o cliente na lista — mais
+       * uma segunda chamada a `/vinculos/rompidos`. Além do custo, `getAll`
+       * para na vigésima página em silêncio: passando de dois mil projetos,
+       * esta tela afirmava "Cliente não encontrado na sua carteira" sobre
+       * alguém que está lá.
+       *
+       * `GET /clientes/:id` responde com o mesmo escopo — só sai cliente que
+       * tem projeto com este designer — lido por quem tem o índice.
+       */
+      setCliente(await clientesApi.get(clienteId));
     } catch (e: any) {
       setError(e?.message ?? 'Não foi possível carregar o cliente.');
       setCliente(null);
@@ -177,15 +126,13 @@ export default function ClienteDetailPage() {
       : projetos;
 
     /*
-     * Quem tem prazo vem primeiro, do mais urgente para o menos — é a ordem em
-     * que o trabalho cobra. Sem prazo desce, e aí vale o mais recente.
+     * A ordem já vem do servidor: quem tem prazo primeiro, do mais urgente ao
+     * menos, e sem prazo no fim pelo mais recente. A regra era reimplementada
+     * aqui, e a mesma regra em dois lugares é a que sai de sincronia quando
+     * alguém mexe num só — filtrar preserva a ordem de entrada, então não há o
+     * que reordenar.
      */
-    return [...arr].sort((a, b) => {
-      const pa = a.prazo ? new Date(a.prazo).getTime() : Number.POSITIVE_INFINITY;
-      const pb = b.prazo ? new Date(b.prazo).getTime() : Number.POSITIVE_INFINITY;
-      if (pa !== pb) return pa - pb;
-      return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
-    });
+    return arr;
   }, [projetos, busca]);
 
   // ===== Ações =====
@@ -396,9 +343,9 @@ export default function ClienteDetailPage() {
           </div>
         )}
 
-        {clienteSafe.criado_em && (
+        {clienteSafe.criadoEm && (
           <p className="text-xs text-muted-foreground">
-            Cliente desde {formatDate(clienteSafe.criado_em)}
+            Cliente desde {formatDate(clienteSafe.criadoEm)}
           </p>
         )}
       </section>
