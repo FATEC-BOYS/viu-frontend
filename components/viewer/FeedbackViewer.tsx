@@ -112,6 +112,47 @@ type Props = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Onde o cartão do compositor cabe, em coordenadas da moldura.
+ *
+ * O cartão acompanha a marcação, mas quem manda no limite é o CANVAS, não a
+ * moldura: uma arte em retrato pode render mais estreita que os próprios
+ * botões, e encolher o cartão até a largura dela espremeria "Gravar áudio",
+ * "Cancelar" e "Enviar" para fora — o `overflow-hidden` do canvas recortaria
+ * justamente o que permite enviar ou desistir. O cartão pode transbordar a
+ * moldura; o que ele não pode é passar da tela.
+ *
+ * Função pura, e separada, porque a aritmética da folga erra sem avisar: a
+ * primeira versão clampava contra a largura errada e o "Enviar" saía pela
+ * borda direita num telefone. Isso se testa com números; no navegador só se
+ * descobre olhando.
+ */
+export function posicaoDoCartao({
+  pinX,
+  larguraMoldura,
+  larguraArea,
+  larguraCartao = 288,
+  respiro = 8,
+}: {
+  /** Posição da marcação, em porcentagem da largura da moldura. */
+  pinX: number;
+  larguraMoldura: number;
+  /** Largura útil do canvas — a caixa de conteúdo, sem o padding. */
+  larguraArea: number;
+  larguraCartao?: number;
+  respiro?: number;
+}): { largura: number; esquerda: number } {
+  const largura = Math.min(larguraCartao, Math.max(0, larguraArea - respiro * 2));
+  // A moldura é centralizada na área: isto é a sobra de cada lado que o
+  // cartão pode ocupar sem sair da tela.
+  const folga = Math.max(0, (larguraArea - larguraMoldura) / 2);
+  const esquerda = Math.min(
+    Math.max((pinX / 100) * larguraMoldura - largura / 2, -folga + respiro),
+    larguraMoldura + folga - largura - respiro,
+  );
+  return { largura, esquerda };
+}
+
 export function getInitials(name?: string | null, email?: string | null): string {
   if (name) {
     const parts = name.trim().split(/\s+/);
@@ -200,7 +241,22 @@ export default function FeedbackViewer({
    */
   useEffect(() => {
     const el = imgRef.current;
-    if (el?.complete && el.naturalWidth === 0) setImagemFalhou(true);
+    if (!el?.complete) return;
+    if (el.naturalWidth === 0) {
+      setImagemFalhou(true);
+      return;
+    }
+    /*
+     * A proporção também se perdia aqui, e com ela o encaixe na tela.
+     *
+     * `razao` só era definido no `onLoad`, que não dispara quando a imagem
+     * termina de carregar antes da hidratação — o caso comum, já que o HTML
+     * vem do servidor. Sem `razao` não há `caixa`, a moldura fica sem largura
+     * e sem altura, e a arte renderiza no tamanho natural: medido, uma arte de
+     * 2400px de altura dentro de um canvas de 738px, transbordando. O botão
+     * "encaixar na tela" prometia algo que nunca acontecia.
+     */
+    setRazao(el.naturalWidth / el.naturalHeight);
   }, [arte.arquivo]);
 
   const recorder = useAudioRecorder();
@@ -232,6 +288,9 @@ export default function FeedbackViewer({
    */
   const areaRef = useRef<HTMLDivElement>(null);
   const [caixa, setCaixa] = useState<{ w: number; h: number } | null>(null);
+  /* A área visível da arte. O cartão do compositor se mede contra ela, e não
+     contra a moldura — ver o comentário onde ele é posicionado. */
+  const [areaTam, setAreaTam] = useState<{ w: number; h: number } | null>(null);
   const [trilhaAberta, setTrilhaAberta] = useState(false);
   const [abaTrilha, setAbaTrilha] = useState<"comentarios" | "aprovacoes">("comentarios");
 
@@ -251,12 +310,30 @@ export default function FeedbackViewer({
     function medir() {
       const el = areaRef.current;
       if (!el || !razao) return;
-      const dispW = el.clientWidth;
-      const dispH = el.clientHeight;
+      /*
+       * O espaço é o da CAIXA DE CONTEÚDO, sem o respiro das bordas.
+       *
+       * `clientWidth` inclui o padding, então a moldura nascia mais larga que
+       * o espaço real e o flex a espremia de volta: num telefone, `style`
+       * dizia 390px e a tela mostrava 358px. Enquanto só os pins liam isso
+       * passou despercebido — eles medem o retângulo de verdade, não o
+       * número. O cartão do compositor, que se posiciona pelo número, saía
+       * pela borda direita e cortava o "Enviar".
+       */
+      const estilo = getComputedStyle(el);
+      const dispW =
+        el.clientWidth -
+        parseFloat(estilo.paddingLeft) -
+        parseFloat(estilo.paddingRight);
+      const dispH =
+        el.clientHeight -
+        parseFloat(estilo.paddingTop) -
+        parseFloat(estilo.paddingBottom);
       if (dispW <= 0 || dispH <= 0) return;
       // Cabe pela largura ou pela altura — o que apertar primeiro manda.
       const w = Math.min(dispW, dispH * razao);
       setCaixa({ w, h: w / razao });
+      setAreaTam({ w: dispW, h: dispH });
     }
 
     medir();
@@ -917,15 +994,11 @@ export default function FeedbackViewer({
              * Na vertical basta trocar de lado: na metade de baixo o cartão
              * sobe, e aí nunca passa do rodapé.
              */
-            const larguraMoldura = caixa?.w ?? 0;
-            const largura = Math.min(288, larguraMoldura || 288);
-            const esquerda = Math.max(
-              0,
-              Math.min(
-                (pin.x / 100) * larguraMoldura - largura / 2,
-                larguraMoldura - largura,
-              ),
-            );
+            const { largura, esquerda } = posicaoDoCartao({
+              pinX: pin.x,
+              larguraMoldura: caixa?.w ?? 0,
+              larguraArea: areaTam?.w ?? caixa?.w ?? 0,
+            });
             const acima = pin.y > 55;
             return (
               <div

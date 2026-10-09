@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import FeedbackViewer, { type FeedbackItem, getInitials, avatarColor } from "../FeedbackViewer";
+import FeedbackViewer, { type FeedbackItem, getInitials, avatarColor, posicaoDoCartao } from "../FeedbackViewer";
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -813,5 +813,54 @@ describe("marcação: escrever no pin e poder desistir", () => {
     // Entrava por um `as FeedbackItem` cru, sem passar pela conversão que a
     // página faz: aparecia como "Anônimo" e "Invalid Date" até recarregar.
     await waitFor(() => expect(screen.getByText("João Santos")).toBeInTheDocument());
+  });
+});
+
+/*
+ * O cartão do compositor não pode passar da tela.
+ *
+ * Números de medições reais no navegador. A primeira versão desta conta
+ * clampava contra a largura errada — `clientWidth` inclui o padding, então a
+ * moldura "media" 390px e mostrava 358px — e o "Enviar" saía pela borda
+ * direita num telefone, com o cartão indo de 110 a 398 numa tela de 390.
+ */
+describe("posicaoDoCartao: cabe na tela, não na moldura", () => {
+  // Telefone de 390px: área útil 358, arte deitada ocupando tudo.
+  const TELEFONE = { larguraMoldura: 358, larguraArea: 358 };
+
+  it("a marcação na borda direita não empurra o cartão para fora", () => {
+    const { largura, esquerda } = posicaoDoCartao({ pinX: 90, ...TELEFONE });
+    expect(largura).toBe(288);
+    // Direita do cartão, em coordenadas da moldura, dentro da área.
+    expect(esquerda + largura).toBeLessThanOrEqual(TELEFONE.larguraArea);
+  });
+
+  it("a marcação na borda esquerda também não", () => {
+    const { esquerda } = posicaoDoCartao({ pinX: 0, ...TELEFONE });
+    expect(esquerda).toBeGreaterThanOrEqual(0);
+  });
+
+  it("no meio, o cartão fica centrado na marcação", () => {
+    const { largura, esquerda } = posicaoDoCartao({ pinX: 50, ...TELEFONE });
+    expect(esquerda + largura / 2).toBeCloseTo(0.5 * TELEFONE.larguraMoldura, 1);
+  });
+
+  it("arte estreita não espreme o cartão: ele transborda a moldura, não a tela", () => {
+    // Medido: arte 300x2400 num telefone vira moldura de 88px.
+    const { largura, esquerda } = posicaoDoCartao({
+      pinX: 50,
+      larguraMoldura: 88,
+      larguraArea: 358,
+    });
+    // Encolher até 88px cortaria "Gravar áudio", "Cancelar" e "Enviar".
+    expect(largura).toBe(288);
+    const folga = (358 - 88) / 2;
+    expect(esquerda).toBeGreaterThanOrEqual(-folga);
+    expect(esquerda + largura).toBeLessThanOrEqual(88 + folga);
+  });
+
+  it("tela mais estreita que o cartão encolhe o cartão, e não o contrário", () => {
+    const { largura } = posicaoDoCartao({ pinX: 50, larguraMoldura: 200, larguraArea: 200 });
+    expect(largura).toBe(184);
   });
 });
