@@ -39,6 +39,10 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { paraFeedbackItem, type FeedbackItem } from "./types";
+// Reexportado porque o tipo nasceu aqui e há quem importe daqui; some
+// em runtime, então não arrasta nada do módulo cliente junto.
+export type { FeedbackItem };
 import { useAudioRecorder, formatElapsed } from "./hooks/useAudioRecorder";
 
 /* ------------------------------------------------------------------ */
@@ -55,28 +59,7 @@ export type Reply = {
   criado_em: string;
 };
 
-export type FeedbackItem = {
-  id: string;
-  conteudo: string;
-  tipo: "TEXTO" | "AUDIO";
-  arquivo?: string | null;
-  transcricao?: string | null;
-  // derivado de resolvidoEm — o schema não guarda estados intermediários
-  status: "ABERTO" | "RESOLVIDO";
-  criado_em: string;
-  autor_id?: string | null;
-  autor_nome?: string | null;
-  autor_email?: string | null;
-  arte_versao_id?: string | null;
-  /**
-   * A versão da arte em que este comentário foi feito — cláusula 3.2 do anexo,
-   * que define rodada como o conjunto de feedbacks sobre uma mesma versão.
-   * `null` em comentário anterior ao campo; a tela diz isso em vez de chutar.
-   */
-  versao_numero?: number | null;
-  posicao_x?: number | null;
-  posicao_y?: number | null;
-};
+
 
 type ArteMin = {
   id: string;
@@ -111,6 +94,8 @@ type Props = {
   temSessao?: boolean;
   /** Para onde mandar quem precisa entrar — já com a volta para esta arte. */
   urlDeLogin?: string | null;
+  /** Para onde mandar quem ainda não tem conta — também com a volta. */
+  urlDeCadastro?: string | null;
   /** Painel de aprovações, quando o visitante tem conta. Entra como aba da trilha. */
   aprovacoes?: React.ReactNode;
   /**
@@ -126,6 +111,47 @@ type Props = {
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Onde o cartão do compositor cabe, em coordenadas da moldura.
+ *
+ * O cartão acompanha a marcação, mas quem manda no limite é o CANVAS, não a
+ * moldura: uma arte em retrato pode render mais estreita que os próprios
+ * botões, e encolher o cartão até a largura dela espremeria "Gravar áudio",
+ * "Cancelar" e "Enviar" para fora — o `overflow-hidden` do canvas recortaria
+ * justamente o que permite enviar ou desistir. O cartão pode transbordar a
+ * moldura; o que ele não pode é passar da tela.
+ *
+ * Função pura, e separada, porque a aritmética da folga erra sem avisar: a
+ * primeira versão clampava contra a largura errada e o "Enviar" saía pela
+ * borda direita num telefone. Isso se testa com números; no navegador só se
+ * descobre olhando.
+ */
+export function posicaoDoCartao({
+  pinX,
+  larguraMoldura,
+  larguraArea,
+  larguraCartao = 288,
+  respiro = 8,
+}: {
+  /** Posição da marcação, em porcentagem da largura da moldura. */
+  pinX: number;
+  larguraMoldura: number;
+  /** Largura útil do canvas — a caixa de conteúdo, sem o padding. */
+  larguraArea: number;
+  larguraCartao?: number;
+  respiro?: number;
+}): { largura: number; esquerda: number } {
+  const largura = Math.min(larguraCartao, Math.max(0, larguraArea - respiro * 2));
+  // A moldura é centralizada na área: isto é a sobra de cada lado que o
+  // cartão pode ocupar sem sair da tela.
+  const folga = Math.max(0, (larguraArea - larguraMoldura) / 2);
+  const esquerda = Math.min(
+    Math.max((pinX / 100) * larguraMoldura - largura / 2, -folga + respiro),
+    larguraMoldura + folga - largura - respiro,
+  );
+  return { largura, esquerda };
+}
 
 export function getInitials(name?: string | null, email?: string | null): string {
   if (name) {
@@ -161,6 +187,7 @@ export default function FeedbackViewer({
   onCommentModeChange,
   temSessao = false,
   urlDeLogin = null,
+  urlDeCadastro = null,
   aprovacoes = null,
   decisao = null,
 }: Props) {
@@ -174,6 +201,17 @@ export default function FeedbackViewer({
   const [transcribing, setTranscribing] = useState(false);
   const [showResolved, setShowResolved] = useState(true);
   const [internalCommentMode, setInternalCommentMode] = useState(false);
+  /*
+   * A imagem não carregou.
+   *
+   * A moldura só ganha tamanho pelo `onLoad` — a tabela de artes não guarda
+   * dimensão —, então uma imagem que falha deixa uma caixa de 0x0. A barra
+   * seguia dizendo "Clique na arte" e o clique não fazia nada: tela morta sem
+   * uma palavra de explicação. Dizer o que houve é o mínimo; marcar um ponto
+   * numa imagem que não apareceu não teria sentido de qualquer forma.
+   */
+  const [imagemFalhou, setImagemFalhou] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // Zoom/pan
   const [scale, setScale] = useState(1);
@@ -191,6 +229,35 @@ export default function FeedbackViewer({
   const imgContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const feedbackListRef = useRef<HTMLUListElement>(null);
+
+  /*
+   * A imagem pode ter falhado ANTES de o React pendurar o `onError`.
+   *
+   * O HTML vem do servidor e o navegador começa a baixar na hora; se o erro
+   * acontece antes da hidratação, o evento já passou e o handler nunca roda —
+   * foi o que aconteceu ao testar com a URL assinada devolvendo 403. O que
+   * sobra para saber é o estado do próprio elemento: `complete` com
+   * `naturalWidth` zero significa que não veio imagem nenhuma.
+   */
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el?.complete) return;
+    if (el.naturalWidth === 0) {
+      setImagemFalhou(true);
+      return;
+    }
+    /*
+     * A proporção também se perdia aqui, e com ela o encaixe na tela.
+     *
+     * `razao` só era definido no `onLoad`, que não dispara quando a imagem
+     * termina de carregar antes da hidratação — o caso comum, já que o HTML
+     * vem do servidor. Sem `razao` não há `caixa`, a moldura fica sem largura
+     * e sem altura, e a arte renderiza no tamanho natural: medido, uma arte de
+     * 2400px de altura dentro de um canvas de 738px, transbordando. O botão
+     * "encaixar na tela" prometia algo que nunca acontecia.
+     */
+    setRazao(el.naturalWidth / el.naturalHeight);
+  }, [arte.arquivo]);
 
   const recorder = useAudioRecorder();
 
@@ -221,6 +288,9 @@ export default function FeedbackViewer({
    */
   const areaRef = useRef<HTMLDivElement>(null);
   const [caixa, setCaixa] = useState<{ w: number; h: number } | null>(null);
+  /* A área visível da arte. O cartão do compositor se mede contra ela, e não
+     contra a moldura — ver o comentário onde ele é posicionado. */
+  const [areaTam, setAreaTam] = useState<{ w: number; h: number } | null>(null);
   const [trilhaAberta, setTrilhaAberta] = useState(false);
   const [abaTrilha, setAbaTrilha] = useState<"comentarios" | "aprovacoes">("comentarios");
 
@@ -240,12 +310,30 @@ export default function FeedbackViewer({
     function medir() {
       const el = areaRef.current;
       if (!el || !razao) return;
-      const dispW = el.clientWidth;
-      const dispH = el.clientHeight;
+      /*
+       * O espaço é o da CAIXA DE CONTEÚDO, sem o respiro das bordas.
+       *
+       * `clientWidth` inclui o padding, então a moldura nascia mais larga que
+       * o espaço real e o flex a espremia de volta: num telefone, `style`
+       * dizia 390px e a tela mostrava 358px. Enquanto só os pins liam isso
+       * passou despercebido — eles medem o retângulo de verdade, não o
+       * número. O cartão do compositor, que se posiciona pelo número, saía
+       * pela borda direita e cortava o "Enviar".
+       */
+      const estilo = getComputedStyle(el);
+      const dispW =
+        el.clientWidth -
+        parseFloat(estilo.paddingLeft) -
+        parseFloat(estilo.paddingRight);
+      const dispH =
+        el.clientHeight -
+        parseFloat(estilo.paddingTop) -
+        parseFloat(estilo.paddingBottom);
       if (dispW <= 0 || dispH <= 0) return;
       // Cabe pela largura ou pela altura — o que apertar primeiro manda.
       const w = Math.min(dispW, dispH * razao);
       setCaixa({ w, h: w / razao });
+      setAreaTam({ w: dispW, h: dispH });
     }
 
     medir();
@@ -257,15 +345,40 @@ export default function FeedbackViewer({
   /* — Keyboard shortcut: C to toggle comment mode — */
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      /*
+       * Escape vem ANTES da guarda de campo de texto, de propósito.
+       *
+       * A guarda existe para a tecla `C` não ligar o modo comentário no meio
+       * de uma palavra. Escape é o contrário: é escrevendo que se desiste, e
+       * engoli-lo ali deixava a pessoa sem saída com o cursor no campo.
+       */
+      if (e.key === "Escape") {
+        if (pin) { setPin(null); setComment(""); return; }
+        if (commentModeActive) setCommentMode(false);
+        return;
+      }
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "c" || e.key === "C") {
         e.preventDefault();
-        setCommentMode(!commentModeActive);
+        alternarModoComentario();
+        return;
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [commentModeActive, setCommentMode]);
+  }, [commentModeActive, setCommentMode, pin]);
+
+  /*
+   * Sair do modo comentário leva a marcação junto.
+   *
+   * Antes o botão só alternava o modo: a marcação continuava pendurada,
+   * invisível na barra, e grudava no próximo comentário que a pessoa
+   * escrevesse sem querer marcar nada.
+   */
+  function alternarModoComentario() {
+    if (commentModeActive) { setPin(null); setComment(""); }
+    setCommentMode(!commentModeActive);
+  }
 
   /* — Filtered feedbacks — */
   const visibleFeedbacks = useMemo(() => {
@@ -375,7 +488,7 @@ export default function FeedbackViewer({
       // desembrulhar, o envelope inteiro entrava na lista como se fosse o
       // feedback, e a tela morria lendo campo de um objeto que não existia.
       const corpo = await res.json();
-      const created = (corpo?.data ?? corpo) as FeedbackItem;
+      const created = paraFeedbackItem(corpo?.data ?? corpo);
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setComment("");
@@ -426,7 +539,7 @@ export default function FeedbackViewer({
       // desembrulhar, o envelope inteiro entrava na lista como se fosse o
       // feedback, e a tela morria lendo campo de um objeto que não existia.
       const corpo = await res.json();
-      const created = (corpo?.data ?? corpo) as FeedbackItem;
+      const created = paraFeedbackItem(corpo?.data ?? corpo);
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setPin(null);
@@ -575,8 +688,11 @@ export default function FeedbackViewer({
               size="sm"
               variant={commentModeActive ? "default" : "ghost"}
               className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs"
-              onClick={() => setCommentMode(!commentModeActive)}
-              disabled={!canComment}
+              onClick={alternarModoComentario}
+              /* Sem imagem não há onde marcar: a moldura tem tamanho zero e o
+                 clique cai no vazio. Melhor o botão dizer isso. */
+              disabled={!canComment || imagemFalhou}
+              title={imagemFalhou ? "A arte não carregou — não há onde marcar" : undefined}
             >
               <MessageCircle className="h-4 w-4" />
               {commentModeActive ? "Clique na arte" : "Comentar"}
@@ -598,6 +714,12 @@ export default function FeedbackViewer({
           <Maximize2 className="h-4 w-4" />
         </button>
 
+        {imagemFalhou && (
+          <span className="shrink-0 whitespace-nowrap px-2 text-[11px] text-destructive">
+            A arte não carregou
+          </span>
+        )}
+
         {positionedFeedbacks.length > 0 && (
           <>
             <span aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-border" />
@@ -616,6 +738,112 @@ export default function FeedbackViewer({
         )}
       </div>
     </div>
+  );
+
+  /*
+   * O compositor é UM só, montado em dois lugares.
+   *
+   * Com marcação ele nasce no pin: é para lá que a pessoa está olhando, e é o
+   * que qualquer ferramenta de revisão faz. Sem marcação segue no rodapé da
+   * trilha, que é onde cabe um comentário sobre a arte inteira.
+   *
+   * Escrever dois seria mais fácil e garantiria divergência: dois campos, dois
+   * gravadores, dois caminhos de envio para manter iguais para sempre.
+   */
+  const compositor = (
+            <div className={!canComment ? "opacity-60 pointer-events-none" : ""}>
+              <Textarea
+                placeholder={readOnly ? "Comentários desabilitados" : "Escreva um comentário…"}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {recorder.state === "idle" ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleStartRecording}
+                      disabled={!canComment || sending !== "none"}
+                    >
+                      <Mic className="h-4 w-4 mr-1" />
+                      Gravar áudio
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleStopRecording}
+                      disabled={!canComment}
+                    >
+                      <Square className="h-4 w-4 mr-1" />
+                      Parar ({formatElapsed(recorder.elapsedMs)})
+                    </Button>
+                  )}
+                  {sending === "audio" && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
+                    </span>
+                  )}
+                  {transcribing && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Transcrevendo…
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Desistir precisa estar ao lado de enviar. Antes a única
+                      saída era um X no rodapé da trilha — que no celular é
+                      gaveta fechada, e aí não havia saída nenhuma. */}
+                  {pin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setPin(null); setComment(""); }}
+                      disabled={sending !== "none"}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                  <Button
+                    size={pin ? "sm" : "default"}
+                    onClick={handleAddComment}
+                    disabled={!canComment || !comment.trim() || sending !== "none"}
+                  >
+                    {sending === "text" ? "Enviando..." : pin ? "Enviar" : "Enviar comentário"}
+                  </Button>
+                </div>
+              </div>
+              {recorder.permissionError && (
+                <p className="text-xs text-destructive mt-1">{recorder.permissionError}</p>
+              )}
+            </div>
+  );
+
+  const porta = (
+              <div className="rounded-lg border border-dashed p-3 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Comentar nesta arte precisa de conta.
+                </p>
+                {/*
+                  Duas portas, não uma.
+                  
+                  Só o login estava aqui, e login é porta para quem JÁ tem
+                  chave. Quem recebe o link no WhatsApp e nunca usou o VIU lia
+                  "precisa de conta" e não tinha para onde ir. O servidor não
+                  exige vínculo com o projeto — "quem autorizou foi o token" —,
+                  então criar conta ali mesmo e voltar para a arte sempre
+                  funcionou; faltava oferecer.
+                */}
+                <div className="mt-2 flex flex-col items-stretch gap-2 sm:flex-row sm:justify-center">
+                  <Button asChild size="sm">
+                    <Link href={urlDeCadastro ?? "/cadastro"}>Criar conta</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={urlDeLogin ?? "/login"}>Já tenho conta</Link>
+                  </Button>
+                </div>
+              </div>
   );
 
   const canvas = (
@@ -651,8 +879,11 @@ export default function FeedbackViewer({
               const el = e.currentTarget;
               if (el.naturalWidth && el.naturalHeight) {
                 setRazao(el.naturalWidth / el.naturalHeight);
+                setImagemFalhou(false);
               }
             }}
+            ref={imgRef}
+            onError={() => setImagemFalhou(true)}
             className="block h-full w-full"
             draggable={false}
           />
@@ -735,6 +966,61 @@ export default function FeedbackViewer({
               <div className="w-2.5 h-2.5 rotate-45 -mt-1.5 ml-[calc(50%-5px)] bg-red-50 dark:bg-red-950/40 border-b-2 border-r-2 border-red-400 dark:bg-red-950 dark:border-red-500" />
             </div>
           )}
+
+          {/*
+            O compositor, ancorado no ponto marcado.
+
+            Ancorar pelo lado oposto quando a marcação cai na metade direita ou
+            inferior é o que impede o cartão de sair pela borda — o canvas
+            recorta o que passa, e um compositor recortado não tem como ser
+            enviado nem cancelado.
+
+            A escala inversa existe porque o cartão mora dentro da moldura, que
+            é quem recebe o zoom: sem ela o texto dobraria de tamanho junto com
+            a arte. E as duas paradas de propagação impedem que escrever vire
+            mover o pin (clique) ou arrastar a arte (mousedown).
+          */}
+          {pin && temSessao && (() => {
+            /*
+             * O cartão é preso à MOLDURA, não ao ponto.
+             *
+             * Ancorá-lo só pelo lado da marcação estourava a borda: 288px
+             * ancorados a 60% de uma moldura de 362px começam em -55px, e num
+             * telefone "Escreva um comentário" aparecia cortado como "eva um
+             * comentário", com o "Gravar áudio" pela metade. Centralizar no pin
+             * e depois prender nas bordas mantém o cartão inteiro e ainda ao
+             * lado da marcação.
+             *
+             * Na vertical basta trocar de lado: na metade de baixo o cartão
+             * sobe, e aí nunca passa do rodapé.
+             */
+            const { largura, esquerda } = posicaoDoCartao({
+              pinX: pin.x,
+              larguraMoldura: caixa?.w ?? 0,
+              larguraArea: areaTam?.w ?? caixa?.w ?? 0,
+            });
+            const acima = pin.y > 55;
+            return (
+              <div
+                className="absolute z-40 rounded-lg border bg-background p-2.5 shadow-xl"
+                style={{
+                  left: esquerda,
+                  width: largura,
+                  ...(acima ? { bottom: `${100 - pin.y}%` } : { top: `${pin.y}%` }),
+                  /* O cartão mora dentro da moldura, que é quem recebe o zoom:
+                     sem a escala inversa o texto dobraria junto com a arte. */
+                  transform: `scale(${1 / scale})`,
+                  transformOrigin: `left ${acima ? "bottom" : "top"}`,
+                }}
+                /* Escrever não pode virar mover o pin (clique) nem arrastar a
+                   arte (mousedown). */
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {compositor}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -954,87 +1240,16 @@ export default function FeedbackViewer({
           </div>
 
           <div className="shrink-0 space-y-2 border-t p-3">
-            {pin && (
-              <div className="flex items-center gap-2 rounded-md bg-pastel-pessego/30 px-2.5 py-1.5 text-xs">
-                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">Marcado na arte</span>
-                <button onClick={() => setPin(null)} className="shrink-0 hover:text-destructive" aria-label="Tirar a marcação">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-            {/*
-              Sem sessão, nada de escrita no DOM — nem campo, nem gravador, nem
-              botão. No lugar, a porta.
-
-              Antes isto era um bloco desabilitado com `pointer-events-none`:
-              o `<textarea>` e o `<button>` continuavam na página, um script
-              preenchia e clicava sem obstáculo nenhum, e a promessa da tela
-              ("escreva um comentário") não batia com a do servidor, que
-              recusa escrita sem conta. O 401 continua sendo a barreira real;
-              esta tela apenas deixa de prometer o que não existe.
-            */}
             {!temSessao ? (
-              <div className="rounded-lg border border-dashed p-3 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Comentar nesta arte precisa de conta.
-                </p>
-                <Button asChild size="sm" className="mt-2">
-                  <Link href={urlDeLogin ?? "/login"}>Entrar para comentar</Link>
-                </Button>
-              </div>
+              porta
+            ) : pin ? (
+              /* Com marcação o compositor está sobre a arte, ao lado do pin —
+                 repeti-lo aqui daria dois campos disputando o mesmo texto. */
+              <p className="text-center text-xs text-muted-foreground">
+                Escrevendo na marcação, sobre a arte.
+              </p>
             ) : (
-            <div className={!canComment ? "opacity-60 pointer-events-none" : ""}>
-              <Textarea
-                placeholder={readOnly ? "Comentários desabilitados" : "Escreva um comentário…"}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {recorder.state === "idle" ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleStartRecording}
-                      disabled={!canComment || sending !== "none"}
-                    >
-                      <Mic className="h-4 w-4 mr-1" />
-                      Gravar áudio
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleStopRecording}
-                      disabled={!canComment}
-                    >
-                      <Square className="h-4 w-4 mr-1" />
-                      Parar ({formatElapsed(recorder.elapsedMs)})
-                    </Button>
-                  )}
-                  {sending === "audio" && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
-                    </span>
-                  )}
-                  {transcribing && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Transcrevendo…
-                    </span>
-                  )}
-                </div>
-                <Button
-                  onClick={handleAddComment}
-                  disabled={!canComment || !comment.trim() || sending !== "none"}
-                >
-                  {sending === "text" ? "Enviando..." : "Enviar comentário"}
-                </Button>
-              </div>
-              {recorder.permissionError && (
-                <p className="text-xs text-destructive mt-1">{recorder.permissionError}</p>
-              )}
-            </div>
+              compositor
             )}
           </div>
         </>

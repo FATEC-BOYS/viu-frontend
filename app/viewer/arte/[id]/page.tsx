@@ -1,6 +1,7 @@
 // app/viewer/arte/[id]/page.tsx
 import { notFound, redirect } from 'next/navigation'
 import ViewerShell from '@/components/viewer/ViewerShell'
+import { paraFeedbackItem } from '@/components/viewer/types'
 import LinkIndisponivel from '@/components/viewer/LinkIndisponivel'
 import { backendFetch, credenciaisDaSessao } from '@/lib/serverBackend'
 
@@ -137,26 +138,7 @@ function ArteNaTela({
 }) {
   const arte = d.arte
 
-  const feedbacks = (d.feedbacks ?? []).map((f: any) => ({
-    id: f.id,
-    conteudo: f.conteudo,
-    tipo: f.tipo,
-    arquivo: f.arquivo ?? null,
-    posicao_x: f.posicaoX ?? f.posicao_x ?? null,
-    posicao_y: f.posicaoY ?? f.posicao_y ?? null,
-    posicao_x_abs: null,
-    posicao_y_abs: null,
-    status: f.status ?? 'PENDENTE',
-    criado_em: f.criadoEm ?? f.criado_em ?? '',
-    autor_id: f.autorId ?? null,
-    arte_versao_id: null,
-    autor_nome: f.autor?.nome ?? f.guestNome ?? null,
-    autor_email: f.autor?.email ?? f.guestEmail ?? null,
-    // Sobre qual versão o comentário foi feito (cláusula 3.2). Nulo em
-    // comentário anterior ao campo — e nulo fica nulo: preencher por dedução
-    // produziria um palpite indistinguível de um registro.
-    versao_numero: f.versaoNumero ?? null,
-  }))
+  const feedbacks = (d.feedbacks ?? []).map(paraFeedbackItem)
 
   // `canComment` nunca existiu: GET /preview/:token devolve
   // { somenteLeitura, acessos, arte, feedbacks }. Como `!undefined` é sempre
