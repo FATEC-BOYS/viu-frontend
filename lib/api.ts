@@ -169,6 +169,20 @@ async function renovarOuSair(redirecionar: boolean): Promise<ResultadoRefresh> {
   return resultado
 }
 
+/*
+ * O status do erro conta POR QUE falhou, não só que falhou.
+ *
+ * Lançar 401 também quando o refresh apenas não respondeu faz todo mundo que
+ * checa 401 ler "sessão expirada" — inclusive a sondagem do AuthContext, que
+ * então apaga o perfil em cache no exato caso em que a sessão pode estar
+ * perfeitamente boa: token de acesso vencido junto com um 5xx ou 429 na
+ * renovação. 503 diz o que de fato aconteceu, e quem filtra por 401 passa a
+ * acertar.
+ */
+function statusDe401(resultado: ResultadoRefresh): number {
+  return resultado === "indisponivel" ? 503 : 401;
+}
+
 /** Mensagem honesta para cada motivo de 401. */
 function mensagemDe401(resultado: ResultadoRefresh, doServidor?: string): string {
   if (resultado === 'indisponivel') {
@@ -330,7 +344,7 @@ async function request<T>(
   if (res.status === 401 && retry) {
     const renovacao = await renovarOuSair(opcoes.redirecionarNo401 !== false)
     if (renovacao === 'ok') return request<T>(path, init, false, 0, opcoes)
-    throw erroDeApi(mensagemDe401(renovacao), 401, null)
+    throw erroDeApi(mensagemDe401(renovacao), statusDe401(renovacao), null)
   }
 
   // 429: o backend limita rotas sensíveis (login, upload, transcrição). Só
@@ -423,7 +437,7 @@ async function enviarMultipart<T>(
       }
       const renovacao = await renovarOuSair(true)
       if (renovacao === 'ok') return enviarMultipart<T>(path, form, metodo, false)
-      throw erroDeApi(mensagemDe401(renovacao, body.message), 401, body)
+      throw erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body)
     }
     throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
   }
@@ -493,7 +507,7 @@ function uploadComProgresso<T>(
             uploadComProgresso<T>(path, form, metodo, onProgress, false).then(resolve, reject)
             return
           }
-          reject(erroDeApi(mensagemDe401(renovacao, body.message), 401, body))
+          reject(erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body))
         })
         return
       }

@@ -373,8 +373,15 @@ describe('renovação de sessão diante de falha', () => {
       .mockResolvedValueOnce(resposta(401, { message: 'expirado' }))
       .mockResolvedValueOnce(resposta(503, { message: 'indisponível' }))
 
+    /*
+     * 503, e não 401: o status precisa dizer por que falhou.
+     *
+     * Com 401 aqui, quem filtra por 401 — a sondagem do AuthContext, entre
+     * outros — lê "sessão expirada" e apaga o perfil em cache justamente no
+     * caso em que a sessão pode estar boa.
+     */
     await expect(api.get('/projetos')).rejects.toMatchObject({
-      status: 401,
+      status: 503,
       message: 'Não foi possível confirmar sua sessão agora. Tente de novo em instantes.',
     })
 
@@ -389,7 +396,7 @@ describe('renovação de sessão diante de falha', () => {
       .mockResolvedValueOnce(resposta(401, {}))
       .mockResolvedValueOnce(resposta(429, { message: 'Muitas tentativas' }))
 
-    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 401 })
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 503 })
 
     expect(replace).not.toHaveBeenCalled()
     expect(temSessao()).toBe(true)
@@ -413,11 +420,11 @@ describe('renovação de sessão diante de falha', () => {
     fetchMock
       .mockResolvedValueOnce(resposta(401, {}))
       .mockResolvedValueOnce(resposta(500, {}))
-    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 401 })
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 503 })
     const ate_aqui = fetchMock.mock.calls.length
 
     fetchMock.mockResolvedValueOnce(resposta(401, {}))
-    await expect(api.get('/tarefas')).rejects.toMatchObject({ status: 401 })
+    await expect(api.get('/tarefas')).rejects.toMatchObject({ status: 503 })
 
     // Uma carga de página dispara dezenas de requisições. Insistir no refresh
     // em cada uma bate numa porta que acabou de dizer "espere" — e queima a
