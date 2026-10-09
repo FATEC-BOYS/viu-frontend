@@ -29,9 +29,18 @@ function resposta(status: number, body?: unknown, headers: Record<string, string
 
 const fetchMock = vi.fn()
 
-beforeEach(() => {
+beforeEach(async () => {
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
+  localStorage.clear()
+
+  // A memória de "servidor indisponível" do cliente é estado de módulo e
+  // atravessa testes: sem limpá-la, um teste que simula 503 na renovação faria
+  // o próximo acreditar que o servidor ainda está fora. Uma resposta boa é
+  // exatamente o que a apaga — então é assim que se começa cada teste.
+  fetchMock.mockResolvedValueOnce(resposta(200, {}))
+  await api.get('/ping')
+  fetchMock.mockReset()
   localStorage.clear()
 })
 
@@ -115,7 +124,7 @@ describe('api — sessão por cookie', () => {
     expect(init.headers.Authorization).toBeUndefined()
   })
 
-  it('401 renova pelo /auth/refresh sem corpo e repete a chamada', async () => {
+  it('401 renova pelo /auth/refresh com corpo vazio em JSON e repete a chamada', async () => {
     fetchMock
       .mockResolvedValueOnce(resposta(401, { message: 'expirado' }))
       .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1', nome: 'Teste' } } }))
@@ -127,8 +136,18 @@ describe('api — sessão por cookie', () => {
     expect(String(urlRefresh)).toContain('/auth/refresh')
     expect(initRefresh.method).toBe('POST')
     expect(initRefresh.credentials).toBe('include')
-    // O refresh token vem do cookie — não há o que mandar no corpo.
-    expect(initRefresh.body).toBeUndefined()
+    /*
+     * O corpo tem que existir, mesmo vazio, e este teste já afirmou o
+     * contrário: `expect(initRefresh.body).toBeUndefined()`.
+     *
+     * O refresh token vem do cookie, então era natural concluir que não havia
+     * o que mandar — mas o Fastify recusa `Content-Type: application/json` sem
+     * corpo com 400 ("Body cannot be empty") antes de a rota rodar. A
+     * renovação nunca acontecia; o 400 era lido como "sua sessão acabou"; e a
+     * pessoa caía no login sem ter feito nada. A suíte passava porque este
+     * teste conferia o formato da requisição e não o destino dela.
+     */
+    expect(initRefresh.body).toBe('{}')
   })
 
   it('renovação bem-sucedida atualiza o perfil em cache', async () => {
@@ -327,6 +346,134 @@ describe('401 em sondagem de sessão', () => {
     // Voltar caía nela, ela tomava 401 de novo e devolvia para /login.
     const { location } = espionarNavegacao()
     expect(location.href).toBe('')
+  })
+})
+
+/**
+ * Deslogar é destruir trabalho: a pessoa perde onde estava e o que digitou.
+ *
+ * Por isso 401 não é uma coisa só. "O servidor disse que não há sessão" é
+ * motivo para mandar ao login; "não deu para perguntar" — rede caiu, 5xx, cota
+ * estourada — não é, e tratar os dois como iguais foi o que vinha derrubando
+ * quem estava com a sessão perfeitamente válida.
+ */
+describe('renovação de sessão diante de falha', () => {
+  function espionar() {
+    const replace = vi.fn()
+    vi.stubGlobal('window', {
+      location: { pathname: '/projetos', search: '', href: '', replace },
+    } as unknown as Window & typeof globalThis)
+    return replace
+  }
+
+  it('servidor fora do ar na renovação não desloga nem apaga o perfil', async () => {
+    const replace = espionar()
+    localStorage.setItem('viu_user', JSON.stringify({ id: 'u1', nome: 'Ana' }))
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, { message: 'expirado' }))
+      .mockResolvedValueOnce(resposta(503, { message: 'indisponível' }))
+
+    /*
+     * 503, e não 401: o status precisa dizer por que falhou.
+     *
+     * Com 401 aqui, quem filtra por 401 — a sondagem do AuthContext, entre
+     * outros — lê "sessão expirada" e apaga o perfil em cache justamente no
+     * caso em que a sessão pode estar boa.
+     */
+    await expect(api.get('/projetos')).rejects.toMatchObject({
+      status: 503,
+      message: 'Não foi possível confirmar sua sessão agora. Tente de novo em instantes.',
+    })
+
+    expect(replace).not.toHaveBeenCalled()
+    expect(temSessao()).toBe(true)
+  })
+
+  it('cota estourada na renovação também não desloga', async () => {
+    const replace = espionar()
+    localStorage.setItem('viu_user', JSON.stringify({ id: 'u1' }))
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(429, { message: 'Muitas tentativas' }))
+
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 503 })
+
+    expect(replace).not.toHaveBeenCalled()
+    expect(temSessao()).toBe(true)
+  })
+
+  it('401 na renovação desloga e aí sim apaga o perfil em cache', async () => {
+    const replace = espionar()
+    localStorage.setItem('viu_user', JSON.stringify({ id: 'u1' }))
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(401, { message: 'Refresh token inválido' }))
+
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 401 })
+
+    expect(replace).toHaveBeenCalledWith('/login?next=%2Fprojetos')
+    expect(temSessao()).toBe(false)
+  })
+
+  it('servidor indisponível não é reconsultado a cada 401 da mesma onda', async () => {
+    espionar()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(500, {}))
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 503 })
+    const ate_aqui = fetchMock.mock.calls.length
+
+    fetchMock.mockResolvedValueOnce(resposta(401, {}))
+    await expect(api.get('/tarefas')).rejects.toMatchObject({ status: 503 })
+
+    // Uma carga de página dispara dezenas de requisições. Insistir no refresh
+    // em cada uma bate numa porta que acabou de dizer "espere" — e queima a
+    // cota que existe para conter força bruta.
+    expect(fetchMock.mock.calls.length).toBe(ate_aqui + 1)
+  })
+
+  it('a sessão seguinte não herda o veredito da anterior', async () => {
+    const replace = espionar()
+    // Visitante anônimo na tela de login: 401 na sondagem e 401 no refresh.
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(401, {}))
+    await expect(
+      api.get('/auth/me', { redirecionarNo401: false }),
+    ).rejects.toMatchObject({ status: 401 })
+
+    /*
+     * O login entra por navegação do router: mesmo documento, mesmo módulo.
+     *
+     * Enquanto o cliente guardava "não há sessão" por alguns segundos, o
+     * primeiro 401 da sessão NOVA era atendido pela lembrança em vez de uma
+     * tentativa real — e a pessoa caía no login logo depois de entrar. Medido
+     * no navegador: 40 requisições com 401 e nenhuma ida ao /auth/refresh.
+     */
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1', nome: 'Ana' } } }))
+      .mockResolvedValueOnce(resposta(200, { data: ['ok'] }))
+
+    await expect(api.get('/projetos')).resolves.toEqual({ data: ['ok'] })
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('401 no upload renova e reenvia em vez de perder o arquivo', async () => {
+    const replace = espionar()
+    const form = new FormData()
+    form.set('nome', 'capa')
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1' } } }))
+      .mockResolvedValueOnce(resposta(201, { data: { id: 'arte1' } }))
+
+    await expect(apiUpload('/artes/upload', form)).resolves.toEqual({ data: { id: 'arte1' } })
+
+    // O mesmo FormData volta: vencer a sessão no meio do envio não pode
+    // custar o arquivo que a pessoa já escolheu.
+    expect(fetchMock.mock.calls[2][1].body).toBe(form)
+    expect(replace).not.toHaveBeenCalled()
   })
 })
 

@@ -45,17 +45,58 @@ export function perfilEmCache(): { id: string; nome?: string; email?: string } |
   }
 }
 
+/**
+ * O que o servidor respondeu quando pedimos para renovar a sessão.
+ *
+ * A distinção importa porque tratar os dois casos como um só é o que derruba
+ * quem não devia cair: `sem-sessao` é o servidor dizendo "não há sessão
+ * válida", e aí o login é o destino certo; `indisponivel` é não ter conseguido
+ * perguntar — rede caiu, 5xx, cota estourada —, e nesse caso a sessão pode
+ * estar perfeitamente boa.
+ */
+export type ResultadoRefresh = 'ok' | 'sem-sessao' | 'indisponivel'
+
 let isRefreshing = false
-let refreshQueue: Array<(ok: boolean) => void> = []
+let refreshQueue: Array<(resultado: ResultadoRefresh) => void> = []
 
 /**
- * Renova a sessão. O refresh token vem do cookie — não há corpo para enviar.
+ * Servidor indisponível vale por alguns segundos — e SÓ isso se lembra.
+ *
+ * Quando o refresh volta 429 ou 5xx, tentar de novo a cada 401 da mesma onda
+ * só piora: é bater numa porta que acabou de dizer "espere". Guardar essa
+ * resposta por alguns segundos resolve.
+ *
+ * O veredito sobre a SESSÃO, ao contrário, nunca é guardado — e a diferença é
+ * o que separa um alívio de um bug. A tela de login sonda `/auth/me`, leva 401
+ * de visitante anônimo e aprende "não há sessão"; o login entra por navegação
+ * do router, no MESMO documento, então a lembrança sobreviveria à troca de
+ * sessão e derrubaria a seguinte. Foi medido assim, quando esta memória ainda
+ * guardava os dois casos: 40 requisições com 401 e nenhuma chamada a
+ * `/auth/refresh`, com a pessoa caindo no login logo depois de entrar.
+ *
+ * Uma sessão pode nascer a qualquer instante. A disponibilidade do servidor,
+ * não — por isso só ela cabe numa lembrança.
+ */
+const MEMORIA_INDISPONIVEL_MS = 3000
+let indisponivelDesde: number | null = null
+
+/** Qualquer resposta boa prova que o servidor está de pé. */
+function sessaoRespondeu(): void {
+  indisponivelDesde = null
+}
+
+/**
+ * Renova a sessão. O refresh token vem do cookie.
  *
  * Chamadas simultâneas que tomam 401 juntas compartilham a mesma renovação:
  * cada refresh rotaciona a sessão no servidor, então duas em paralelo
  * derrubariam uma à outra.
  */
-async function tryRefresh(): Promise<boolean> {
+async function tryRefresh(): Promise<ResultadoRefresh> {
+  if (indisponivelDesde && Date.now() - indisponivelDesde < MEMORIA_INDISPONIVEL_MS) {
+    return 'indisponivel'
+  }
+
   if (isRefreshing) {
     return new Promise((resolve) => { refreshQueue.push(resolve) })
   }
@@ -66,10 +107,17 @@ async function tryRefresh(): Promise<boolean> {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
+      // O corpo vazio é obrigatório, e a falta dele era o bug: o Fastify
+      // recusa `Content-Type: application/json` sem corpo com 400 ("Body
+      // cannot be empty") antes de a rota rodar. A renovação nunca acontecia,
+      // e o 400 era lido aqui como "sua sessão acabou" — era isso que
+      // deslogava quem estava logado, sem aviso e sem motivo.
+      body: '{}',
     })
 
-    let ok = res.ok
-    if (ok) {
+    let resultado: ResultadoRefresh
+    if (res.ok) {
+      resultado = 'ok'
       const body = await res.json().catch(() => null)
       if (body?.data?.usuario) {
         try {
@@ -79,24 +127,68 @@ async function tryRefresh(): Promise<boolean> {
           // a sessão de funcionar.
         }
       }
+    } else if (res.status >= 500 || res.status === 429) {
+      resultado = 'indisponivel'
     } else {
+      resultado = 'sem-sessao'
+      // Só aqui o perfil em cache deixou de valer. Apagá-lo quando o servidor
+      // apenas não respondeu mostraria interface deslogada a quem tem sessão.
       try {
         localStorage.removeItem(USER_KEY)
       } catch {
-        ok = false
+        // Sem storage, só perdemos a hidratação otimista.
       }
     }
 
-    refreshQueue.forEach((cb) => cb(ok))
+    indisponivelDesde = resultado === 'indisponivel' ? Date.now() : null
+    refreshQueue.forEach((cb) => cb(resultado))
     refreshQueue = []
-    return ok
+    return resultado
   } catch {
-    refreshQueue.forEach((cb) => cb(false))
+    indisponivelDesde = Date.now()
+    refreshQueue.forEach((cb) => cb('indisponivel'))
     refreshQueue = []
-    return false
+    return 'indisponivel'
   } finally {
     isRefreshing = false
   }
+}
+
+/**
+ * Diante de um 401: tenta renovar e só manda para o login quando o servidor
+ * disse que não há sessão. Devolve 'ok' quando vale repetir a requisição.
+ *
+ * Mora aqui, num lugar só, porque os quatro pontos que tratavam 401 —
+ * requisição JSON, upload por fetch, upload por XHR e a sondagem de sessão —
+ * decidiam cada um por si, e três deles mandavam para o login sem sequer
+ * tentar renovar.
+ */
+async function renovarOuSair(redirecionar: boolean): Promise<ResultadoRefresh> {
+  const resultado = await tryRefresh()
+  if (resultado === 'sem-sessao' && redirecionar) irParaLogin()
+  return resultado
+}
+
+/*
+ * O status do erro conta POR QUE falhou, não só que falhou.
+ *
+ * Lançar 401 também quando o refresh apenas não respondeu faz todo mundo que
+ * checa 401 ler "sessão expirada" — inclusive a sondagem do AuthContext, que
+ * então apaga o perfil em cache no exato caso em que a sessão pode estar
+ * perfeitamente boa: token de acesso vencido junto com um 5xx ou 429 na
+ * renovação. 503 diz o que de fato aconteceu, e quem filtra por 401 passa a
+ * acertar.
+ */
+function statusDe401(resultado: ResultadoRefresh): number {
+  return resultado === "indisponivel" ? 503 : 401;
+}
+
+/** Mensagem honesta para cada motivo de 401. */
+function mensagemDe401(resultado: ResultadoRefresh, doServidor?: string): string {
+  if (resultado === 'indisponivel') {
+    return 'Não foi possível confirmar sua sessão agora. Tente de novo em instantes.'
+  }
+  return doServidor ?? 'Sessão expirada. Faça login novamente.'
 }
 
 export interface ApiError extends Error {
@@ -250,11 +342,9 @@ async function request<T>(
   const res = await buscar(`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
 
   if (res.status === 401 && retry) {
-    if (await tryRefresh()) {
-      return request<T>(path, init, false, 0, opcoes)
-    }
-    if (opcoes.redirecionarNo401 !== false) irParaLogin()
-    throw erroDeApi('Sessão expirada. Faça login novamente.', 401, null)
+    const renovacao = await renovarOuSair(opcoes.redirecionarNo401 !== false)
+    if (renovacao === 'ok') return request<T>(path, init, false, 0, opcoes)
+    throw erroDeApi(mensagemDe401(renovacao), statusDe401(renovacao), null)
   }
 
   // 429: o backend limita rotas sensíveis (login, upload, transcrição). Só
@@ -267,6 +357,7 @@ async function request<T>(
   }
 
   const body = await lerCorpo(res)
+  if (res.ok) sessaoRespondeu()
   if (!res.ok) {
     if (res.status === 403) {
       throw erroDeApi(
@@ -320,9 +411,17 @@ export async function apiUpload<T>(
   if (init.onProgress) {
     return uploadComProgresso<T>(path, form, init.method ?? 'POST', init.onProgress)
   }
+  return enviarMultipart<T>(path, form, init.method ?? 'POST', true)
+}
 
+async function enviarMultipart<T>(
+  path: string,
+  form: FormData,
+  metodo: string,
+  podeRenovar: boolean,
+): Promise<T> {
   const res = await buscar(`${BASE_URL}${path}`, {
-    method: init.method ?? 'POST',
+    method: metodo,
     body: form,
     credentials: 'include',
   })
@@ -330,8 +429,15 @@ export async function apiUpload<T>(
   const body = await lerCorpo(res)
   if (!res.ok) {
     if (res.status === 401) {
-      irParaLogin()
-      throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+      // Vencer a sessão no meio de um envio não pode custar o arquivo:
+      // renovamos e mandamos de novo antes de cogitar o login.
+      if (!podeRenovar) {
+        irParaLogin()
+        throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+      }
+      const renovacao = await renovarOuSair(true)
+      if (renovacao === 'ok') return enviarMultipart<T>(path, form, metodo, false)
+      throw erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body)
     }
     throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
   }
@@ -366,6 +472,7 @@ function uploadComProgresso<T>(
   form: FormData,
   metodo: string,
   onProgress: (porcentagem: number) => void,
+  podeRenovar = true,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -385,8 +492,23 @@ function uploadComProgresso<T>(
         return
       }
       if (xhr.status === 401) {
-        irParaLogin()
-        reject(erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body))
+        // Mesma regra do caminho por fetch: renovar e repetir antes de
+        // considerar a sessão perdida. Um upload longo cruza o vencimento do
+        // token com facilidade, e perder o arquivo por causa disso não passa.
+        if (!podeRenovar) {
+          irParaLogin()
+          reject(erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body))
+          return
+        }
+        renovarOuSair(true).then((renovacao) => {
+          if (renovacao === 'ok') {
+            // A barra volta a zero: é o preço de reenviar, e melhor que ver o
+            // envio morrer com o arquivo já escolhido.
+            uploadComProgresso<T>(path, form, metodo, onProgress, false).then(resolve, reject)
+            return
+          }
+          reject(erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body))
+        })
         return
       }
       reject(erroDeApi(body.message ?? `Erro ${xhr.status}`, xhr.status, body))

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { api, type ApiError } from '@/lib/api'
 
 export type UserProfile = {
   id: string
@@ -93,8 +93,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(res.data)
         guardarPerfil(res.data)
       })
-      .catch(() => {
+      .catch((erro: unknown) => {
         if (!ativo) return
+        // Só 401 significa "visitante anônimo". Rede que caiu, 5xx ou cota
+        // estourada significam "não deu para perguntar" — e aí derrubar o
+        // perfil mostra interface deslogada a quem tem sessão boa. Medido: um
+        // único /auth/me abortado apagava o cache com a sessão respondendo 200.
+        if ((erro as ApiError | undefined)?.status !== 401) return
         setUser(null)
         guardarPerfil(null)
       })
