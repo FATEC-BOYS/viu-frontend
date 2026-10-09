@@ -109,6 +109,17 @@ export default function ViewerShell({
    * e ler ali daria divergência de hidratação pelo mesmo motivo de `temConta`.
    */
   const [voltarPara, setVoltarPara] = useState<string | null>(null);
+
+  /*
+   * As duas portas, montadas no mesmo lugar para não divergirem.
+   *
+   * `next` carrega a volta para ESTA arte. Sem ele a pessoa entra e cai no
+   * dashboard, longe do que o designer pediu para ela olhar — e ela não tem
+   * outro endereço para a arte além do link que recebeu.
+   */
+  const volta = voltarPara ? `?next=${encodeURIComponent(voltarPara)}` : "";
+  const urlDeLogin = `/login${volta}`;
+  const urlDeCadastro = `/cadastro${volta}`;
   useEffect(() => {
     setVoltarPara(window.location.pathname + window.location.search);
   }, []);
@@ -196,7 +207,7 @@ export default function ViewerShell({
           <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
         ) : (
           <Link
-            href={voltarPara ? `/login?next=${encodeURIComponent(voltarPara)}` : "/login"}
+            href={urlDeLogin}
             className="ml-auto shrink-0 text-xs font-medium underline underline-offset-2"
           >
             {readOnly ? "Entrar na sua conta" : "Entrar para comentar"}
@@ -216,7 +227,8 @@ export default function ViewerShell({
           /* Sem sessão a área de escrita não existe — ver o comentário na
              prop. A porta leva de volta para esta mesma arte. */
           temSessao={temConta}
-          urlDeLogin={voltarPara ? `/login?next=${encodeURIComponent(voltarPara)}` : "/login"}
+          urlDeLogin={urlDeLogin}
+          urlDeCadastro={urlDeCadastro}
           /* Aprovar exige sessão e ser o cliente do projeto. Sem conta a aba
              inteira sai, em vez de existir para devolver 401. */
           aprovacoes={

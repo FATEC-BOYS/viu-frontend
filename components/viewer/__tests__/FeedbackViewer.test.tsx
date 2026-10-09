@@ -111,6 +111,7 @@ const defaultProps = {
    */
   temSessao: true,
   urlDeLogin: "/login?next=%2Fl%2Ftok_123",
+  urlDeCadastro: "/cadastro?next=%2Fl%2Ftok_123",
 };
 
 beforeEach(() => {
@@ -240,7 +241,7 @@ describe("FeedbackViewer", () => {
     render(<FeedbackViewer {...defaultProps} />);
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");
     await userEvent.type(textarea, "Novo comentário");
-    await userEvent.click(screen.getByText("Enviar comentário"));
+    await userEvent.click(screen.getByRole("button", { name: "Enviar comentário" }));
 
     await waitFor(() => {
       expect(screen.getByText("Novo comentário")).toBeInTheDocument();
@@ -615,7 +616,11 @@ describe("FeedbackViewer", () => {
     // Type comment and submit
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");
     await userEvent.type(textarea, "Pin comment");
-    await userEvent.click(screen.getByText("Enviar comentário"));
+    /*
+     * Com marcação o compositor nasce no pin, e ali o rótulo encurta: o cartão
+     * tem 288px e precisa caber "Gravar áudio", "Cancelar" e o envio.
+     */
+    await userEvent.click(screen.getByRole("button", { name: "Enviar" }));
 
     await waitFor(() => {
       const fetchCall = mockFetch.mock.calls[0];
@@ -670,10 +675,21 @@ describe("visitante sem sessão", () => {
     expect(screen.queryByRole("button", { name: /^comentar$/i })).not.toBeInTheDocument();
   });
 
-  it("no lugar, oferece a porta — e ela volta para esta arte", () => {
+  /*
+   * Duas portas, e as duas voltando para esta arte.
+   *
+   * Só havia o login — porta para quem JÁ tem conta. Quem recebe o link no
+   * WhatsApp e nunca usou o VIU lia "precisa de conta" e não tinha para onde
+   * ir: nenhum cadastro, nenhum caminho. Comentar por link não exige vínculo
+   * com o projeto ("quem autorizou foi o token"), então criar conta ali mesmo
+   * sempre funcionou do lado do servidor; faltava a tela oferecer.
+   */
+  it("oferece criar conta E entrar, as duas voltando para esta arte", () => {
     render(<FeedbackViewer {...semSessao} />);
-    const porta = screen.getByRole("link", { name: /entrar para comentar/i });
-    expect(porta.getAttribute("href")).toContain("/login?next=");
+    const cadastro = screen.getByRole("link", { name: /criar conta/i });
+    const login = screen.getByRole("link", { name: /já tenho conta/i });
+    expect(cadastro.getAttribute("href")).toContain("/cadastro?next=");
+    expect(login.getAttribute("href")).toContain("/login?next=");
   });
 
   it("continua mostrando a arte e os comentários — ler pelo link é público", () => {
@@ -684,6 +700,118 @@ describe("visitante sem sessão", () => {
   it("com sessão, a área de escrita volta a existir", () => {
     render(<FeedbackViewer {...defaultProps} />);
     expect(screen.getByPlaceholderText(/escreva um comentário/i)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /entrar para comentar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /criar conta/i })).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * Marcar vários pontos, e poder desistir de qualquer um.
+ *
+ * O que foi relatado: a segunda marcação movia a primeira em vez de criar
+ * outra, e não havia como cancelar. O X de tirar a marcação morava no rodapé
+ * da trilha — que no telefone é gaveta fechada —, Escape não fazia nada, e
+ * desligar o modo comentário deixava a marcação pendurada para grudar no
+ * próximo comentário. Nada disso tinha teste.
+ */
+describe("marcação: escrever no pin e poder desistir", () => {
+  function marcar(x = 100, y = 50) {
+    const moldura = document.querySelector("[data-arte-moldura]")!;
+    vi.spyOn(moldura, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, width: 500, height: 400, right: 500, bottom: 400, x: 0, y: 0, toJSON: () => {},
+    });
+    fireEvent.click(moldura, { clientX: x, clientY: y });
+  }
+
+  it("com marcação existe UM compositor, e ele está sobre a arte", async () => {
+    render(<FeedbackViewer {...defaultProps} />);
+    // Sem marcação, o compositor é o do rodapé da trilha.
+    expect(screen.getAllByPlaceholderText(/escreva um comentário/i)).toHaveLength(1);
+
+    await userEvent.click(screen.getByText("Comentar"));
+    marcar();
+
+    // Com marcação ele não é duplicado: some do rodapé e aparece no pin. Dois
+    // campos disputando o mesmo texto é como se escreve um bug.
+    const campos = screen.getAllByPlaceholderText(/escreva um comentário/i);
+    expect(campos).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+  });
+
+  it("Escape desfaz a marcação, inclusive com o cursor no campo", async () => {
+    render(<FeedbackViewer {...defaultProps} />);
+    await userEvent.click(screen.getByText("Comentar"));
+    marcar();
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+
+    // Com o foco no campo: é escrevendo que se desiste, e a guarda que impede
+    // a tecla "C" de ligar o modo no meio de uma palavra engolia o Escape.
+    const campo = screen.getByPlaceholderText(/escreva um comentário/i);
+    await userEvent.type(campo, "deixa pra lá");
+    // Disparado NO campo e borbulhando até o window, que é como acontece de
+    // verdade quando se aperta Escape com o cursor no texto.
+    fireEvent.keyDown(campo, { key: "Escape" });
+
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
+  it("Cancelar tira a marcação e não guarda o texto abandonado", async () => {
+    render(<FeedbackViewer {...defaultProps} />);
+    await userEvent.click(screen.getByText("Comentar"));
+    marcar();
+    await userEvent.type(screen.getByPlaceholderText(/escreva um comentário/i), "texto abandonado");
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // O compositor volta para o rodapé, vazio: texto de uma marcação desfeita
+    // reaparecendo no comentário seguinte seria pior que perdê-lo.
+    const campo = screen.getByPlaceholderText(/escreva um comentário/i) as HTMLTextAreaElement;
+    expect(campo.value).toBe("");
+  });
+
+  it("sair do modo comentário leva a marcação junto", async () => {
+    render(<FeedbackViewer {...defaultProps} />);
+    await userEvent.click(screen.getByText("Comentar"));
+    marcar();
+    // O botão alterna; o rótulo vira "Clique na arte" enquanto o modo está on.
+    await userEvent.click(screen.getByText("Clique na arte"));
+
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
+  });
+
+  it("depois de enviar, o modo segue ligado para a próxima marcação", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: "fb_1", conteudo: "primeiro", tipo: "TEXTO" }),
+    });
+    render(<FeedbackViewer {...defaultProps} />);
+    await userEvent.click(screen.getByText("Comentar"));
+    marcar(100, 50);
+    await userEvent.type(screen.getByPlaceholderText(/escreva um comentário/i), "primeiro");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar" }));
+
+    // Sem isto, marcar três pontos exigiria ligar o modo três vezes.
+    await waitFor(() => expect(screen.getByText("Clique na arte")).toBeInTheDocument());
+    marcar(300, 200);
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+  });
+
+  it("o comentário recém-enviado já aparece com autor e data", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      // Como o backend responde: camelCase, autor aninhado.
+      json: () => Promise.resolve({
+        data: {
+          id: "fb_2", conteudo: "com autor", tipo: "TEXTO",
+          criadoEm: "2026-01-02T10:00:00.000Z",
+          autor: { nome: "João Santos", email: "joao@empresa.com" },
+        },
+      }),
+    });
+    render(<FeedbackViewer {...defaultProps} />);
+    await userEvent.type(screen.getByPlaceholderText(/escreva um comentário/i), "com autor");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar comentário" }));
+
+    // Entrava por um `as FeedbackItem` cru, sem passar pela conversão que a
+    // página faz: aparecia como "Anônimo" e "Invalid Date" até recarregar.
+    await waitFor(() => expect(screen.getByText("João Santos")).toBeInTheDocument());
   });
 });

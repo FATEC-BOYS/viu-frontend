@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useId, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -382,6 +382,9 @@ function Stepper({
 
 export default function CadastroPage() {
   const router = useRouter();
+  // De onde a pessoa veio — uma arte compartilhada, quase sempre. Ver o
+  // comentário no `router.replace` abaixo.
+  const proximo = useSearchParams().get("next");
   const { signIn } = useAuth();
 
   const [step, setStep] = useState<number>(STEPS.ROLE);
@@ -467,7 +470,18 @@ export default function CadastroPage() {
       // O e-mail viaja para a próxima tela poder dizer para onde o link foi.
       // Sem isso ela só conseguia falar em "seu e-mail", e quem digitou errado
       // não tinha como perceber.
-      router.replace(`/verificar-email?email=${encodeURIComponent(email)}`);
+      /*
+       * O `next` segue junto até o fim.
+       *
+       * Quem chega aqui por um link de arte compartilhada veio para comentar
+       * numa arte específica, e não tem outro endereço para ela além do link
+       * que recebeu. O cadastro não cria sessão — só o login cria —, então a
+       * volta precisa atravessar esta tela e a de verificação até o login, ou
+       * a pessoa termina no dashboard sem ideia de como voltar.
+       */
+      router.replace(
+        `/verificar-email?email=${encodeURIComponent(email)}${proximo ? `&next=${encodeURIComponent(proximo)}` : ""}`,
+      );
     } catch (err: any) {
       // Pelo `codigo`, não pela frase: a mensagem é copy e vai mudar.
       if (err?.body?.codigo === 'EMAIL_EM_USO') {
@@ -559,7 +573,7 @@ export default function CadastroPage() {
                   {/* "Esqueci minha senha" seria mentira para quem nunca teve
                       uma. Quem já tem entra direto pelo segundo botão. */}
                   <Button asChild variant="outline" className="h-11 sm:h-9">
-                    <Link href={`/login?email=${encodeURIComponent(email)}`}>Entrar</Link>
+                    <Link href={`/login?email=${encodeURIComponent(email)}${proximo ? `&next=${encodeURIComponent(proximo)}` : ""}`}>Entrar</Link>
                   </Button>
                 </div>
               </div>
@@ -584,7 +598,7 @@ export default function CadastroPage() {
 
             <p className="text-sm text-center">
               Já tem uma conta?{" "}
-              <Link href="/login" className="font-semibold text-primary hover:underline">
+              <Link href={proximo ? `/login?next=${encodeURIComponent(proximo)}` : "/login"} className="font-semibold text-primary hover:underline">
                 Entrar
               </Link>
             </p>
