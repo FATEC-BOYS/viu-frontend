@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { buscarContatos, nomeDoContato } from "@/lib/contatos";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -15,15 +16,12 @@ export default function AsyncUserSingleSelect({
   tipo,
   value,
   onChange,
-  route,
   placeholder,
   label,
-  resolveRoute = "/api/contacts/resolve",
 }: {
   tipo: "CLIENTE" | "DESIGNER";
   value: string | null;                 // id (uuid) ou email
   onChange: (val: string | null) => void;
-  route: string;                        // ex: "/api/contacts/search"
   placeholder?: string;
   /**
    * Nome já conhecido de quem está selecionado. Quem abre este campo quase
@@ -32,7 +30,6 @@ export default function AsyncUserSingleSelect({
    * essa volta falhava mostrava o id cru.
    */
   label?: string | null;
-  resolveRoute?: string;                // ex: "/api/contacts/resolve"
 }) {
   const [query, setQuery] = React.useState("");
   const [options, setOptions] = React.useState<Option[]>([]);
@@ -62,16 +59,14 @@ export default function AsyncUserSingleSelect({
       // Tenta resolver no servidor (somente seus contatos)
       try {
         setResolving(true);
-        const res = await fetch(`${resolveRoute}?id=${encodeURIComponent(value)}&tipo=${tipo}`, {
-        });
+        const nome = await nomeDoContato(value, tipo);
         if (!active) return;
         /*
          * Sem nome, o campo fica vazio e o placeholder volta a aparecer. Um id
          * no lugar do nome não é um rótulo pior — é informação errada: a pessoa
          * lê "c09e853bcf…" e não tem como saber de quem é o projeto.
          */
-        const data = res.ok ? await res.json() : null;
-        setDisplayLabel(data?.label ?? "");
+        setDisplayLabel(nome ?? "");
       } catch {
         setDisplayLabel("");
       } finally {
@@ -81,7 +76,7 @@ export default function AsyncUserSingleSelect({
     run();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, label, tipo, resolveRoute]);
+  }, [value, label, tipo]);
 
   // 2) Buscar sugestões conforme digita
   React.useEffect(() => {
@@ -89,31 +84,24 @@ export default function AsyncUserSingleSelect({
       setOptions([]);
       return;
     }
-    const ctrl = new AbortController();
+    // Sinalizador no lugar do AbortController: `api` não recebe signal, e o
+    // que importa é o mesmo — resposta velha não sobrescreve a atual.
+    let atual = true;
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${route}?q=${encodeURIComponent(query)}&tipo=${tipo}`, {
-          signal: ctrl.signal,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const opts = (data.items ?? []).map((u: any) => ({
-            id: u.id ?? u.email,
-            label: u.label ?? u.nome ?? u.email,
-            email: u.email,
-          })) as Option[];
-          setOptions(opts);
-        }
+        const items = await buscarContatos(query, tipo);
+        if (!atual) return;
+        setOptions(items.map((u) => ({ id: u.id, label: u.label, email: u.email })) as Option[]);
       } catch (e) {
-        if ((e as any).name !== "AbortError") console.error("Search error", e);
+        if (atual) console.error("Search error", e);
       } finally {
-        setLoading(false);
+        if (atual) setLoading(false);
       }
     };
     load();
-    return () => ctrl.abort();
-  }, [query, tipo, route]);
+    return () => { atual = false; };
+  }, [query, tipo]);
 
   function selectItem(opt: Option) {
     onChange(opt.id);

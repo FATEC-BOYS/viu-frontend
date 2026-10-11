@@ -1,0 +1,127 @@
+// lib/feedbacksDaArte.ts
+import { api, apiUpload } from '@/lib/api'
+
+/**
+ * Comentar e responder, falando DIRETO com o backend.
+ *
+ * Isto morava em rotas do Next (`app/api/feedbacks/*`), que recebiam a
+ * chamada do navegador e a repassavam à API anexando o cookie da sessão. O
+ * repasse não podia funcionar publicado: o cookie é gravado pelo backend sem
+ * atributo `Domain`, portanto host-only, e o navegador só o entrega ao host
+ * que o criou. Local, API e app dividem `localhost` — porta não conta para
+ * cookie — e o repasse via tudo. Em domínios diferentes o servidor Next
+ * recebia a requisição sem cookie nenhum e respondia
+ * "Entre na sua conta para comentar nesta arte" a quem estava logada,
+ * inclusive no link compartilhado, que é a promessa central do produto.
+ *
+ * O navegador não tem esse problema: ele guarda o cookie do host do backend e
+ * o entrega quando fala com o backend. Passando por `api`, cada chamada ainda
+ * ganha renovação de sessão e reenvio — que o `fetch` cru para `/api/...`
+ * nunca teve.
+ *
+ * As duas portas do comentário continuam sendo duas, pela mesma razão de
+ * antes: com token vai por `/links/:token/feedbacks`, que respeita o
+ * `somenteLeitura` DO LINK (ele é encaminhável e pode parar na mão de um
+ * terceiro); sem token vai por `/feedbacks`, que exige acesso ao projeto — é
+ * a pessoa na conta dela, e a permissão dela não vem da configuração de um
+ * link específico.
+ */
+
+export type NovoComentario = {
+  token: string
+  arteId: string
+  conteudo: string
+  posicaoX: number | null
+  posicaoY: number | null
+}
+
+export async function enviarComentario({
+  token,
+  arteId,
+  conteudo,
+  posicaoX,
+  posicaoY,
+}: NovoComentario): Promise<any> {
+  const corpo = token
+    ? { conteudo, tipo: 'TEXTO', posicaoX, posicaoY }
+    : { arteId, conteudo, tipo: 'TEXTO', posicaoX, posicaoY }
+
+  const res = await api.post<{ data?: any }>(
+    token ? `/links/${encodeURIComponent(token)}/feedbacks` : '/feedbacks',
+    corpo,
+  )
+  return (res as any)?.data ?? res
+}
+
+export async function enviarComentarioDeAudio({
+  token,
+  arteId,
+  audio,
+  posicaoX,
+  posicaoY,
+}: {
+  token: string
+  arteId: string
+  audio: Blob
+  posicaoX: number | null
+  posicaoY: number | null
+}): Promise<any> {
+  const form = new FormData()
+  form.append('audio', audio, `gravacao_${Date.now()}.webm`)
+  // Com token a arte sai do próprio token; sem ele é preciso dizer qual é.
+  if (!token) form.append('arteId', arteId)
+  if (posicaoX !== null) form.append('posicaoX', String(posicaoX))
+  if (posicaoY !== null) form.append('posicaoY', String(posicaoY))
+
+  const res = await apiUpload<{ data?: any }>(
+    token ? `/links/${encodeURIComponent(token)}/feedbacks/audio` : '/feedbacks/audio',
+    form,
+  )
+  return (res as any)?.data ?? res
+}
+
+/** O backend devolve criadoEm/autor; a tela lê criado_em/autor. */
+export function normalizarResposta(r: any) {
+  return {
+    id: r?.id,
+    conteudo: r?.conteudo ?? '',
+    criado_em: r?.criadoEm ?? r?.criado_em ?? '',
+    autor: {
+      id: r?.autor?.id ?? r?.autorId ?? '',
+      nome: r?.autor?.nome ?? 'Usuário',
+      avatar: r?.autor?.avatar ?? null,
+    },
+  }
+}
+
+/**
+ * A thread de um feedback.
+ *
+ * Resposta é um feedback com `parentId` apontando para o pai (migration
+ * 20240106000000_feedback_threads), então ler a thread é ler o pai: o
+ * `GET /feedbacks/:id` já traz `respostas`.
+ */
+export async function listarRespostas(feedbackId: string) {
+  const res = await api.get<{ data?: any }>(`/feedbacks/${encodeURIComponent(feedbackId)}`)
+  return ((res as any)?.data?.respostas ?? []).map(normalizarResposta)
+}
+
+export async function responder(feedbackId: string, conteudo: string) {
+  const texto = String(conteudo ?? '').trim()
+  if (!texto) throw new Error('Conteúdo vazio.')
+
+  // `arteId` sai do próprio pai — a resposta vive na mesma arte, e o backend
+  // recusa `parentId` de outra arte.
+  const paiRes = await api.get<{ data?: any }>(`/feedbacks/${encodeURIComponent(feedbackId)}`)
+  const pai = (paiRes as any)?.data
+  const arteId = pai?.arte?.id ?? pai?.arteId
+  if (!arteId) throw new Error('Feedback não encontrado.')
+
+  const res = await api.post<{ data?: any }>('/feedbacks', {
+    conteudo: texto.slice(0, 2000),
+    tipo: 'TEXTO',
+    arteId,
+    parentId: feedbackId,
+  })
+  return normalizarResposta((res as any)?.data ?? res)
+}

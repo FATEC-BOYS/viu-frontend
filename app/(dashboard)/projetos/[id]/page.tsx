@@ -23,6 +23,7 @@ import {
   type AprovacaoPainel as LibAprovacaoPainel,
 } from "@/lib/projects";
 
+import { useAuth } from "@/contexts/AuthContext";
 import ProjetoHeader from "@/components/projetos/ProjetoHeader";
 import ProjetoTabs, { type ProjetoTabKey } from "@/components/projetos/ProjetoTabs";
 import GerenciarAcessosDrawer from "@/components/projetos/pessoas/GerenciarAcessosDrawer";
@@ -107,6 +108,7 @@ const ABAS_VALIDAS: ProjetoTabKey[] = [
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
@@ -239,6 +241,25 @@ export default function ProjetoPage() {
   const [arteVersao, setArteVersao] = useState<ArteDetail | null>(null);
   /** Arte para a qual se está pedindo aprovação a partir da lista. */
   const [arteAprovacao, setArteAprovacao] = useState<string | null>(null);
+
+  /*
+   * Pedir a decisão é do designer DESTE projeto — `solicitarAprovacao` recusa
+   * qualquer outro com "apenas o designer do projeto pode solicitar
+   * aprovação". As três portas para a ação (o botão da aba, o ícone na lista
+   * de artes e o diálogo em si) vinham sem condição nenhuma: cliente e admin
+   * abriam o modal, escolhiam arte e versão, e só descobriam no "Solicitar"
+   * que a ação nunca foi deles.
+   *
+   * A regra é ser o designer DO PROJETO, não ter o papel DESIGNER: um designer
+   * convidado para outro projeto também não pede. Ela mora aqui uma vez só
+   * porque três cópias divergem — e divergir aqui é oferecer de novo o que o
+   * servidor recusa.
+   *
+   * O painel de acompanhamento continua visível para todos: ver em que pé
+   * está a aprovação é de quem é do projeto; pedir é do designer.
+   */
+  const podeSolicitarAprovacao =
+    !!user && !!projeto?.designer?.id && projeto.designer.id === user.id;
   const ART_PAGE = 12;
 
   function buildArtesQuery(from: number) {
@@ -636,7 +657,11 @@ export default function ProjetoPage() {
                     if (!detalhe) { toast.error("Não foi possível abrir esta arte."); return; }
                     setArteVersao(detalhe);
                   }}
-                  onPedirAprovacao={arteId => setArteAprovacao(arteId)}
+                  onPedirAprovacao={
+                    podeSolicitarAprovacao
+                      ? arteId => setArteAprovacao(arteId)
+                      : undefined
+                  }
                 />
                 <ArteQuickPeekDrawer
                   open={!!peekId}
@@ -674,14 +699,16 @@ export default function ProjetoPage() {
               painel={painel}
               onLembrar={lembrarAprovadores}
               acoes={
-                <SolicitarAprovacaoDialog
-                  artes={artRows.map((a) => ({
-                    id: a.id,
-                    nome: a.nome,
-                    versaoAtual: a.versao,
-                  }))}
-                  onSolicitado={loadApproval}
-                />
+                podeSolicitarAprovacao ? (
+                  <SolicitarAprovacaoDialog
+                    artes={artRows.map((a) => ({
+                      id: a.id,
+                      nome: a.nome,
+                      versaoAtual: a.versao,
+                    }))}
+                    onSolicitado={loadApproval}
+                  />
+                ) : null
               }
             />
           )
@@ -751,13 +778,15 @@ export default function ProjetoPage() {
         />
       )}
 
-      <SolicitarAprovacaoDialog
-        artes={artRows.map(a => ({ id: a.id, nome: a.nome, versaoAtual: a.versao }))}
-        arteInicial={arteAprovacao ?? undefined}
-        aberto={!!arteAprovacao}
-        onAbertoChange={v => !v && setArteAprovacao(null)}
-        onSolicitado={() => { setArteAprovacao(null); loadApproval(); loadArtes(); }}
-      />
+      {podeSolicitarAprovacao && (
+        <SolicitarAprovacaoDialog
+          artes={artRows.map(a => ({ id: a.id, nome: a.nome, versaoAtual: a.versao }))}
+          arteInicial={arteAprovacao ?? undefined}
+          aberto={!!arteAprovacao}
+          onAbertoChange={v => !v && setArteAprovacao(null)}
+          onSolicitado={() => { setArteAprovacao(null); loadApproval(); loadArtes(); }}
+        />
+      )}
 
       <ProjetoModal
         open={editando}

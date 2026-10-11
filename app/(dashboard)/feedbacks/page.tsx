@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, getAll } from '@/lib/api';
+import { listarRespostas, responder } from '@/lib/feedbacksDaArte';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -268,12 +269,7 @@ function FeedbackDetail({
   async function loadThread() {
     try {
       setLoadingThread(true);
-      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) throw new Error('Falha ao carregar respostas');
-      const data = await res.json();
-      setThread(data);
+      setThread(await listarRespostas(fb.id));
     } catch (e) {
       console.error('[FeedbackDetail] loadThread error', e);
       setThread([]);
@@ -291,15 +287,8 @@ function FeedbackDetail({
     if (!reply.trim()) return;
     try {
       setSending(true);
-      const res = await fetch(`/api/feedbacks/${encodeURIComponent(fb.id)}/respostas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ conteudo: reply.trim() }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Falha ao enviar resposta');
-      setThread((prev) => [...prev, j.resposta]);
+      const resposta = await responder(fb.id, reply.trim());
+      setThread((prev) => [...prev, resposta]);
       setReply('');
       toast.success('Resposta enviada!');
     } catch (e: any) {

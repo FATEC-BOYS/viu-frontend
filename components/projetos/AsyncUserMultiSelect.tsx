@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { buscarContatos } from "@/lib/contatos";
 import { X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,13 +16,11 @@ export default function AsyncUserMultiSelect({
   tipo,
   value,
   onChange,
-  route,
   placeholder,
 }: {
   tipo: "CLIENTE" | "DESIGNER";
   value: string[];                 // array de ids/emails
   onChange: (val: string[]) => void;
-  route: string;                   // ex: "/api/contacts/search"
   placeholder?: string;
 }) {
   const [query, setQuery] = React.useState("");
@@ -33,30 +32,33 @@ export default function AsyncUserMultiSelect({
       setOptions([]);
       return;
     }
-    const ctrl = new AbortController();
+    /*
+     * Fala direto com o backend, e não mais com uma rota do Next passada por
+     * prop: publicado, o servidor Next não tem o cookie da sessão e a busca
+     * voltava vazia em silêncio, como se não houvesse ninguém cadastrado.
+     *
+     * No lugar do `AbortController` vai um sinalizador: `api` não recebe
+     * signal, e o que importa é o mesmo — resposta de uma digitação velha não
+     * pode sobrescrever a da atual.
+     */
+    let atual = true;
     const run = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${route}?q=${encodeURIComponent(query)}&tipo=${tipo}`, {
-          signal: ctrl.signal,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setOptions((data.items ?? []).map((u: any) => ({
-            id: u.id ?? u.email,
-            label: u.nome ?? u.email,
-            email: u.email,
-          })));
-        }
+        const items = await buscarContatos(query, tipo);
+        if (!atual) return;
+        // `u.nome` não existe na resposta — o campo é `label`. Lendo o campo
+        // errado, toda sugestão caía no e-mail mesmo tendo nome cadastrado.
+        setOptions(items.map((u) => ({ id: u.id, label: u.label, email: u.email })));
       } catch (e) {
-        if ((e as any).name !== "AbortError") console.error("Search error", e);
+        if (atual) console.error("Search error", e);
       } finally {
-        setLoading(false);
+        if (atual) setLoading(false);
       }
     };
     run();
-    return () => ctrl.abort();
-  }, [query, tipo, route]);
+    return () => { atual = false; };
+  }, [query, tipo]);
 
   function addItem(opt: Option) {
     if (!value.includes(opt.id)) {

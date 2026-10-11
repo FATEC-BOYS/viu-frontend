@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
-import { perfilEmCache } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { listarAprovacoes, decidirAprovacao, type AprovacaoDaArte } from '@/lib/aprovacoesDaArte'
 
 /**
  * Decisões desta arte, e — quando for a sua vez — o botão para decidir.
@@ -25,14 +26,13 @@ import { perfilEmCache } from '@/lib/api'
  *   entregava o erro num `alert()`.
  */
 
-type Aprovacao = {
-  id: string
-  status: 'PENDENTE' | 'APROVADO' | 'REJEITADO'
-  comentario: string | null
-  criadoEm: string
-  versaoNumero: number | null
-  aprovador: { id: string; nome: string | null } | null
-}
+/*
+ * Um tipo só, vindo de quem busca os dados. Havia dois `Aprovacao` descrevendo
+ * a mesma linha — este e o da rota do Next — e dois tipos para a mesma coisa
+ * divergem: foi assim que `FeedbackItem` acabou com um `status: 'PENDENTE'`
+ * que sequer existia na união do outro.
+ */
+type Aprovacao = AprovacaoDaArte
 
 const ROTULO: Record<Aprovacao['status'], string> = {
   PENDENTE: 'Aguardando decisão',
@@ -55,38 +55,41 @@ function iniciais(nome?: string | null) {
   return base.slice(0, 2).toUpperCase()
 }
 
-export default function ApprovalsPanel({ arteId, token }: { arteId: string; token: string }) {
+/*
+ * Sem `token`: aprovação nunca passou pelo link. A rota antiga recebia o
+ * token, validava, e então devolvia lista vazia a quem não tivesse sessão —
+ * decidir exige conta e ser o aprovador. O parâmetro dava a impressão de que
+ * o link concedia algo aqui, e não concedia.
+ */
+export default function ApprovalsPanel({ arteId }: { arteId: string }) {
   const [aprovacoes, setAprovacoes] = useState<Aprovacao[]>([])
   const [carregando, setCarregando] = useState(true)
   const [decidindo, setDecidindo] = useState<string | null>(null)
   const [pedindoAjuste, setPedindoAjuste] = useState<string | null>(null)
   const [motivo, setMotivo] = useState('')
 
-  // Quem está olhando. Só o próprio aprovador pode decidir — é a mesma regra
-  // que o backend aplica; aqui ela só deixa de ser uma promessa falsa na tela.
-  const [usuarioId, setUsuarioId] = useState<string | null>(null)
-  useEffect(() => {
-    setUsuarioId(perfilEmCache()?.id ?? null)
-  }, [])
+  /*
+   * Quem está olhando. Só o próprio aprovador pode decidir — é a mesma regra
+   * que o backend aplica; aqui ela só deixa de ser uma promessa falsa na tela.
+   *
+   * Vinha de `perfilEmCache()`, o cache do `localStorage`, que é conveniência
+   * de interface e não credencial: vem vazio em aba anônima, com
+   * armazenamento bloqueado, e na primeira carga antes de o `AuthProvider`
+   * preencher. Nesses casos o aprovador não se reconhecia e os botões de
+   * decidir sumiam da própria pessoa que devia decidir.
+   */
+  const { user } = useAuth()
+  const usuarioId = user?.id ?? null
 
   const carregar = useCallback(async () => {
     try {
-      const qs = new URLSearchParams({ token })
-      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes?${qs}`, {
-        cache: 'no-store',
-      })
-      if (!res.ok) {
-        setAprovacoes([])
-        return
-      }
-      const json = await res.json()
-      setAprovacoes(json.aprovacoes ?? [])
+      setAprovacoes(await listarAprovacoes(arteId))
     } catch {
       setAprovacoes([])
     } finally {
       setCarregando(false)
     }
-  }, [arteId, token])
+  }, [arteId])
 
   useEffect(() => {
     carregar()
@@ -101,27 +104,20 @@ export default function ApprovalsPanel({ arteId, token }: { arteId: string; toke
   ) {
     setDecidindo(ap.id)
     try {
-      const res = await fetch(`/api/arte/${encodeURIComponent(arteId)}/aprovacoes`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({
-          aprovadorId: ap.aprovador?.id,
-          decisao,
-          comentario: comentario ?? null,
-        }),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        toast.error(j?.error ?? 'Não foi possível registrar a decisão.')
-        return
-      }
+      /*
+       * Pelo id DESTA linha, que o painel já tem na mão e acabou de mostrar.
+       * Ia o `aprovadorId`, e o servidor reconsultava para redescobrir qual
+       * pendência era — com a mesma pessoa podendo ter duas abertas na mesma
+       * arte, o modo de falhar era registrar a decisão na versão errada.
+       */
+      await decidirAprovacao(ap.id, decisao, comentario ?? null)
       toast.success(decisao === 'APROVADO' ? 'Arte aprovada' : 'Pedido de ajuste enviado')
       setPedindoAjuste(null)
       setMotivo('')
       await carregar()
-    } catch {
-      toast.error('Falha ao registrar a decisão.')
+    } catch (erro) {
+      // A frase do backend diz, por exemplo, que a recusa precisa de motivo.
+      toast.error((erro as Error)?.message || 'Falha ao registrar a decisão.')
     } finally {
       setDecidindo(null)
     }

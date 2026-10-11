@@ -20,7 +20,6 @@ export default function StepParticipants({
           value={values.participantes.designersAdicionaisIds}
           onChange={(arr) => setValues({ ...values, participantes: { ...values.participantes, designersAdicionaisIds: arr } })}
           placeholder="Buscar designer ou adicionar por e-mail…"
-          route="/api/contacts/search"
         />
       </div>
 
@@ -32,7 +31,6 @@ export default function StepParticipants({
             value={values.participantes.clientesAdicionaisIds}
             onChange={(arr) => setValues({ ...values, participantes: { ...values.participantes, clientesAdicionaisIds: arr } })}
             placeholder="Buscar cliente ou adicionar por e-mail…"
-            route="/api/contacts/search"
           />
         </div>
       )}

@@ -32,7 +32,6 @@ export default function StepApproval({
           value={values.aprovacao.aprovadoresClienteIds}
           onChange={(arr) => setValues({ ...values, aprovacao: { ...values.aprovacao, aprovadoresClienteIds: arr } })}
           placeholder="Buscar aprovador ou adicionar por e-mail…"
-          route="/api/contacts/search"
         />
         <div className="flex items-center justify-between mt-2">
           <div className="space-y-0.5">

@@ -114,7 +114,6 @@ export default function StepBasic({
               label={clientes.find((c) => c.id === values.cliente_id)?.nome ?? null}
               onChange={(id) => setValues({ ...values, cliente_id: id })}
               placeholder="Buscar ou adicionar por e-mail…"
-              route="/api/contacts/search"
             />
             {mensagem("clienteId")}
           </div>
