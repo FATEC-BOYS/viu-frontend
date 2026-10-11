@@ -43,6 +43,29 @@ export default async function PublicLinkResolver({ params }: Props) {
        * A tela do viewer também trata o caso, mas quase ninguém chega lá por
        * fora: quem tem o link tem /l/<token>.
        */
+      /*
+       * 5xx não é link ruim, é falha nossa.
+       *
+       * O `?? "NAO_ENCONTRADO"` era um balde: qualquer resposta sem `motivo`
+       * — inclusive um 500 do servidor — virava "Não encontramos esta arte".
+       * O cliente lia que o endereço estava errado e voltava cobrar outro
+       * link de quem já tinha mandado o certo, o designer parecia desleixado
+       * por erro nosso, e ninguém ficava sabendo que houve erro nenhum.
+       *
+       * O backend distingue revogado, expirado e limite atingido com 404 e um
+       * `motivo` no corpo. Qualquer 5xx é outra categoria, e a tela precisa
+       * dizer isso.
+       */
+      if (res.status >= 500) {
+        // Vai para o log do servidor: do lado do cliente este caso é mudo, e
+        // sem rastro ninguém descobre que aconteceu.
+        console.error("[/l/token] backend falhou ao resolver o destino", {
+          status: res.status,
+          token: token.slice(0, 8),
+        });
+        return <LinkIndisponivel motivo="FALHA_TEMPORARIA" tentarEm={`/l/${token}`} />;
+      }
+
       const corpo = await res.json().catch(() => null);
       return (
         <LinkIndisponivel
@@ -53,12 +76,23 @@ export default async function PublicLinkResolver({ params }: Props) {
     }
     const body = await res.json();
     destino = body?.data;
-  } catch {
-    // Rede ou backend fora: não dá para dizer o motivo, e chutar seria pior.
-    return <LinkIndisponivel motivo="NAO_ENCONTRADO" />;
+  } catch (erro) {
+    /*
+     * Rede ou backend fora. Não dá para dizer QUAL link é — e justamente por
+     * isso não dá para dizer que ele não existe, que era o que esta tela
+     * fazia. Chutar contra o link é o pior chute possível: é o único que
+     * manda o cliente cobrar a pessoa errada.
+     */
+    console.error("[/l/token] não foi possível falar com o backend", erro);
+    return <LinkIndisponivel motivo="FALHA_TEMPORARIA" tentarEm={`/l/${token}`} />;
   }
 
-  if (!destino?.arteId) return <LinkIndisponivel motivo="NAO_ENCONTRADO" />;
+  // Aqui o backend respondeu 2xx mas sem destino: resposta bem-formada e sem
+  // o campo que importa. É falha nossa, não endereço errado.
+  if (!destino?.arteId) {
+    console.error("[/l/token] destino sem arteId", { token: token.slice(0, 8) });
+    return <LinkIndisponivel motivo="FALHA_TEMPORARIA" tentarEm={`/l/${token}`} />;
+  }
 
   redirect(`/viewer/arte/${destino.arteId}?token=${token}`);
 }

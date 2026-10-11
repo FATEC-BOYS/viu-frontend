@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { LinkIcon, Clock, Ban, Eye } from 'lucide-react'
+import { LinkIcon, Clock, Ban, Eye, RefreshCw } from 'lucide-react'
 
 /**
  * A tela de quando o link não abre.
@@ -13,6 +13,13 @@ import { LinkIcon, Clock, Ban, Eye } from 'lucide-react'
  * sido, e sem ninguém saber o que fazer a respeito.
  *
  * Cada motivo tem um próximo passo diferente, e é isso que a tela diz.
+ *
+ * Os quatro primeiros motivos dizem que o LINK está ruim. `FALHA_TEMPORARIA`
+ * diz o contrário: o link está bom e quem falhou fomos nós. A diferença não é
+ * cosmética — ela decide quem age. "Não encontramos esta arte" manda o cliente
+ * cobrar um link novo de quem já mandou o certo, e o designer fica parecendo
+ * desleixado por um erro que é nosso. Mais: ele nem descobre que houve erro,
+ * porque do outro lado a mensagem parece um caso normal de link vencido.
  */
 
 export type MotivoLinkIndisponivel =
@@ -21,6 +28,7 @@ export type MotivoLinkIndisponivel =
   | 'EXPIRADO'
   | 'LIMITE_ATINGIDO'
   | 'TIPO_NAO_SUPORTADO'
+  | 'FALHA_TEMPORARIA'
 
 function dataCurta(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR')
@@ -41,6 +49,14 @@ function conteudo(motivo: MotivoLinkIndisponivel, expiraEm: string | null) {
         icone: Ban,
         titulo: 'Este link foi desativado',
         ajuda: 'Quem enviou a arte encerrou o acesso por este link. Fale com essa pessoa para receber outro.',
+      }
+    case 'FALHA_TEMPORARIA':
+      return {
+        icone: RefreshCw,
+        titulo: 'Não conseguimos abrir agora',
+        // O único motivo em que insistir é o conselho certo: o link continua
+        // válido, e quem precisa consertar algo somos nós, não o cliente.
+        ajuda: 'O problema é do nosso lado, não do link que você recebeu. Tente de novo em alguns instantes.',
       }
     case 'LIMITE_ATINGIDO':
       return {
@@ -63,9 +79,12 @@ function conteudo(motivo: MotivoLinkIndisponivel, expiraEm: string | null) {
 export default function LinkIndisponivel({
   motivo,
   expiraEm = null,
+  tentarEm = null,
 }: {
   motivo: MotivoLinkIndisponivel
   expiraEm?: string | null
+  /** Endereço para insistir. Só faz sentido quando a falha é nossa. */
+  tentarEm?: string | null
 }) {
   const { icone: Icone, titulo, ajuda } = conteudo(motivo, expiraEm)
 
@@ -78,13 +97,26 @@ export default function LinkIndisponivel({
         {/*
           Uma saída, e só uma. Quem chegou aqui provavelmente não tem conta no
           VIU — oferecer "entrar" seria mandá-lo para outra porta fechada.
+
+          A exceção é a falha temporária: ali insistir é a ação certa, e é o
+          único caso em que a pessoa resolve sozinha.
         */}
-        <Link
-          href="/"
-          className="inline-block text-sm font-medium underline underline-offset-2"
-        >
-          Conhecer o VIU
-        </Link>
+        {motivo === 'FALHA_TEMPORARIA' && tentarEm ? (
+          <Link
+            href={tentarEm}
+            prefetch={false}
+            className="inline-block rounded-md border px-4 py-2 text-sm font-medium"
+          >
+            Tentar de novo
+          </Link>
+        ) : (
+          <Link
+            href="/"
+            className="inline-block text-sm font-medium underline underline-offset-2"
+          >
+            Conhecer o VIU
+          </Link>
+        )}
       </div>
     </main>
   )
