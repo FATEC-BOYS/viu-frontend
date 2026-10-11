@@ -54,14 +54,29 @@ function dataCurta(iso: string) {
  * se diz é a primeira causa, porque é a que o designer precisa desfazer.
  */
 export function estadoDoLink(l: LinkCompartilhado): { faixa: Faixa; rotulo: string } {
-  if (l.revogado) return { faixa: 'morto', rotulo: 'revogado' };
+  /*
+   * Num link morto, a pergunta que decide o próximo passo é "o cliente chegou
+   * a ver?". "Expirou em 09/10" sozinho não responde: com 3 aberturas não há
+   * o que fazer, com zero é preciso mandar outro link — e a arte nunca foi
+   * vista. O aviso vai só quando a resposta é não, que é o caso acionável;
+   * dizer "· aberto 3 vezes" em toda linha dobraria o rótulo para confirmar
+   * o que já está bem.
+   */
+  const fechado = l.acessos === 0 ? ' · ninguém abriu' : '';
+
+  if (l.revogado) return { faixa: 'morto', rotulo: `revogado${fechado}` };
 
   if (l.expiraEm && new Date(l.expiraEm) < new Date()) {
-    return { faixa: 'morto', rotulo: `expirou em ${dataCurta(l.expiraEm)}` };
+    return { faixa: 'morto', rotulo: `expirou em ${dataCurta(l.expiraEm)}${fechado}` };
   }
 
   if (l.limiteTentativas !== null && l.acessos >= l.limiteTentativas) {
-    return { faixa: 'morto', rotulo: `limite de ${l.limiteTentativas} acessos atingido` };
+    // O plural acompanha o número: "limite de 1 acessos" aparecia na tela.
+    const vezes = l.limiteTentativas === 1 ? 'acesso' : 'acessos';
+    return {
+      faixa: 'morto',
+      rotulo: `limite de ${l.limiteTentativas} ${vezes} atingido${fechado}`,
+    };
   }
 
   if (l.acessos === 0) {
@@ -109,20 +124,42 @@ export function agrupar(itens: LinkCompartilhado[]): Grupo[] {
     .filter((g) => g.itens.length > 0);
 }
 
-/** A frase do topo: o que está pendurado, ou o alívio de não haver nada. */
+/**
+ * A frase do topo: o que está pendurado, ou o alívio de não haver nada.
+ *
+ * `esperando` é "ainda vale E ninguém abriu". Um link que MORREU sem ser
+ * aberto não está lá — as faixas são checadas em ordem e morto vence
+ * não-aberto. Ler `esperando` vazio como "todos abriram" era a tela afirmando
+ * o contrário do que aconteceu, e justamente no caso que mais importa: o link
+ * vencer antes de o cliente abrir. É quando o designer precisa mandar outro, e
+ * a frase dizia que estava tudo certo.
+ */
 export function recadoDosLinks(itens: LinkCompartilhado[]): string {
   if (itens.length === 0) return 'Nenhum link enviado ainda.';
 
   const esperando = itens.filter((l) => estadoDoLink(l).faixa === 'esperando');
-  if (esperando.length === 0) {
-    return 'Todo link que você mandou já foi aberto.';
+
+  if (esperando.length > 0) {
+    const parados = esperando.filter((l) => diasDesde(l.criadoEm) >= 7);
+    if (parados.length === 1) return '1 link esperando há mais de uma semana.';
+    if (parados.length > 1) return `${parados.length} links esperando há mais de uma semana.`;
+
+    return esperando.length === 1
+      ? '1 link ainda não foi aberto.'
+      : `${esperando.length} links ainda não foram abertos.`;
   }
 
-  const parados = esperando.filter((l) => diasDesde(l.criadoEm) >= 7);
-  if (parados.length === 1) return '1 link esperando há mais de uma semana.';
-  if (parados.length > 1) return `${parados.length} links esperando há mais de uma semana.`;
+  /*
+   * Ninguém esperando. Sobra distinguir "todos abriram" de "alguns morreram
+   * fechados" — e basta olhar `acessos`, sem reconsultar a faixa: com
+   * `esperando` vazio, um link com zero acessos só pode estar morto, porque é
+   * a única outra saída para quem não foi aberto.
+   */
+  const fechadosEMortos = itens.filter((l) => l.acessos === 0);
+  if (fechadosEMortos.length === 1) return '1 link deixou de valer sem ninguém abrir.';
+  if (fechadosEMortos.length > 1) {
+    return `${fechadosEMortos.length} links deixaram de valer sem ninguém abrir.`;
+  }
 
-  return esperando.length === 1
-    ? '1 link ainda não foi aberto.'
-    : `${esperando.length} links ainda não foram abertos.`;
+  return 'Todo link que você mandou já foi aberto.';
 }

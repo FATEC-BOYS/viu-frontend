@@ -44,23 +44,44 @@ describe('estadoDoLink', () => {
   it('põe link revogado fora do ar, mesmo sem validade vencida', () => {
     const r = estadoDoLink(link({ revogado: true, expiraEm: dias(30) }));
     expect(r.faixa).toBe('morto');
-    expect(r.rotulo).toBe('revogado');
+    expect(r.rotulo).toBe('revogado · ninguém abriu');
   });
 
   it('diz "revogado" quando o link está revogado E expirado — é a causa que se desfaz', () => {
-    expect(estadoDoLink(link({ revogado: true, expiraEm: dias(-5) })).rotulo).toBe('revogado');
+    expect(estadoDoLink(link({ revogado: true, expiraEm: dias(-5) })).rotulo).toBe(
+      'revogado · ninguém abriu',
+    );
   });
 
   it('reconhece link expirado e mostra a data', () => {
     const r = estadoDoLink(link({ expiraEm: '2026-09-01T12:00:00.000Z' }));
     expect(r.faixa).toBe('morto');
-    expect(r.rotulo).toBe('expirou em 01/09');
+    expect(r.rotulo).toBe('expirou em 01/09 · ninguém abriu');
+  });
+
+  /*
+   * O que a linha morta não dizia: se o cliente chegou a ver. "Expirou em
+   * 01/09" era a mesma frase para a arte vista três vezes e para a que ninguém
+   * abriu — e são conclusões opostas. Com 3 aberturas não há o que fazer; com
+   * zero, a peça nunca foi vista e falta mandar outro link.
+   */
+  it('num link morto, diz se ninguém chegou a abrir — e cala quando abriram', () => {
+    expect(estadoDoLink(link({ revogado: true, acessos: 2 })).rotulo).toBe('revogado');
+    expect(estadoDoLink(link({ expiraEm: dias(-5), acessos: 2 })).rotulo).toBe(
+      'expirou em 07/09',
+    );
   });
 
   it('reconhece o limite de acessos atingido', () => {
     const r = estadoDoLink(link({ limiteTentativas: 3, acessos: 3 }));
     expect(r.faixa).toBe('morto');
     expect(r.rotulo).toBe('limite de 3 acessos atingido');
+  });
+
+  it('concorda o plural com o número — a tela mostrava "limite de 1 acessos"', () => {
+    expect(estadoDoLink(link({ limiteTentativas: 1, acessos: 1 })).rotulo).toBe(
+      'limite de 1 acesso atingido',
+    );
   });
 
   it('não mata o link enquanto o limite não é alcançado', () => {
@@ -147,9 +168,43 @@ describe('recadoDosLinks', () => {
     expect(recadoDosLinks([link({ criadoEm: dias(-2) })])).toBe('1 link ainda não foi aberto.');
   });
 
-  it('não conta link morto como espera', () => {
+  /*
+   * Este teste existia afirmando 'Todo link que você mandou já foi aberto.'
+   * para esta mesma lista — e o link revogado tem `acessos: 0`, então a frase
+   * esperada era a mentira. A intenção do nome estava certa (morto não é
+   * espera); o que faltava era um lugar para o morto fechado aparecer, em vez
+   * de desaparecer na boa notícia.
+   */
+  it('não conta link morto como espera, mas também não o chama de aberto', () => {
     expect(recadoDosLinks([link({ revogado: true }), link({ id: 'x', acessos: 1 })])).toBe(
-      'Todo link que você mandou já foi aberto.',
+      '1 link deixou de valer sem ninguém abrir.',
     );
+  });
+
+  it('o caso que motivou o conserto: venceu antes de o cliente abrir', () => {
+    /*
+     * É o pior momento para a tela dizer que está tudo certo. A arte nunca foi
+     * vista, o designer acha que foi, e a única ação que resolve — mandar
+     * outro link — é justamente a que a frase antiga desencorajava.
+     */
+    const itens = [
+      link({ id: 'a', expiraEm: dias(-1) }),
+      link({ id: 'b', revogado: true }),
+      link({ id: 'c', limiteTentativas: 2, acessos: 2 }),
+    ];
+    expect(recadoDosLinks(itens)).toBe('2 links deixaram de valer sem ninguém abrir.');
+  });
+
+  it('a boa notícia continua existindo quando é verdade', () => {
+    // Todo link morto foi aberto antes de morrer: não falta nada a fazer.
+    const itens = [link({ id: 'a', revogado: true, acessos: 1 }), link({ id: 'b', acessos: 4 })];
+    expect(recadoDosLinks(itens)).toBe('Todo link que você mandou já foi aberto.');
+  });
+
+  it('quem ainda pode abrir vem antes de quem já não pode — é onde cabe cobrança', () => {
+    // Com um link vivo e fechado, a frase é sobre ele: ainda dá para cobrar.
+    // O morto fechado já não tem ação possível além de mandar outro.
+    const itens = [link({ id: 'vivo', criadoEm: dias(-2) }), link({ id: 'morto', revogado: true })];
+    expect(recadoDosLinks(itens)).toBe('1 link ainda não foi aberto.');
   });
 });
