@@ -23,7 +23,7 @@ vi.mock("@/lib/feedbacksDaArte", () => ({
   enviarComentario: (a: any) => enviarComentarioMock(a),
   enviarComentarioDeAudio: (a: any) => enviarAudioMock(a),
   listarRespostas: (a: any) => listarRespostasMock(a),
-  responder: (a: any, b: any) => responderMock(a, b),
+  responder: (a: any, b: any, c?: any) => responderMock(a, b, c),
 }));
 
 // Mock sonner toast
@@ -868,5 +868,105 @@ describe("posicaoDoCartao: cabe na tela, não na moldura", () => {
   it("tela mais estreita que o cartão encolhe o cartão, e não o contrário", () => {
     const { largura } = posicaoDoCartao({ pinX: 50, larguraMoldura: 200, larguraArea: 200 });
     expect(largura).toBe(184);
+  });
+});
+
+/*
+ * A conversa pelo link.
+ *
+ * O preview do token devolve TODOS os feedbacks públicos da arte, sem separar
+ * resposta de comentário — então a resposta sempre chegou à tela. O que não
+ * havia era `parent_id` no tipo: o conversor o descartava, e sem ele a
+ * resposta entrava na trilha como comentário solto. Como a lista vem ordenada
+ * por mais recente, ela aparecia ACIMA do comentário que respondia.
+ *
+ * E responder não existia pelo link: a única rota de resposta era a de
+ * sessão, que exige vínculo com o projeto. O designer dizia "vou clarear na
+ * v2" e quem recebeu o link não tinha como dizer "não era isso".
+ */
+describe("conversa: resposta é resposta, não comentário novo", () => {
+  const pai: FeedbackItem = {
+    id: "fb_pai",
+    conteudo: "O azul do fundo ficou pesado",
+    tipo: "TEXTO",
+    status: "ABERTO",
+    criado_em: "2026-03-01T10:00:00Z",
+    autor_nome: "João",
+  };
+  const resposta: FeedbackItem = {
+    id: "fb_resposta",
+    conteudo: "Boa, vou clarear na v2",
+    tipo: "TEXTO",
+    status: "ABERTO",
+    criado_em: "2026-03-01T11:00:00Z",
+    autor_nome: "Ana",
+    parent_id: "fb_pai",
+  };
+
+  it("não lista a resposta ao lado do comentário que ela responde", async () => {
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
+
+    expect(screen.getByText("O azul do fundo ficou pesado")).toBeInTheDocument();
+    // Fechada, a thread não mostra a resposta — e ela também não vaza para a
+    // trilha. Antes aparecia como um segundo cartão, acima do pai.
+    expect(screen.queryByText("Boa, vou clarear na v2")).not.toBeInTheDocument();
+  });
+
+  it("mostra a resposta dentro da thread do pai", async () => {
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
+    await userEvent.click(screen.getByText(/^Respostas/));
+
+    expect(await screen.findByText("Boa, vou clarear na v2")).toBeInTheDocument();
+  });
+
+  it("não vai à rede buscar o que já veio na lista", async () => {
+    /*
+     * Importa para quem abre o link: a rota de thread é de sessão e responde
+     * 403 a quem não é do projeto. Buscar de novo era pedir ao servidor o que
+     * já estava na mão, por uma porta que o visitante não pode usar.
+     */
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
+    await userEvent.click(screen.getByText(/^Respostas/));
+    await screen.findByText("Boa, vou clarear na v2");
+
+    expect(listarRespostasMock).not.toHaveBeenCalled();
+  });
+
+  it("conta as respostas sem contá-las como comentários", async () => {
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
+    expect(screen.getByText(/^Respostas \(1\)/)).toBeInTheDocument();
+  });
+
+  it("responder pelo link vai pela porta do token", async () => {
+    responderMock.mockResolvedValueOnce({
+      id: "fb_nova", conteudo: "não era isso", tipo: "TEXTO", status: "ABERTO",
+      criado_em: "2026-03-01T12:00:00Z", autor_nome: "João", parent_id: "fb_pai",
+    });
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
+    await userEvent.click(screen.getByText(/^Respostas/));
+
+    await userEvent.type(await screen.findByPlaceholderText("Responder..."), "não era isso");
+    await userEvent.keyboard("{Enter}");
+
+    // O token é o terceiro argumento: é ele que manda por
+    // /links/:token/feedbacks em vez da rota de sessão.
+    await waitFor(() =>
+      expect(responderMock).toHaveBeenCalledWith("fb_pai", "não era isso", "tok_123"),
+    );
+  });
+
+  it("a resposta enviada aparece na thread sem recarregar", async () => {
+    responderMock.mockResolvedValueOnce({
+      id: "fb_nova", conteudo: "não era isso, é o contraste", tipo: "TEXTO", status: "ABERTO",
+      criado_em: "2026-03-01T12:00:00Z", autor_nome: "João", parent_id: "fb_pai",
+    });
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai]} />);
+    await userEvent.click(screen.getByText(/^Respostas/));
+    await userEvent.type(await screen.findByPlaceholderText("Responder..."), "x");
+    await userEvent.keyboard("{Enter}");
+
+    expect(await screen.findByText("não era isso, é o contraste")).toBeInTheDocument();
+    // E não vira um cartão novo na trilha: entrou com parent_id.
+    expect(screen.getAllByText("não era isso, é o contraste")).toHaveLength(1);
   });
 });
