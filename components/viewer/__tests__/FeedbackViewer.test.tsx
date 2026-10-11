@@ -919,17 +919,34 @@ describe("conversa: resposta é resposta, não comentário novo", () => {
     expect(await screen.findByText("Boa, vou clarear na v2")).toBeInTheDocument();
   });
 
-  it("não vai à rede buscar o que já veio na lista", async () => {
+  it("pelo link, não vai à rede buscar o que já veio na lista", async () => {
     /*
-     * Importa para quem abre o link: a rota de thread é de sessão e responde
-     * 403 a quem não é do projeto. Buscar de novo era pedir ao servidor o que
-     * já estava na mão, por uma porta que o visitante não pode usar.
+     * A rota de thread é de sessão e responde 403 a quem não é do projeto.
+     * Buscar de novo seria pedir ao servidor o que já está na mão, por uma
+     * porta que o visitante do link nem pode usar.
      */
     render(<FeedbackViewer {...defaultProps} initialFeedbacks={[pai, resposta]} />);
     await userEvent.click(screen.getByText(/^Respostas/));
     await screen.findByText("Boa, vou clarear na v2");
 
     expect(listarRespostasMock).not.toHaveBeenCalled();
+  });
+
+  it("pela conta, busca a thread mesmo já tendo uma resposta na mão", async () => {
+    /*
+     * Quem decide é a ORIGEM, não ter alguma resposta carregada.
+     *
+     * Pela conta a lista vem de `GET /feedbacks?arteId=`, que é paginada e
+     * devolve só as raízes — ter uma resposta ali não significa ter a thread
+     * inteira. Enquanto a condição era "já tenho alguma resposta?", isto
+     * passava por acaso: como aquela rota não devolve resposta nenhuma, nunca
+     * havia o que suprimir. Bastaria o servidor mudar esse filtro para a
+     * thread começar a mostrar um subconjunto velho, sem nunca mais buscar.
+     */
+    render(<FeedbackViewer {...defaultProps} token="" initialFeedbacks={[pai, resposta]} />);
+    await userEvent.click(screen.getByText(/^Respostas/));
+
+    await waitFor(() => expect(listarRespostasMock).toHaveBeenCalledWith("fb_pai"));
   });
 
   it("conta as respostas sem contá-las como comentários", async () => {

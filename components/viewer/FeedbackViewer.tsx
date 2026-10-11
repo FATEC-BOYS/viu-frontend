@@ -676,12 +676,27 @@ export default function FeedbackViewer({
       } else {
         next.add(feedbackId);
         /*
-         * Só vai à rede quando a resposta NÃO veio na lista. Pelo link ela
-         * sempre vem — o preview devolve todos os feedbacks públicos da arte
-         * —, e buscar de novo era pedir ao servidor o que já estava na mão,
-         * por uma rota que o visitante do link nem pode usar.
+         * Pular a busca é decisão da ORIGEM, não de já ter alguma resposta na
+         * mão.
+         *
+         * Pelo link a lista é completa: o preview devolve todos os feedbacks
+         * públicos da arte, sem teto e sem separar resposta de comentário.
+         * Buscar de novo ali seria pedir o que já está na mão, por uma rota
+         * de sessão que o visitante do link nem pode usar — ela responde 403.
+         *
+         * Pela conta a lista é outra coisa: `GET /feedbacks?arteId=` devolve
+         * só as raízes (o backend filtra `parentId: null`) e é paginada. Ter
+         * uma resposta na mão ali não significa ter a thread inteira, então a
+         * busca precisa acontecer.
+         *
+         * A condição foi `!respostasPorPai[feedbackId]`, o que dava no mesmo
+         * HOJE — sem respostas na lista de sessão, ela nunca suprimia nada.
+         * Mas amarrava a correção desta tela a um filtro do servidor que
+         * nada aqui menciona: bastaria `listFeedbacks` passar a devolver
+         * respostas para a thread começar a mostrar um subconjunto velho, sem
+         * nunca mais buscar. Decidir pela origem não depende disso.
          */
-        if (!threadsBuscadas.current.has(feedbackId) && !respostasPorPai[feedbackId]) {
+        if (!token && !threadsBuscadas.current.has(feedbackId)) {
           loadReplies(feedbackId);
         }
       }
