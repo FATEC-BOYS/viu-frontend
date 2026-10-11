@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import LinkIndisponivel from '../LinkIndisponivel'
+import LinkIndisponivel, { motivoDaResposta } from '../LinkIndisponivel'
 
 /**
  * Antes isto era `notFound()` — página em branco, igual para revogado,
@@ -103,5 +103,43 @@ describe('falha nossa não pode parecer link ruim', () => {
       expect(screen.queryByRole('link', { name: /tentar de novo/i })).not.toBeInTheDocument()
       unmount()
     }
+  })
+})
+
+/*
+ * A classificação é por lista de PERMISSÃO, e a diferença é prática.
+ *
+ * A primeira versão perguntava "é 5xx?" para decidir falha nossa. Só que o
+ * backend manda `motivo` apenas quando quem recusou foi o link — 404 para
+ * inexistente, 410 para revogado, expirado e limite. Um 429 do limitador nem
+ * passa por esse handler: vem sem motivo, escapava do `>= 500`, e a tela
+ * voltava a dizer "endereço errado" sobre um link perfeitamente bom.
+ */
+describe('motivoDaResposta: só o link acusa o link', () => {
+  it.each(['NAO_ENCONTRADO', 'REVOGADO', 'EXPIRADO', 'LIMITE_ATINGIDO', 'TIPO_NAO_SUPORTADO'])(
+    'motivo %s vem do backend e é respeitado',
+    (motivo) => {
+      expect(motivoDaResposta({ motivo, success: false })).toBe(motivo)
+    },
+  )
+
+  it('429 do limitador não tem motivo: é falha nossa', () => {
+    // O corpo do rate limit, como o backend o monta.
+    const corpo = { statusCode: 429, error: 'Too Many Requests', message: 'Muitas tentativas. Espere 2 minutos e tente de novo.', success: false }
+    expect(motivoDaResposta(corpo)).toBe('FALHA_TEMPORARIA')
+  })
+
+  it('500 sem motivo também', () => {
+    expect(motivoDaResposta({ message: 'Erro ao abrir o link', success: false })).toBe('FALHA_TEMPORARIA')
+  })
+
+  it('corpo que nem é JSON cai do lado certo', () => {
+    expect(motivoDaResposta(null)).toBe('FALHA_TEMPORARIA')
+  })
+
+  it('motivo desconhecido não vira tela de link ruim por engano', () => {
+    // Se o backend inventar um motivo antes do front conhecer, o conservador
+    // é não acusar o link: pedir para tentar de novo não culpa ninguém.
+    expect(motivoDaResposta({ motivo: 'ALGO_NOVO' })).toBe('FALHA_TEMPORARIA')
   })
 })
