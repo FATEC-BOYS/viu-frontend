@@ -1,7 +1,7 @@
 // app/l/[token]/page.tsx
 import { redirect } from "next/navigation";
 import { backendFetch } from "@/lib/serverBackend";
-import LinkIndisponivel from "@/components/viewer/LinkIndisponivel";
+import LinkIndisponivel, { motivoDaResposta } from "@/components/viewer/LinkIndisponivel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,35 +44,26 @@ export default async function PublicLinkResolver({ params }: Props) {
        * fora: quem tem o link tem /l/<token>.
        */
       /*
-       * 5xx não é link ruim, é falha nossa.
+       * Só o que o backend atribui ao LINK vira tela de link ruim.
        *
        * O `?? "NAO_ENCONTRADO"` era um balde: qualquer resposta sem `motivo`
-       * — inclusive um 500 do servidor — virava "Não encontramos esta arte".
-       * O cliente lia que o endereço estava errado e voltava cobrar outro
-       * link de quem já tinha mandado o certo, o designer parecia desleixado
-       * por erro nosso, e ninguém ficava sabendo que houve erro nenhum.
-       *
-       * O backend distingue revogado, expirado e limite atingido com 404 e um
-       * `motivo` no corpo. Qualquer 5xx é outra categoria, e a tela precisa
-       * dizer isso.
+       * virava "Não encontramos esta arte". O cliente lia que o endereço
+       * estava errado e voltava cobrar outro link de quem já tinha mandado o
+       * certo; o designer parecia desleixado por erro nosso; e ninguém ficava
+       * sabendo que houve erro algum.
        */
-      if (res.status >= 500) {
+      const corpo = await res.json().catch(() => null);
+      const motivo = motivoDaResposta(corpo);
+      if (motivo === "FALHA_TEMPORARIA") {
         // Vai para o log do servidor: do lado do cliente este caso é mudo, e
         // sem rastro ninguém descobre que aconteceu.
-        console.error("[/l/token] backend falhou ao resolver o destino", {
+        console.error("[/l/token] backend recusou sem motivo de link", {
           status: res.status,
           token: token.slice(0, 8),
         });
-        return <LinkIndisponivel motivo="FALHA_TEMPORARIA" tentarEm={`/l/${token}`} />;
+        return <LinkIndisponivel motivo={motivo} tentarEm={`/l/${token}`} />;
       }
-
-      const corpo = await res.json().catch(() => null);
-      return (
-        <LinkIndisponivel
-          motivo={corpo?.motivo ?? "NAO_ENCONTRADO"}
-          expiraEm={corpo?.expiraEm ?? null}
-        />
-      );
+      return <LinkIndisponivel motivo={motivo} expiraEm={corpo?.expiraEm ?? null} />;
     }
     const body = await res.json();
     destino = body?.data;

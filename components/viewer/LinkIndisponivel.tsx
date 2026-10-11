@@ -30,6 +30,38 @@ export type MotivoLinkIndisponivel =
   | 'TIPO_NAO_SUPORTADO'
   | 'FALHA_TEMPORARIA'
 
+
+/** Os motivos que falam do LINK. Tudo que não está aqui é falha nossa. */
+const MOTIVOS_DO_LINK: readonly MotivoLinkIndisponivel[] = [
+  'NAO_ENCONTRADO',
+  'REVOGADO',
+  'EXPIRADO',
+  'LIMITE_ATINGIDO',
+  'TIPO_NAO_SUPORTADO',
+]
+
+/**
+ * O que dizer diante de uma resposta que não deu certo.
+ *
+ * A regra é por LISTA DE PERMISSÃO, e isso importa: a versão anterior
+ * perguntava "é 5xx?" para decidir falha nossa, e caía no genérico em todo o
+ * resto. Mas o backend só manda `motivo` quando quem recusou foi o link —
+ * 404 para inexistente, 410 para revogado, expirado e limite. Um **429** do
+ * limitador nem chega a esse handler, então vem sem motivo, escapava do
+ * `>= 500` e virava "Não encontramos esta arte": a tela voltava a culpar um
+ * link perfeitamente bom.
+ *
+ * Invertido, qualquer status operacional novo — 429, 403, 502, o que vier —
+ * cai sozinho no lado certo, sem ninguém precisar lembrar de atualizar uma
+ * lista de erros.
+ */
+export function motivoDaResposta(corpo: unknown): MotivoLinkIndisponivel {
+  const motivo = (corpo as { motivo?: unknown } | null)?.motivo
+  return MOTIVOS_DO_LINK.includes(motivo as MotivoLinkIndisponivel)
+    ? (motivo as MotivoLinkIndisponivel)
+    : 'FALHA_TEMPORARIA'
+}
+
 function dataCurta(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR')
 }
