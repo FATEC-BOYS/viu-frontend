@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { buscarContatos } from "@/lib/contatos";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { X, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -95,49 +96,70 @@ export default function AsyncUserMultiSelect({
         ))}
       </div>
 
-      {/* Input + suggestions */}
-      <div className="relative">
-        <Input
-          placeholder={placeholder ?? "Buscar..."}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {loading && (
-          <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
-        )}
+      {/*
+        A lista vai num Popover, e não num `absolute` dentro do campo.
 
-        {query && options.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-lg">
-            {options.map((opt) => (
-              <div
-                key={opt.id}
-                className={cn(
-                  "cursor-pointer px-3 py-2 text-sm hover:bg-accent",
-                  value.includes(opt.id) && "bg-accent"
-                )}
-                onClick={() => addItem(opt)}
-              >
-                {opt.label}
-                {opt.email && (
-                  <span className="ml-2 text-xs text-muted-foreground">{opt.email}</span>
-                )}
-              </div>
-            ))}
+        Ela era filha de um container `relative` que, dentro do modal de novo
+        projeto, vive no corpo rolável — e `overflow-y: auto` recorta filho
+        posicionado. Medido a 1440x900: 68% da lista sumia, e a segunda pessoa
+        que casava a busca era invisível. O Popover do Radix portaliza para
+        fora da árvore que rola e reposiciona sozinho quando falta espaço.
+      */}
+      <Popover
+        open={Boolean(query) && (options.length > 0 || !loading)}
+        onOpenChange={(aberto) => { if (!aberto) setOptions([]); }}
+      >
+        <PopoverAnchor asChild>
+          <div className="relative">
+            <Input
+              placeholder={placeholder ?? "Buscar..."}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {loading && (
+              <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
-        )}
+        </PopoverAnchor>
 
-        {/* opção de adicionar direto */}
-        {query && !loading && options.length === 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-lg">
-            <div
-              className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
-              onClick={() => addItem({ id: query, label: query })}
-            >
-              Convidar <strong>{query}</strong>
-            </div>
-          </div>
-        )}
-      </div>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          // Largura da âncora, como o `w-full` de antes. `p-0` porque o
+          // padrão do componente tem padding, que aqui viraria moldura.
+          className="w-[var(--radix-popover-trigger-width)] p-0"
+          // Sem isto o Popover rouba o foco ao abrir e a pessoa para de
+          // digitar no meio da busca.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          {options.length > 0
+            ? options.map((opt) => (
+                <div
+                  key={opt.id}
+                  className={cn(
+                    "cursor-pointer px-3 py-2 text-sm hover:bg-accent",
+                    value.includes(opt.id) && "bg-accent"
+                  )}
+                  onClick={() => addItem(opt)}
+                >
+                  {opt.label}
+                  {opt.email && (
+                    <span className="ml-2 text-xs text-muted-foreground">{opt.email}</span>
+                  )}
+                </div>
+              ))
+            : (
+                /* adicionar direto o que foi digitado */
+                <div
+                  className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
+                  onClick={() => addItem({ id: query, label: query })}
+                >
+                  Convidar <strong>{query}</strong>
+                </div>
+              )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
