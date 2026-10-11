@@ -60,29 +60,58 @@ let isRefreshing = false
 let refreshQueue: Array<(resultado: ResultadoRefresh) => void> = []
 
 /**
- * Servidor indisponível vale por alguns segundos — e SÓ isso se lembra.
+ * O que a última renovação disse, por alguns segundos.
  *
- * Quando o refresh volta 429 ou 5xx, tentar de novo a cada 401 da mesma onda
- * só piora: é bater numa porta que acabou de dizer "espere". Guardar essa
- * resposta por alguns segundos resolve.
+ * Renovar ROTACIONA a sessão no servidor: a anterior morre na hora. Numa onda
+ * de 401 isso vira corrida. A primeira renovação troca o cookie; uma
+ * requisição que ainda viajava com o token antigo volta 401, pede OUTRA
+ * renovação, e essa segunda rotação mata a sessão que a primeira acabou de
+ * criar. Quem estivesse com o token do meio toma 401 sem ter mais para onde
+ * apelar e cai no login. Medido: duas rotações na mesma onda, as duas
+ * respondendo 200, e a pessoa deslogada mesmo assim — intermitente, que é
+ * exatamente a cara de "deslogada do nada".
  *
- * O veredito sobre a SESSÃO, ao contrário, nunca é guardado — e a diferença é
- * o que separa um alívio de um bug. A tela de login sonda `/auth/me`, leva 401
- * de visitante anônimo e aprende "não há sessão"; o login entra por navegação
- * do router, no MESMO documento, então a lembrança sobreviveria à troca de
- * sessão e derrubaria a seguinte. Foi medido assim, quando esta memória ainda
- * guardava os dois casos: 40 requisições com 401 e nenhuma chamada a
- * `/auth/refresh`, com a pessoa caindo no login logo depois de entrar.
+ * Por isso um sucesso recente responde "ok" sem ir à rede: o cookie novo já
+ * está no navegador, e o certo é repetir a requisição, não rotacionar de novo.
  *
- * Uma sessão pode nascer a qualquer instante. A disponibilidade do servidor,
- * não — por isso só ela cabe numa lembrança.
+ * Os vereditos negativos valem pelo mesmo motivo, do outro lado. Quando a
+ * sessão acabou de verdade, insistir não a traz de volta: medido numa onda,
+ * sete idas ao `/auth/refresh` depois da primeira recusa, queimando a cota até
+ * virar 429 — e atrás de um proxy essa cota é compartilhada com todo mundo.
  */
-const MEMORIA_INDISPONIVEL_MS = 3000
-let indisponivelDesde: number | null = null
+const MEMORIA_MS = 2000
+let ultimaRenovacao: { em: number; resultado: ResultadoRefresh } | null = null
 
-/** Qualquer resposta boa prova que o servidor está de pé. */
+/**
+ * Esquece o que a última renovação disse.
+ *
+ * Existe para os testes, e só. A memória é estado de módulo com janela de
+ * alguns segundos, e uma suíte roda muito mais rápido que isso: sem zerar,
+ * o veredito de um teste decide o seguinte — foi assim que sete testes
+ * quebraram de uma vez quando a memória passou a guardar também o sucesso.
+ * Em produção ninguém chama isto; a janela expira sozinha.
+ */
+export function esquecerRenovacao(): void {
+  ultimaRenovacao = null
+}
+
+function memoriaDaRenovacao(): ResultadoRefresh | null {
+  if (!ultimaRenovacao) return null
+  return Date.now() - ultimaRenovacao.em < MEMORIA_MS ? ultimaRenovacao.resultado : null
+}
+
+/**
+ * Qualquer resposta boa desmente um veredito negativo: a sessão responde,
+ * afinal. É isso que impede a lembrança de "não há sessão" de atravessar um
+ * login e derrubar a sessão seguinte — medido, quando ela atravessava: 40
+ * requisições com 401 e nenhuma ida ao `/auth/refresh`, com a pessoa caindo no
+ * login logo depois de entrar.
+ *
+ * Um sucesso ela não desmente. "Acabei de rotacionar" continua verdade, e é
+ * justamente o que impede a segunda rotação da mesma onda.
+ */
 function sessaoRespondeu(): void {
-  indisponivelDesde = null
+  if (ultimaRenovacao && ultimaRenovacao.resultado !== 'ok') ultimaRenovacao = null
 }
 
 /**
@@ -93,9 +122,8 @@ function sessaoRespondeu(): void {
  * derrubariam uma à outra.
  */
 async function tryRefresh(): Promise<ResultadoRefresh> {
-  if (indisponivelDesde && Date.now() - indisponivelDesde < MEMORIA_INDISPONIVEL_MS) {
-    return 'indisponivel'
-  }
+  const lembrada = memoriaDaRenovacao()
+  if (lembrada) return lembrada
 
   if (isRefreshing) {
     return new Promise((resolve) => { refreshQueue.push(resolve) })
@@ -140,12 +168,12 @@ async function tryRefresh(): Promise<ResultadoRefresh> {
       }
     }
 
-    indisponivelDesde = resultado === 'indisponivel' ? Date.now() : null
+    ultimaRenovacao = { em: Date.now(), resultado }
     refreshQueue.forEach((cb) => cb(resultado))
     refreshQueue = []
     return resultado
   } catch {
-    indisponivelDesde = Date.now()
+    ultimaRenovacao = { em: Date.now(), resultado: 'indisponivel' }
     refreshQueue.forEach((cb) => cb('indisponivel'))
     refreshQueue = []
     return 'indisponivel'
@@ -325,10 +353,22 @@ function esperaDoRetryAfter(res: Response, tentativa: number): number {
  */
 export type OpcoesRequest = { redirecionarNo401?: boolean }
 
+/**
+ * Quantas renovações uma mesma requisição pode provocar.
+ *
+ * Duas, e não uma, por causa de outra aba. Cada aba é um módulo com a própria
+ * memória: a aba B pode rotacionar a sessão entre a renovação da aba A e a
+ * repetição dela. Aí a repetição volta 401 — e, com orçamento de uma só, a
+ * aba A ia direto para o login sem nem tentar, com a sessão viva e a aba B
+ * navegando normalmente ao lado. Medido: duas abas recarregando juntas, as
+ * duas renovações com 200, e uma delas no login em 2 de 3 tentativas.
+ */
+const ORCAMENTO_RENOVACAO = 2
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  retry = true,
+  renovacoesRestantes = ORCAMENTO_RENOVACAO,
   tentativa429 = 0,
   opcoes: OpcoesRequest = {},
 ): Promise<T> {
@@ -341,9 +381,17 @@ async function request<T>(
   // em outra origem, e sem isso o navegador simplesmente não o envia.
   const res = await buscar(`${BASE_URL}${path}`, { ...init, headers, credentials: 'include' })
 
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && renovacoesRestantes > 0) {
+    /*
+     * 401 DEPOIS de já termos renovado significa que a nossa renovação não é
+     * mais a corrente: outra aba rotacionou no meio. A lembrança virou
+     * mentira, e insistir nela repetiria a requisição com um cookie velho.
+     */
+    if (renovacoesRestantes < ORCAMENTO_RENOVACAO) esquecerRenovacao()
     const renovacao = await renovarOuSair(opcoes.redirecionarNo401 !== false)
-    if (renovacao === 'ok') return request<T>(path, init, false, 0, opcoes)
+    if (renovacao === 'ok') {
+      return request<T>(path, init, renovacoesRestantes - 1, 0, opcoes)
+    }
     throw erroDeApi(mensagemDe401(renovacao), statusDe401(renovacao), null)
   }
 
@@ -353,7 +401,7 @@ async function request<T>(
   if (res.status === 429 && ehIdempotente(init) && tentativa429 < RETRY_MAX_429) {
     const espera = esperaDoRetryAfter(res, tentativa429)
     await new Promise((resolve) => setTimeout(resolve, espera))
-    return request<T>(path, init, retry, tentativa429 + 1, opcoes)
+    return request<T>(path, init, renovacoesRestantes, tentativa429 + 1, opcoes)
   }
 
   const body = await lerCorpo(res)
@@ -384,7 +432,7 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string, opcoes?: OpcoesRequest) =>
-    request<T>(path, { method: 'GET' }, true, 0, opcoes),
+    request<T>(path, { method: 'GET' }, ORCAMENTO_RENOVACAO, 0, opcoes),
   post: <T>(path: string, data: unknown) =>
     request<T>(path, { method: 'POST', body: JSON.stringify(data) }),
   put: <T>(path: string, data: unknown) =>

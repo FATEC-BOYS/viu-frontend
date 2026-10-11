@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { api, apiUpload, temSessao } from '../api'
+import { api, apiUpload, temSessao, esquecerRenovacao } from '../api'
 
 /**
  * Comportamento do cliente HTTP diante das respostas que o backend realmente
@@ -34,14 +34,11 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', fetchMock)
   localStorage.clear()
 
-  // A memória de "servidor indisponível" do cliente é estado de módulo e
-  // atravessa testes: sem limpá-la, um teste que simula 503 na renovação faria
-  // o próximo acreditar que o servidor ainda está fora. Uma resposta boa é
-  // exatamente o que a apaga — então é assim que se começa cada teste.
-  fetchMock.mockResolvedValueOnce(resposta(200, {}))
-  await api.get('/ping')
-  fetchMock.mockReset()
-  localStorage.clear()
+  // A memória da última renovação é estado de módulo e atravessa testes: sem
+  // zerar, o veredito de um teste decide o seguinte. Uma resposta boa não
+  // serve para isso, porque ela de propósito não desmente um SUCESSO — é o
+  // sucesso lembrado que impede a segunda rotação da mesma onda.
+  esquecerRenovacao()
 })
 
 afterEach(() => {
@@ -445,11 +442,16 @@ describe('renovação de sessão diante de falha', () => {
     /*
      * O login entra por navegação do router: mesmo documento, mesmo módulo.
      *
-     * Enquanto o cliente guardava "não há sessão" por alguns segundos, o
-     * primeiro 401 da sessão NOVA era atendido pela lembrança em vez de uma
-     * tentativa real — e a pessoa caía no login logo depois de entrar. Medido
-     * no navegador: 40 requisições com 401 e nenhuma ida ao /auth/refresh.
+     * É o 200 do próprio login que desmente o veredito anterior. Sem isso a
+     * lembrança de "não há sessão" atravessaria a troca de sessão e o primeiro
+     * 401 da sessão NOVA seria atendido pela memória em vez de uma tentativa
+     * real — medido no navegador, quando era assim: 40 requisições com 401 e
+     * nenhuma ida ao `/auth/refresh`, com a pessoa caindo no login logo depois
+     * de entrar.
      */
+    fetchMock.mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1' } } }))
+    await api.post('/auth/login', { email: 'a@b.c', senha: 'x' })
+
     fetchMock
       .mockResolvedValueOnce(resposta(401, {}))
       .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1', nome: 'Ana' } } }))
@@ -457,6 +459,79 @@ describe('renovação de sessão diante de falha', () => {
 
     await expect(api.get('/projetos')).resolves.toEqual({ data: ['ok'] })
     expect(replace).not.toHaveBeenCalled()
+  })
+  /*
+   * Renovar ROTACIONA: a sessão anterior morre na hora. Numa onda de 401 isso
+   * vira corrida — a primeira renovação troca o cookie, e uma requisição que
+   * ainda viajava com o token antigo pede OUTRA, cuja rotação mata a sessão
+   * recém-criada. Medido no navegador: `refresh=[200, 401]` e a pessoa no
+   * login, com o servidor tendo acabado de criar uma sessão boa.
+   */
+  it('sucesso recente não rotaciona de novo: a onda só repete a requisição', async () => {
+    const replace = espionar()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1' } } }))
+      .mockResolvedValueOnce(resposta(200, { data: ['a'] }))
+    await expect(api.get('/a')).resolves.toEqual({ data: ['a'] })
+    const ate_aqui = fetchMock.mock.calls.length
+
+    // A retardatária da mesma onda: 401, mas o cookie novo já está no
+    // navegador. Repetir resolve; rotacionar de novo destruiria a sessão.
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: ['b'] }))
+    await expect(api.get('/b')).resolves.toEqual({ data: ['b'] })
+
+    expect(fetchMock.mock.calls.length).toBe(ate_aqui + 2)
+    const renovacoes = fetchMock.mock.calls.filter(([u]) => String(u).includes('/auth/refresh'))
+    expect(renovacoes).toHaveLength(1)
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('"não há sessão" não é reperguntado a cada 401 da mesma onda', async () => {
+    espionar()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(401, { message: 'Refresh inválido' }))
+    await expect(api.get('/a')).rejects.toMatchObject({ status: 401 })
+    const ate_aqui = fetchMock.mock.calls.length
+
+    fetchMock.mockResolvedValueOnce(resposta(401, {}))
+    await expect(api.get('/b')).rejects.toMatchObject({ status: 401 })
+
+    // Só a requisição, sem segunda ida ao /auth/refresh. Medido antes disto,
+    // numa onda real: sete idas depois da primeira recusa, queimando a cota
+    // até virar 429 — e atrás de um proxy essa cota é de todo mundo.
+    expect(fetchMock.mock.calls.length).toBe(ate_aqui + 1)
+  })
+
+  /*
+   * Cada aba é um módulo com a própria memória. A aba B pode rotacionar entre
+   * a renovação da aba A e a repetição dela — e aí a repetição volta 401 com
+   * a sessão perfeitamente viva. Com orçamento de uma só renovação, a aba A
+   * ia direto para o login enquanto a B navegava ao lado. Medido: 2 de 3.
+   */
+  it('401 depois de renovar ainda tenta de novo: outra aba pode ter rotacionado', async () => {
+    const replace = espionar()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1' } } }))
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { usuario: { id: 'u1' } } }))
+      .mockResolvedValueOnce(resposta(200, { data: ['ok'] }))
+
+    await expect(api.get('/projetos')).resolves.toEqual({ data: ['ok'] })
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('o orçamento é finito: 401 que não cede termina no login', async () => {
+    const replace = espionar()
+    // Tudo 401, renovação inclusive: aqui a sessão acabou mesmo.
+    fetchMock.mockResolvedValue(resposta(401, {}))
+
+    await expect(api.get('/projetos')).rejects.toMatchObject({ status: 401 })
+    expect(replace).toHaveBeenCalled()
   })
 
   it('401 no upload renova e reenvia em vez de perder o arquivo', async () => {
