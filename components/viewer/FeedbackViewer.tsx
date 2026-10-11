@@ -1184,8 +1184,11 @@ export default function FeedbackViewer({
                             <p className="text-muted-foreground mt-0.5">{r.conteudo}</p>
                           </div>
                         ))}
-                        {/* Reply input */}
-                        {!readOnly && (
+                        {/* Reply input — responder exige conta, como comentar.
+                            Era gated só por `!readOnly`, então o visitante
+                            anônimo de um link gravável via o campo e o botão
+                            de uma ação que o servidor recusa. */}
+                        {!readOnly && temSessao && (
                           <div className="flex gap-1.5 mt-1">
                             <Input
                               className="h-7 text-xs"

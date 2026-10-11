@@ -102,8 +102,29 @@ export function normalizarResposta(r: any) {
  * `GET /feedbacks/:id` já traz `respostas`.
  */
 export async function listarRespostas(feedbackId: string) {
-  const res = await api.get<{ data?: any }>(`/feedbacks/${encodeURIComponent(feedbackId)}`)
-  return ((res as any)?.data?.respostas ?? []).map(normalizarResposta)
+  /*
+   * `redirecionarNo401: false` porque esta leitura é OPCIONAL numa página
+   * cuja leitura é pública.
+   *
+   * Ler a thread exige conta — a rota antiga respondia 401 com `[]`, e quem
+   * chamava ignorava em silêncio. Trocando aquele `fetch` cru por `api`, o
+   * 401 passou a tentar renovar e, falhando, mandar para o login: o visitante
+   * anônimo que abrisse o link do WhatsApp e clicasse em "Respostas" era
+   * EXPULSO da página que tinha todo o direito de estar lendo. Medido: clique
+   * no botão e a URL virava /login?next=…
+   *
+   * Aqui 401 significa "esta pessoa não vê as respostas", que é uma resposta
+   * válida — e não "a sessão acabou, vá fazer login".
+   */
+  try {
+    const res = await api.get<{ data?: any }>(
+      `/feedbacks/${encodeURIComponent(feedbackId)}`,
+      { redirecionarNo401: false },
+    )
+    return ((res as any)?.data?.respostas ?? []).map(normalizarResposta)
+  } catch {
+    return []
+  }
 }
 
 export async function responder(feedbackId: string, conteudo: string) {
