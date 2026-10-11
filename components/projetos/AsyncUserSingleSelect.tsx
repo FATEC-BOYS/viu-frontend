@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { buscarContatos, nomeDoContato } from "@/lib/contatos";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -110,21 +111,66 @@ export default function AsyncUserSingleSelect({
     setOptions([]);
   }
 
+  const temSugestoes = Boolean(query) && options.length > 0;
+  const ofereceConvite =
+    Boolean(query) && !loading && options.length === 0 && EMAIL_RE.test(query);
+
+  const ancoraRef = React.useRef<HTMLDivElement>(null);
+
   return (
     <div className="space-y-2">
-      <div className="relative">
-        <Input
-          placeholder={placeholder ?? "Buscar cliente..."}
-          value={query !== "" ? query : (displayLabel || "")}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {(loading || resolving) && (
-          <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
-        )}
+      {/*
+        A lista vai num Popover, e não num `absolute` dentro do campo.
 
-        {query && options.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-lg">
-            {options.map((opt) => (
+        Ela era filha de um container `relative` que, dentro do modal de novo
+        projeto, vive no corpo rolável — e `overflow-y: auto` recorta filho
+        posicionado. Medido a 1440x900: a lista ia de 650 a 724, o container
+        terminava em 674, e 68% dela sumia. Com duas pessoas casando a busca,
+        a segunda era invisível: existia, mas não dava para escolher.
+
+        Virar a lista para cima não resolveria — recortaria na outra borda. O
+        Popover do Radix portaliza o conteúdo para fora da árvore que rola, e
+        ainda reposiciona sozinho quando falta espaço.
+      */}
+      <Popover
+        open={temSugestoes || ofereceConvite}
+        onOpenChange={(aberto) => { if (!aberto) setOptions([]); }}
+      >
+        <PopoverAnchor asChild>
+          <div ref={ancoraRef} className="relative">
+            <Input
+              placeholder={placeholder ?? "Buscar cliente..."}
+              value={query !== "" ? query : (displayLabel || "")}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {(loading || resolving) && (
+              <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        </PopoverAnchor>
+
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          // A largura da âncora: a lista continua acompanhando o campo, como
+          // acompanhava com `w-full`. E `p-0` porque o padrão do componente
+          // tem padding, que aqui viraria moldura em volta dos itens.
+          className="w-[var(--radix-popover-trigger-width)] p-0"
+          // O campo é PopoverAnchor, não Trigger, então o Radix o considera
+          // "fora" do conteúdo: clicar nele para reposicionar o cursor
+          // disparava a dispensa, que zera `options` e descarta o que já
+          // tinha sido carregado. Interação dentro da âncora não é dispensa.
+          onInteractOutside={(e) => {
+            const alvo = (e.detail?.originalEvent?.target ?? null) as Node | null;
+            if (alvo && ancoraRef.current?.contains(alvo)) e.preventDefault();
+          }}
+          // Sem isto o Popover rouba o foco ao abrir e a pessoa para de
+          // digitar no meio da busca.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          {temSugestoes &&
+            options.map((opt) => (
               <div
                 key={opt.id}
                 className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
@@ -136,12 +182,9 @@ export default function AsyncUserSingleSelect({
                 )}
               </div>
             ))}
-          </div>
-        )}
 
-        {/* opção de convidar direto (se digitou um e-mail válido e não achou nada) */}
-        {query && !loading && options.length === 0 && EMAIL_RE.test(query) && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-lg">
+          {/* convidar direto: digitou um e-mail válido e não achou ninguém */}
+          {ofereceConvite && (
             <div
               className="cursor-pointer px-3 py-2 text-sm hover:bg-accent"
               onClick={() => {
@@ -152,9 +195,9 @@ export default function AsyncUserSingleSelect({
             >
               Convidar <strong>{query}</strong>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
