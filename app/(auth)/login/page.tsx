@@ -199,7 +199,12 @@ function LoginContent() {
           <Link href="/recuperar" className="text-muted-foreground hover:underline">
             Esqueci minha senha
           </Link>
-          <Link href="/cadastro" className="font-semibold text-primary hover:underline">
+          {/* O `next` atravessa: quem caiu aqui vindo de uma arte e descobre
+              que não tem conta não pode perder a volta ao trocar de tela. */}
+          <Link
+            href={nextParam ? `/cadastro?next=${encodeURIComponent(nextParam)}` : "/cadastro"}
+            className="font-semibold text-primary hover:underline"
+          >
             Criar conta
           </Link>
         </CardFooter>

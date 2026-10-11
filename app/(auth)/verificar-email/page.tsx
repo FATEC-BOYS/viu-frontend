@@ -21,6 +21,13 @@ function VerificarEmailContent() {
   // e-mail cadastrado", e quem digitou errado ficava esperando um e-mail que
   // nunca ia chegar, sem nada na tela que ajudasse a perceber.
   const emailDoCadastro = search.get('email') ?? ''
+  /*
+   * A volta para onde a pessoa estava, quando ela chegou aqui vinda de uma
+   * arte compartilhada. Como o cadastro não cria sessão, o login é a última
+   * parada antes da arte — e é para lá que estes links precisam levar o `next`.
+   */
+  const proximo = search.get('next')
+  const urlDeLogin = proximo ? `/login?next=${encodeURIComponent(proximo)}` : '/login'
 
   const [status, setStatus] = useState<Status>(token ? 'verifying' : 'idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -87,7 +94,7 @@ function VerificarEmailContent() {
           </CardHeader>
           <CardFooter className="flex justify-center">
             <Button asChild>
-              <Link href="/login">Fazer login</Link>
+              <Link href={urlDeLogin}>Fazer login</Link>
             </Button>
           </CardFooter>
         </Card>
@@ -133,7 +140,7 @@ function VerificarEmailContent() {
             )}
           </CardContent>
           <CardFooter className="flex justify-center text-sm">
-            <Link href="/login" className="text-muted-foreground hover:underline">
+            <Link href={urlDeLogin} className="text-muted-foreground hover:underline">
               Voltar para o login
             </Link>
           </CardFooter>
@@ -192,7 +199,7 @@ function VerificarEmailContent() {
           )}
         </CardContent>
         <CardFooter className="flex justify-center text-sm">
-          <Link href="/login" className="text-muted-foreground hover:underline">
+          <Link href={urlDeLogin} className="text-muted-foreground hover:underline">
             Já verificou? Fazer login
           </Link>
         </CardFooter>
