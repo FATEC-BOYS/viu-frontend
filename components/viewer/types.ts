@@ -42,6 +42,17 @@ export type FeedbackItem = {
   versao_numero?: number | null;
   posicao_x?: number | null;
   posicao_y?: number | null;
+  /**
+   * O comentário ao qual este responde, quando é uma resposta.
+   *
+   * O campo existe no banco desde a migration de threads e sempre veio no
+   * preview do link — o conversor é que o descartava. Sem ele a tela não tem
+   * como saber que uma resposta é resposta, então ela entrava na trilha como
+   * comentário solto, e por ordenação a resposta aparecia ACIMA do comentário
+   * que respondia. Medido no link: "Boa, vou clarear na v2" em cima de "O
+   * azul do fundo ficou pesado", sem nada ligando os dois.
+   */
+  parent_id?: string | null;
 };
 
 export type Versao = {
@@ -112,5 +123,6 @@ export function paraFeedbackItem(f: any): FeedbackItem {
     versao_numero: f.versaoNumero ?? f.versao_numero ?? null,
     posicao_x: f.posicaoX ?? f.posicao_x ?? null,
     posicao_y: f.posicaoY ?? f.posicao_y ?? null,
+    parent_id: f.parentId ?? f.parent_id ?? null,
   };
 }

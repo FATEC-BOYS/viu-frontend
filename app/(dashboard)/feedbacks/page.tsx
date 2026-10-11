@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, getAll } from '@/lib/api';
 import { listarRespostas, responder } from '@/lib/feedbacksDaArte';
+import type { FeedbackItem } from '@/components/viewer/types';
 import { toast } from 'sonner';
 
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -261,9 +262,10 @@ function FeedbackDetail({
   const isResolved = fb.status === 'RESOLVIDO';
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
-  const [thread, setThread] = useState<
-    { id: string; conteudo: string; criado_em: string; autor: { id: string; nome: string | null } }[]
-  >([]);
+  // Resposta é feedback, e usa o tipo de feedback. Havia uma forma própria
+  // declarada aqui para a mesma linha de banco que a trilha já lê como
+  // `FeedbackItem` — duas formas para a mesma coisa divergem.
+  const [thread, setThread] = useState<FeedbackItem[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
 
   async function loadThread() {
@@ -375,7 +377,7 @@ function FeedbackDetail({
             {thread.map((r) => (
               <div key={r.id} className="rounded-md border p-2.5">
                 <p className="text-[11px] text-muted-foreground">
-                  {r.autor?.nome ?? 'Usuário'} · {formatDateTime(r.criado_em)}
+                  {r.autor_nome ?? 'Usuário'} · {formatDateTime(r.criado_em)}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{r.conteudo}</p>
               </div>

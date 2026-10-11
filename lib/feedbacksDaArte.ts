@@ -1,5 +1,6 @@
 // lib/feedbacksDaArte.ts
 import { api, apiUpload } from '@/lib/api'
+import { paraFeedbackItem, type FeedbackItem } from '@/components/viewer/types'
 
 /**
  * Comentar e responder, falando DIRETO com o backend.
@@ -80,19 +81,16 @@ export async function enviarComentarioDeAudio({
   return (res as any)?.data ?? res
 }
 
-/** O backend devolve criadoEm/autor; a tela lê criado_em/autor. */
-export function normalizarResposta(r: any) {
-  return {
-    id: r?.id,
-    conteudo: r?.conteudo ?? '',
-    criado_em: r?.criadoEm ?? r?.criado_em ?? '',
-    autor: {
-      id: r?.autor?.id ?? r?.autorId ?? '',
-      nome: r?.autor?.nome ?? 'Usuário',
-      avatar: r?.autor?.avatar ?? null,
-    },
-  }
-}
+/*
+ * Resposta é feedback, e usa o tipo de feedback.
+ *
+ * Havia um `normalizarResposta` com forma própria (`autor` aninhado, sem
+ * `tipo`, sem `status`) para a mesma linha de banco que a trilha já lia como
+ * `FeedbackItem`. Duas formas para a mesma coisa divergem — foi assim que
+ * `FeedbackItem` ganhou um `status: 'PENDENTE'` que não existia na união, e
+ * `Aprovacao` acabou declarada duas vezes. Com uma forma só, a resposta pode
+ * entrar na trilha sem tradutor no meio.
+ */
 
 /**
  * A thread de um feedback.
@@ -101,7 +99,7 @@ export function normalizarResposta(r: any) {
  * 20240106000000_feedback_threads), então ler a thread é ler o pai: o
  * `GET /feedbacks/:id` já traz `respostas`.
  */
-export async function listarRespostas(feedbackId: string) {
+export async function listarRespostas(feedbackId: string): Promise<FeedbackItem[]> {
   /*
    * `redirecionarNo401: false` porque esta leitura é OPCIONAL numa página
    * cuja leitura é pública.
@@ -121,18 +119,43 @@ export async function listarRespostas(feedbackId: string) {
       `/feedbacks/${encodeURIComponent(feedbackId)}`,
       { redirecionarNo401: false },
     )
-    return ((res as any)?.data?.respostas ?? []).map(normalizarResposta)
+    return ((res as any)?.data?.respostas ?? []).map(paraFeedbackItem)
   } catch {
     return []
   }
 }
 
-export async function responder(feedbackId: string, conteudo: string) {
+/**
+ * Responder — pelas duas portas, como comentar.
+ *
+ * Com token vai por `/links/:token/feedbacks` com `parentId`: o token
+ * autoriza a CONVERSA daquela arte, não só a primeira mensagem, e respeita o
+ * `somenteLeitura` do link como comentar já respeitava. Antes só existia a
+ * porta de sessão, que exige vínculo com o projeto — então o designer
+ * respondia "vou clarear na v2" e quem recebeu o link não tinha como dizer
+ * "não era isso". O laço que o produto existe para fechar morria aí.
+ *
+ * Pelo token a arte sai do próprio token, então não há a consulta ao pai: é
+ * uma requisição em vez de duas, e uma a menos para dar errado.
+ */
+export async function responder(
+  feedbackId: string,
+  conteudo: string,
+  token = '',
+): Promise<FeedbackItem> {
   const texto = String(conteudo ?? '').trim()
   if (!texto) throw new Error('Conteúdo vazio.')
 
-  // `arteId` sai do próprio pai — a resposta vive na mesma arte, e o backend
-  // recusa `parentId` de outra arte.
+  if (token) {
+    const res = await api.post<{ data?: any }>(
+      `/links/${encodeURIComponent(token)}/feedbacks`,
+      { conteudo: texto.slice(0, 2000), tipo: 'TEXTO', parentId: feedbackId },
+    )
+    return paraFeedbackItem((res as any)?.data ?? res)
+  }
+
+  // Sem token, `arteId` sai do próprio pai — a resposta vive na mesma arte, e
+  // o backend recusa `parentId` de outra arte.
   const paiRes = await api.get<{ data?: any }>(`/feedbacks/${encodeURIComponent(feedbackId)}`)
   const pai = (paiRes as any)?.data
   const arteId = pai?.arte?.id ?? pai?.arteId
@@ -144,5 +167,5 @@ export async function responder(feedbackId: string, conteudo: string) {
     arteId,
     parentId: feedbackId,
   })
-  return normalizarResposta((res as any)?.data ?? res)
+  return paraFeedbackItem((res as any)?.data ?? res)
 }

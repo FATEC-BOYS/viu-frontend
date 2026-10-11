@@ -54,15 +54,17 @@ import { useAudioRecorder, formatElapsed } from "./hooks/useAudioRecorder";
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-export type Reply = {
-  id: string;
-  feedback_id: string;
-  autor: { id: string; nome: string | null };
-  conteudo: string;
-  tipo: "TEXTO" | "AUDIO";
-  arquivo: string | null;
-  criado_em: string;
-};
+/*
+ * Resposta é feedback, e usa `FeedbackItem`.
+ *
+ * Havia um `Reply` com forma própria — `autor` aninhado, `feedback_id` em vez
+ * de `parent_id` — para a mesma linha de banco que a trilha já lia como
+ * `FeedbackItem`. Com duas formas, a resposta precisava de tradutor para
+ * entrar na trilha, e por isso nunca entrou: ela ficava num balde à parte,
+ * carregado por uma requisição própria. Com uma forma só, a resposta que já
+ * vem no preview do link pode ser aninhada sem traduzir nada.
+ */
+export type Reply = FeedbackItem;
 
 
 
@@ -226,7 +228,19 @@ export default function FeedbackViewer({
   const translateStart = useRef({ x: 0, y: 0 });
 
   // Replies per feedback
-  const [replies, setReplies] = useState<Record<string, Reply[]>>({});
+  /*
+   * As respostas vivem na MESMA lista dos comentários, não num balde à parte.
+   *
+   * Havia os dois: `feedbacks` (que já trazia as respostas, vindas do
+   * preview) e um `replies` por pai, preenchido por requisição. Com duas
+   * fontes, a vazia ganhava — expandir uma thread sem respostas gravava `[]`
+   * no balde, e `[] ?? agrupado` devolve `[]`, então a resposta enviada
+   * depois não aparecia. Uma lista só, e `respostasPorPai` deriva dela.
+   *
+   * O conjunto abaixo é só memória de "já perguntei por esta thread", para
+   * não repetir a requisição a cada abre-e-fecha.
+   */
+  const threadsBuscadas = useRef<Set<string>>(new Set());
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyLoading, setReplyLoading] = useState<Record<string, boolean>>({});
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
@@ -385,10 +399,40 @@ export default function FeedbackViewer({
     setCommentMode(!commentModeActive);
   }
 
+  /*
+   * As respostas que já vieram na lista, agrupadas por pai.
+   *
+   * O preview do link devolve TODOS os feedbacks públicos da arte sem separar
+   * resposta de comentário, então a resposta sempre chegou — e, sem este
+   * agrupamento, entrava na trilha como comentário solto. Pior: a lista vem
+   * ordenada por mais recente, então a resposta aparecia ACIMA do comentário
+   * que respondia. Medido no link: "Boa, vou clarear na v2" em cima de "O
+   * azul do fundo ficou pesado", sem nada ligando os dois.
+   *
+   * Agrupar aqui também significa que no fluxo do token a thread não precisa
+   * de requisição nenhuma: ela já está na mão.
+   */
+  const respostasPorPai = useMemo(() => {
+    const porPai: Record<string, FeedbackItem[]> = {};
+    for (const f of feedbacks) {
+      if (!f.parent_id) continue;
+      (porPai[f.parent_id] ??= []).push(f);
+    }
+    // Dentro da thread a ordem é cronológica: conversa se lê de cima para
+    // baixo, ao contrário da trilha, que mostra o mais recente primeiro.
+    for (const lista of Object.values(porPai)) {
+      lista.sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+    }
+    return porPai;
+  }, [feedbacks]);
+
   /* — Filtered feedbacks — */
   const visibleFeedbacks = useMemo(() => {
-    if (showResolved) return feedbacks;
-    return feedbacks.filter((f) => f.status !== "RESOLVIDO");
+    // Só o nível de cima: resposta aparece dentro da thread do pai, não ao
+    // lado dele.
+    const raiz = feedbacks.filter((f) => !f.parent_id);
+    if (showResolved) return raiz;
+    return raiz.filter((f) => f.status !== "RESOLVIDO");
   }, [feedbacks, showResolved]);
 
   const positionedFeedbacks = visibleFeedbacks.filter(
@@ -609,9 +653,18 @@ export default function FeedbackViewer({
 
   /* — Thread / replies — */
   async function loadReplies(feedbackId: string) {
+    threadsBuscadas.current.add(feedbackId);
     try {
-      const data = await listarRespostas(feedbackId);
-      setReplies((prev) => ({ ...prev, [feedbackId]: Array.isArray(data) ? data : [] }));
+      const vindas = await listarRespostas(feedbackId);
+      if (!Array.isArray(vindas) || vindas.length === 0) return;
+      // Entram na lista única, sem duplicar o que já estava nela.
+      setFeedbacks((atuais) => {
+        const conhecidos = new Set(atuais.map((f) => f.id));
+        const novas = vindas
+          .filter((r) => !conhecidos.has(r.id))
+          .map((r) => ({ ...r, parent_id: r.parent_id ?? feedbackId }));
+        return novas.length ? [...atuais, ...novas] : atuais;
+      });
     } catch {}
   }
 
@@ -622,7 +675,30 @@ export default function FeedbackViewer({
         next.delete(feedbackId);
       } else {
         next.add(feedbackId);
-        if (!replies[feedbackId]) loadReplies(feedbackId);
+        /*
+         * Pular a busca é decisão da ORIGEM, não de já ter alguma resposta na
+         * mão.
+         *
+         * Pelo link a lista é completa: o preview devolve todos os feedbacks
+         * públicos da arte, sem teto e sem separar resposta de comentário.
+         * Buscar de novo ali seria pedir o que já está na mão, por uma rota
+         * de sessão que o visitante do link nem pode usar — ela responde 403.
+         *
+         * Pela conta a lista é outra coisa: `GET /feedbacks?arteId=` devolve
+         * só as raízes (o backend filtra `parentId: null`) e é paginada. Ter
+         * uma resposta na mão ali não significa ter a thread inteira, então a
+         * busca precisa acontecer.
+         *
+         * A condição foi `!respostasPorPai[feedbackId]`, o que dava no mesmo
+         * HOJE — sem respostas na lista de sessão, ela nunca suprimia nada.
+         * Mas amarrava a correção desta tela a um filtro do servidor que
+         * nada aqui menciona: bastaria `listFeedbacks` passar a devolver
+         * respostas para a thread começar a mostrar um subconjunto velho, sem
+         * nunca mais buscar. Decidir pela origem não depende disso.
+         */
+        if (!token && !threadsBuscadas.current.has(feedbackId)) {
+          loadReplies(feedbackId);
+        }
       }
       return next;
     });
@@ -633,9 +709,17 @@ export default function FeedbackViewer({
     if (!text) return;
     try {
       setReplyLoading((p) => ({ ...p, [feedbackId]: true }));
-      await responder(feedbackId, text);
+      // `token` manda pela porta do link quando é por link: ali a resposta é
+      // autorizada pelo token, como o comentário já era.
+      const criada = await responder(feedbackId, text, token);
       setReplyText((p) => ({ ...p, [feedbackId]: "" }));
-      await loadReplies(feedbackId);
+      /*
+       * Entra na MESMA lista dos comentários, com `parent_id` — é o que faz
+       * ela aparecer aninhada sem recarregar, e é o que o preview devolveria
+       * no próximo carregamento. Recarregar a thread pela rota de sessão
+       * falharia justamente para quem veio pelo link.
+       */
+      setFeedbacks((f) => [...f, { ...criada, parent_id: criada.parent_id ?? feedbackId }]);
     } catch {
       toast.error("Erro ao enviar resposta.");
     } finally {
@@ -1052,7 +1136,7 @@ export default function FeedbackViewer({
                 const isActive = activeFeedback === fb.id;
                 const isResolved = fb.status === "RESOLVIDO";
                 const isExpanded = expandedThreads.has(fb.id);
-                const fbReplies = replies[fb.id] || [];
+                const fbReplies = respostasPorPai[fb.id] ?? [];
                 const initials = getInitials(fb.autor_nome, fb.autor_email);
                 const color = avatarColor(fb.autor_email || fb.autor_nome || fb.id);
 
@@ -1177,7 +1261,7 @@ export default function FeedbackViewer({
                         )}
                         {fbReplies.map((r) => (
                           <div key={r.id} className="text-xs">
-                            <span className="font-medium">{r.autor?.nome ?? "—"}</span>
+                            <span className="font-medium">{r.autor_nome ?? "—"}</span>
                             <span className="text-muted-foreground ml-1.5" suppressHydrationWarning>
                               {new Date(r.criado_em).toLocaleString()}
                             </span>
