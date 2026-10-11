@@ -6,7 +6,8 @@ import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { clientesApi, type Cliente, type ProjetoDoCliente } from "@/lib/clientes";
+import { clientesApi, prazoEmAberto, type Cliente } from "@/lib/clientes";
+import { telefoneLegivel } from "@/lib/whatsapp";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -37,9 +38,18 @@ import ClienteWizard from "@/components/clientes/ClienteWizard";
 
 /* ============================== Helpers ============================== */
 const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"] as const;
-type Mode = "cards" | "board" | "calendar";
+/*
+ * A aba "Calendário" saiu.
+ *
+ * Ela não era um calendário: `calendarItems` achatava todo projeto com prazo
+ * numa lista ordenada por data, sem mês, sem marcar hoje e sem dizer o que já
+ * tinha vencido. `/prazos`, dois itens acima na barra lateral, faz isso e faz
+ * mais — agrupa em Atrasado / Hoje / Esta semana e pinta o atraso. Manter uma
+ * segunda superfície pior para a mesma pergunta só criava mais um lugar onde
+ * o atraso podia ficar mudo.
+ */
+type Mode = "cards" | "board";
 type StatusFiltro = "todos" | "vinculado" | "rompido";
-const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
 const formatBRLFromCents = (v?: number | null) =>
   typeof v === "number"
     ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v / 100)
@@ -73,9 +83,9 @@ function ClienteCard({
   const concluidos = c.projetos.filter((p) => p.status === "CONCLUIDO").length;
   const ativos = c.projetos.filter((p) => p.status === "EM_ANDAMENTO").length;
   const orcamentoTotal = c.projetos.reduce((acc, p) => acc + (p.orcamento || 0), 0);
-  const proxPrazo = c.projetos
-    .filter((p) => p.prazo && p.status === "EM_ANDAMENTO")
-    .sort((a, b) => new Date(a.prazo!).getTime() - new Date(b.prazo!).getTime())[0];
+  /* Quem decide qual prazo mostrar, e se ele passou, é `lib/clientes` — a
+     mesma função que a tela de detalhe usa. Ver o comentário de lá. */
+  const prazo = prazoEmAberto(c.projetos);
 
   return (
     <div className={`border rounded-lg p-3 card-interativo ${selected ? "ring-2 ring-primary" : ""}`}>
@@ -112,18 +122,30 @@ function ClienteCard({
                   </Badge>
                 )}
               </div>
-              {/* O telefone era `shrink-0` e comia o e-mail, que virava
-                  "clie…". Os dois encolhem, e o e-mail vem primeiro porque é
-                  por ele que se procura alguém. */}
-              <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              {/*
+                * E-mail e telefone, um por linha.
+                *
+                * Lado a lado eles dividiam ~250px dentro de um cartão de 367px
+                * e os DOIS eram cortados — medido: e-mail 104px de 125px,
+                * telefone 60px de 73px. Nenhum dos dois ficava legível, e são
+                * os dois caminhos para falar com a pessoa, que é para o que
+                * esta tela serve. Empilhados cada um tem a largura inteira; o
+                * cartão cresce uma linha, que é barato perto de um e-mail que
+                * não dá para ler.
+                */}
+              <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
                 <span className="flex min-w-0 items-center gap-1">
                   <Mail className="h-3 w-3 shrink-0" />
                   <span className="truncate" title={c.email}>{c.email}</span>
                 </span>
                 {c.telefone && (
-                  <span className="hidden min-w-0 items-center gap-1 sm:flex">
+                  <span className="flex min-w-0 items-center gap-1">
                     <Phone className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{c.telefone}</span>
+                    {/* O `title` que o e-mail já tinha: os dois são cortados
+                        nesta linha, e os dois são para onde se liga. */}
+                    <span className="truncate" title={telefoneLegivel(c.telefone)}>
+                      {telefoneLegivel(c.telefone)}
+                    </span>
                   </span>
                 )}
               </div>
@@ -164,12 +186,25 @@ function ClienteCard({
           número — lia-se "OrçamentoR$ 8.000,00" — e "Próximo prazo" quebrava
           em duas linhas para caber. */}
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+        {/*
+          * "Atrasado" em vermelho quando passou.
+          *
+          * A data sozinha não decide nada: "01/10/2025" tinha a mesma cara de
+          * um prazo que vence mês que vem, e esta é a tela onde se varre a
+          * carteira para escolher quem cobrar hoje. O rótulo carrega o estado
+          * porque a frase por extenso ("atrasado há 375 dias") não cabe ao
+          * lado do orçamento — e, ao abrir o cliente, é ela que aparece.
+          */}
         <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+          <span
+            className={`flex min-w-0 items-center gap-1 ${prazo?.atrasado ? "text-destructive" : "text-muted-foreground"}`}
+          >
             <Calendar className="h-3 w-3 shrink-0" />
-            <span className="truncate">Prazo</span>
+            <span className="truncate">{prazo?.atrasado ? "Atrasado" : "Prazo"}</span>
           </span>
-          <span className="shrink-0 font-medium">{formatDate(proxPrazo?.prazo || null)}</span>
+          <span className={`shrink-0 font-medium ${prazo?.atrasado ? "text-destructive" : ""}`}>
+            {prazo?.dia ?? "—"}
+          </span>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-muted-foreground">Orçamento</span>
@@ -336,17 +371,6 @@ export default function ClientesPage() {
     } finally { setSelected({}); setSelectMode(false); }
   };
 
-  // calendar items
-  const calendarItems = useMemo(() => {
-    const items: { when: number; label: string; cliente: Cliente; projeto: ProjetoDoCliente }[] = [];
-    filtered.forEach((c) => {
-      c.projetos.forEach((p) => {
-        if (p.prazo) items.push({ when: new Date(p.prazo).getTime(), label: p.nome, cliente: c, projeto: p });
-      });
-    });
-    return items.sort((a, b) => a.when - b.when);
-  }, [filtered]);
-
   // loading / error
   if (loading) {
     return (
@@ -411,7 +435,6 @@ export default function ClientesPage() {
             <TabsList>
               <TabsTrigger value="cards">Cards</TabsTrigger>
               <TabsTrigger value="board">Board</TabsTrigger>
-              <TabsTrigger value="calendar">Calendário</TabsTrigger>
             </TabsList>
           </Tabs>
           <Button onClick={() => setOpenClienteWizard(true)}>
@@ -563,25 +586,6 @@ export default function ClientesPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="calendar" className="mt-0">
-          {calendarItems.length === 0 ? (
-            <div className="p-10 text-center text-sm text-muted-foreground">Sem prazos para mostrar.</div>
-          ) : (
-            <div className="space-y-2">
-              {calendarItems.map((it, i) => (
-                <div key={i} className="border rounded-md p-2 flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{it.projeto.nome}</p>
-                    <p className="text-xs text-muted-foreground truncate">{it.cliente.nome} • {formatDate(new Date(it.when).toISOString())}</p>
-                  </div>
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={`/projetos/${it.projeto.id}`}>Abrir</Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
       </Tabs>
 
       {/* Wizard de cliente */}

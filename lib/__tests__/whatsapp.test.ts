@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateWhatsAppLink, normalizarTelefone, montarMensagem } from '../whatsapp'
+import { generateWhatsAppLink, normalizarTelefone, telefoneLegivel, montarMensagem } from '../whatsapp'
 
 const BASE = {
   projectName: 'Campanha de Verão',
@@ -90,5 +90,40 @@ describe('montarMensagem', () => {
 
   it('não deixa o texto quebrado quando o projeto vem sem nome', () => {
     expect(montarMensagem('   ', 'https://x.y/z')).toContain('*seu projeto*')
+  })
+})
+
+describe('telefoneLegivel', () => {
+  it('escreve celular e fixo como se lê', () => {
+    expect(telefoneLegivel('11987654321')).toBe('(11) 98765-4321')
+    expect(telefoneLegivel('1138765432')).toBe('(11) 3876-5432')
+  })
+
+  it('tira o código do país antes de formatar', () => {
+    expect(telefoneLegivel('5511987654321')).toBe('(11) 98765-4321')
+  })
+
+  /*
+   * A mesma regra de `normalizarTelefone`: decide pelo TAMANHO. DDD 55 existe
+   * (Santa Maria/RS), então `5599998888` é um fixo local de 10 dígitos e o
+   * "55" ali é o DDD — não o código do país.
+   */
+  it('não confunde o DDD 55 com código do país', () => {
+    expect(telefoneLegivel('5599998888')).toBe('(55) 9999-8888')
+  })
+
+  it('aceita o que já vem pontuado', () => {
+    expect(telefoneLegivel('(11) 98765-4321')).toBe('(11) 98765-4321')
+  })
+
+  /*
+   * Número com quantidade de dígitos que não reconhecemos volta como veio.
+   * Inventar um traço esconderia o que a pessoa cadastrou, e é por este campo
+   * que se liga para o cliente — vê-lo estranho é o aviso de que está errado.
+   */
+  it('devolve cru o que não sabe formatar, em vez de inventar', () => {
+    expect(telefoneLegivel('123')).toBe('123')
+    expect(telefoneLegivel('')).toBe('')
+    expect(telefoneLegivel('ramal 4021')).toBe('ramal 4021')
   })
 })

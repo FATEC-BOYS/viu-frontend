@@ -32,6 +32,30 @@ export function normalizarTelefone(telefone: string): string | null {
   return null
 }
 
+/**
+ * O mesmo telefone, escrito como se lê.
+ *
+ * Mora aqui, e não numa terceira casa, porque é a mesma pergunta que
+ * `normalizarTelefone` responde — quantos dígitos este número tem e o que eles
+ * significam — e duas respostas separadas para isso divergem com o tempo. A
+ * decisão continua sendo pelo TAMANHO, nunca pelo prefixo: DDD 55 existe.
+ *
+ * Quando o formato não é reconhecido, devolve o que veio. Um número com a
+ * quantidade errada de dígitos ainda é o que o cliente cadastrou, e escondê-lo
+ * atrás de um traço inventado é pior do que mostrá-lo cru: é por ele que se
+ * liga para a pessoa.
+ */
+export function telefoneLegivel(telefone: string): string {
+  const d = telefone.replace(/\D/g, '')
+  const local =
+    (d.length === 12 || d.length === 13) && d.startsWith('55') ? d.slice(2) : d
+
+  if (local.length === 11) return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+
+  return telefone
+}
+
 /** Só http(s) vira link clicável — bloqueia `javascript:` e afins. */
 function urlDeRevisaoValida(url: string): boolean {
   try {
