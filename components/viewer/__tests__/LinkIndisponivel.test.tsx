@@ -65,3 +65,43 @@ describe('a tela de link que não abre', () => {
     expect(screen.getByText(/não encontramos/i)).toBeInTheDocument()
   })
 })
+
+/*
+ * "O link está ruim" e "nós falhamos" não podem sair iguais.
+ *
+ * Qualquer falha virava `NAO_ENCONTRADO`, e o cliente lia que o endereço
+ * estava errado. Ele então cobrava um link novo de quem já tinha mandado o
+ * certo, o designer parecia desleixado por um erro nosso, e nenhum dos dois
+ * ficava sabendo que houve erro — do outro lado, parecia um link vencido
+ * comum.
+ */
+describe('falha nossa não pode parecer link ruim', () => {
+  it('não acusa o link nem manda cobrar quem enviou', () => {
+    render(<LinkIndisponivel motivo="FALHA_TEMPORARIA" />)
+
+    expect(screen.getByText(/não conseguimos abrir/i)).toBeInTheDocument()
+    expect(screen.queryByText(/não encontramos esta arte/i)).not.toBeInTheDocument()
+    // O conselho dos outros motivos é sempre "peça outro a quem enviou", e
+    // aqui ele seria errado: o link está bom.
+    expect(screen.queryByText(/peça (um link novo|outro)/i)).not.toBeInTheDocument()
+  })
+
+  it('diz de quem é o problema, para o designer não levar a culpa', () => {
+    render(<LinkIndisponivel motivo="FALHA_TEMPORARIA" />)
+    expect(screen.getByText(/do nosso lado/i)).toBeInTheDocument()
+  })
+
+  it('oferece insistir — o único motivo em que isso resolve', () => {
+    render(<LinkIndisponivel motivo="FALHA_TEMPORARIA" tentarEm="/l/abc123" />)
+    const botao = screen.getByRole('link', { name: /tentar de novo/i })
+    expect(botao.getAttribute('href')).toBe('/l/abc123')
+  })
+
+  it('nos outros motivos, insistir não aparece: não adiantaria', () => {
+    for (const motivo of ['EXPIRADO', 'REVOGADO', 'LIMITE_ATINGIDO', 'NAO_ENCONTRADO'] as const) {
+      const { unmount } = render(<LinkIndisponivel motivo={motivo} tentarEm="/l/abc123" />)
+      expect(screen.queryByRole('link', { name: /tentar de novo/i })).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+})
