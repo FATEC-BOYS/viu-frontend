@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { recadoDoCliente, type ProjetoDoCliente } from '../clientes';
+import { recadoDoCliente, prazoEmAberto, type ProjetoDoCliente } from '../clientes';
 
 /**
  * A frase substitui cinco cartões de número, um quadro de "Bandeiras & riscos"
@@ -27,6 +27,27 @@ function projeto(over: Partial<ProjetoDoCliente> = {}): ProjetoDoCliente {
     criado_em: dias(-30),
     ...over,
   };
+}
+
+/**
+ * Roda a mesma asserção nos dois fusos que importam.
+ *
+ * O container roda em UTC e o produto roda no Brasil. Foi essa diferença que
+ * escondeu o bug: no cartão, `2025-10-01T00:00:00Z` aparecia como 01/10 aqui e
+ * como 30/09 em São Paulo — todo prazo um dia antes, todo atraso um dia a
+ * mais, para todo usuário brasileiro. Uma asserção que só roda em UTC não teria
+ * visto, e é por isso que este arquivo troca o fuso de propósito.
+ */
+function nosDoisFusos(f: (fuso: string) => void) {
+  const original = process.env.TZ;
+  try {
+    for (const fuso of ['UTC', 'America/Sao_Paulo']) {
+      process.env.TZ = fuso;
+      f(fuso);
+    }
+  } finally {
+    process.env.TZ = original;
+  }
 }
 
 beforeEach(() => {
@@ -88,5 +109,97 @@ describe('recadoDoCliente', () => {
     expect(recadoDoCliente([projeto({ prazo: '2026-09-12T09:00:00.000Z' })])).toBe(
       'Próxima entrega: Site, hoje.',
     );
+  });
+
+  /*
+   * O caso acima passava por sorte: às 09:00 UTC o instante ainda cai no dia
+   * certo em São Paulo. Mas o backend guarda prazo à MEIA-NOITE — é assim que
+   * os dados reais são — e aí `2026-09-12T00:00:00Z` vira 21h de 11/09 no
+   * Brasil, menor que a meia-noite de hoje. O prazo que vence HOJE era
+   * anunciado como vencido, para quem usa o produto e não para quem roda os
+   * testes.
+   */
+  it('nem quando o prazo de hoje chega à meia-noite, em qualquer fuso', () => {
+    nosDoisFusos((fuso) => {
+      expect(recadoDoCliente([projeto({ prazo: '2026-09-12T00:00:00.000Z' })]), fuso).toBe(
+        'Próxima entrega: Site, hoje.',
+      );
+    });
+  });
+});
+
+describe('prazoEmAberto', () => {
+  it('cala quando não há projeto, ou nenhum tem prazo', () => {
+    expect(prazoEmAberto([])).toBeNull();
+    expect(prazoEmAberto([projeto()])).toBeNull();
+  });
+
+  it('mostra o prazo mais próximo entre os que ainda não acabaram', () => {
+    const r = prazoEmAberto([
+      projeto({ id: 'b', prazo: dias(10) }),
+      projeto({ id: 'a', prazo: dias(3) }),
+    ]);
+    expect(r?.atrasado).toBe(false);
+    expect(r?.dia).toBe('15/09/2026');
+  });
+
+  it('diz que passou quando passou', () => {
+    expect(prazoEmAberto([projeto({ prazo: dias(-375) })])?.atrasado).toBe(true);
+  });
+
+  it('não chama de atrasado o que vence hoje', () => {
+    expect(prazoEmAberto([projeto({ prazo: '2026-09-12T00:00:00.000Z' })])?.atrasado).toBe(false);
+  });
+
+  it('ignora o concluído, mesmo com prazo no passado', () => {
+    expect(prazoEmAberto([projeto({ status: 'CONCLUIDO', prazo: dias(-30) })])).toBeNull();
+  });
+
+  /*
+   * A divergência que motivou a função. O cartão filtrava `EM_ANDAMENTO`, e
+   * um projeto pausado com prazo estourado sumia dele — enquanto o detalhe do
+   * MESMO cliente, um clique adiante, dizia "Um projeto com o prazo vencido".
+   * Pausado não é entregue; é exatamente o que precisa de atenção.
+   */
+  it('conta o projeto pausado, como a frase do detalhe já contava', () => {
+    const pausado = [projeto({ status: 'PAUSADO', prazo: dias(-5) })];
+    expect(prazoEmAberto(pausado)?.atrasado).toBe(true);
+    expect(recadoDoCliente(pausado)).toBe('Um projeto com o prazo vencido.');
+  });
+
+  /*
+   * Cancelado guarda o prazo que tinha — nada o apaga. Tratá-lo como aberto
+   * punha um "Atrasado" vermelho num projeto que o cliente chamou de volta:
+   * cobrança de uma entrega que ninguém espera mais. `PainelDoCliente` já
+   * tirava o cancelado da lista do cliente; a regra aqui é a mesma.
+   */
+  it('não cobra entrega de projeto cancelado', () => {
+    const cancelado = [projeto({ status: 'CANCELADO', prazo: dias(-30) })];
+    expect(prazoEmAberto(cancelado)).toBeNull();
+    expect(recadoDoCliente(cancelado)).toBe('Projeto cancelado. Nada em aberto.');
+  });
+
+  it('mas o cancelado não vira entrega na contagem', () => {
+    // Encerrar de um jeito não é encerrar do outro.
+    const mistura = [
+      projeto({ id: 'a', status: 'CONCLUIDO' }),
+      projeto({ id: 'b', status: 'CANCELADO' }),
+    ];
+    expect(recadoDoCliente(mistura)).toBe('1 projeto entregue. Nada em aberto.');
+  });
+
+  /*
+   * O bug medido no navegador: mesmo projeto, 01/10 em UTC e 30/09 em São
+   * Paulo, porque o cartão fazia `new Date(iso).toLocaleDateString()`.
+   */
+  it('escreve o mesmo dia no Brasil e em UTC', () => {
+    const vistos = new Set<string>();
+    nosDoisFusos((fuso) => {
+      const r = prazoEmAberto([projeto({ prazo: '2025-10-01T00:00:00.000Z' })]);
+      expect(r?.dia, fuso).toBe('01/10/2025');
+      expect(r?.atrasado, fuso).toBe(true);
+      vistos.add(r!.dia);
+    });
+    expect(vistos.size).toBe(1);
   });
 });
