@@ -11,7 +11,27 @@ import { diasAte, formatarDia } from '@/lib/diaDeCalendario';
  * parte com regra de verdade.
  */
 
-export type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
+/*
+ * Os quatro estados que o servidor aceita — `UpdateProjetoRequestSchema` tem
+ * os quatro, e a tela do projeto tem botão para cancelar. O tipo listava três,
+ * e um tipo que descreve um mundo menor que o do servidor não protege nada:
+ * só esconde o quarto caso de quem lê o código.
+ */
+export type ProjetoStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO' | 'CANCELADO';
+
+/**
+ * Projeto encerrado: não espera entrega, qualquer que tenha sido o desfecho.
+ *
+ * Cancelado guarda o `prazo` que tinha — nada o apaga —, então perguntar só
+ * "não está concluído?" faz um projeto que foi CHAMADO DE VOLTA aparecer como
+ * atraso a cobrar. `PainelDoCliente` já tira o cancelado da lista do cliente;
+ * aqui a regra é a mesma, dita uma vez e usada pelas duas telas.
+ *
+ * Pausado fica de fora desta lista de propósito: pausado volta.
+ */
+const ENCERRADO: ReadonlySet<ProjetoStatus> = new Set(['CONCLUIDO', 'CANCELADO']);
+
+const esperaEntrega = (p: ProjetoDoCliente) => !ENCERRADO.has(p.status);
 
 export type ProjetoDoCliente = {
   id: string;
@@ -32,12 +52,15 @@ export const PINO: Record<ProjetoStatus, string> = {
   EM_ANDAMENTO: 'bg-pastel-menta',
   PAUSADO: 'bg-pastel-pessego',
   CONCLUIDO: 'bg-border',
+  // Cinza como o concluído: os dois acabaram, e a palavra ao lado diz como.
+  CANCELADO: 'bg-border',
 };
 
 export const ROTULO: Record<ProjetoStatus, string> = {
   EM_ANDAMENTO: 'em andamento',
   PAUSADO: 'pausado',
   CONCLUIDO: 'concluído',
+  CANCELADO: 'cancelado',
 };
 
 /**
@@ -53,7 +76,7 @@ export const ROTULO: Record<ProjetoStatus, string> = {
 export function recadoDoCliente(projetos: ProjetoDoCliente[]): string {
   if (projetos.length === 0) return 'Nenhum projeto ainda.';
 
-  const abertos = projetos.filter((p) => p.status !== 'CONCLUIDO');
+  const abertos = projetos.filter(esperaEntrega);
   /*
    * `diasAte` em vez de `new Date(prazo) < meia-noite local`.
    *
@@ -84,9 +107,23 @@ export function recadoDoCliente(projetos: ProjetoDoCliente[]): string {
   }
 
   if (abertos.length === 0) {
-    return projetos.length === 1
-      ? 'Projeto entregue. Nada em aberto.'
-      : `${projetos.length} projetos entregues. Nada em aberto.`;
+    /*
+     * "Entregue" conta só o que foi CONCLUÍDO. Cancelado também encerra, mas
+     * encerra do outro jeito — e chamar de entrega um projeto que o cliente
+     * chamou de volta é a mesma mentira de chamá-lo de atraso, invertida.
+     */
+    const entregues = projetos.filter((p) => p.status === 'CONCLUIDO').length;
+    if (entregues === 0) {
+      return projetos.length === 1
+        ? 'Projeto cancelado. Nada em aberto.'
+        : 'Nenhum projeto em aberto.';
+    }
+    if (entregues === projetos.length) {
+      return entregues === 1
+        ? 'Projeto entregue. Nada em aberto.'
+        : `${entregues} projetos entregues. Nada em aberto.`;
+    }
+    return `${entregues} ${entregues === 1 ? 'projeto entregue' : 'projetos entregues'}. Nada em aberto.`;
   }
   return abertos.length === 1 ? 'Um projeto em aberto, sem prazo marcado.' : `${abertos.length} projetos em aberto, sem prazo marcado.`;
 }
@@ -118,7 +155,7 @@ export type PrazoEmAberto = {
  * Agora as duas telas leem daqui, então não têm de onde divergir.
  */
 export function prazoEmAberto(projetos: ProjetoDoCliente[]): PrazoEmAberto | null {
-  const comPrazo = projetos.filter((p) => p.status !== 'CONCLUIDO' && p.prazo);
+  const comPrazo = projetos.filter((p) => esperaEntrega(p) && p.prazo);
   if (comPrazo.length === 0) return null;
 
   // O mais próximo primeiro: se algum passou, é ele quem aparece.

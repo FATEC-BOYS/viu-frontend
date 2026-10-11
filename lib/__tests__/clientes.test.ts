@@ -168,6 +168,27 @@ describe('prazoEmAberto', () => {
   });
 
   /*
+   * Cancelado guarda o prazo que tinha — nada o apaga. Tratá-lo como aberto
+   * punha um "Atrasado" vermelho num projeto que o cliente chamou de volta:
+   * cobrança de uma entrega que ninguém espera mais. `PainelDoCliente` já
+   * tirava o cancelado da lista do cliente; a regra aqui é a mesma.
+   */
+  it('não cobra entrega de projeto cancelado', () => {
+    const cancelado = [projeto({ status: 'CANCELADO', prazo: dias(-30) })];
+    expect(prazoEmAberto(cancelado)).toBeNull();
+    expect(recadoDoCliente(cancelado)).toBe('Projeto cancelado. Nada em aberto.');
+  });
+
+  it('mas o cancelado não vira entrega na contagem', () => {
+    // Encerrar de um jeito não é encerrar do outro.
+    const mistura = [
+      projeto({ id: 'a', status: 'CONCLUIDO' }),
+      projeto({ id: 'b', status: 'CANCELADO' }),
+    ];
+    expect(recadoDoCliente(mistura)).toBe('1 projeto entregue. Nada em aberto.');
+  });
+
+  /*
    * O bug medido no navegador: mesmo projeto, 01/10 em UTC e 30/09 em São
    * Paulo, porque o cartão fazia `new Date(iso).toLocaleDateString()`.
    */
