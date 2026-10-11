@@ -18,6 +18,30 @@ import ApprovalsPanel from '../ApprovalsPanel'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
+/*
+ * O painel deixou de passar pela rota do Next (`/api/arte/[id]/aprovacoes`) e
+ * fala direto com o backend: publicado, o servidor Next não tem o cookie da
+ * sessão — ele é host-only no domínio do backend — e o repasse respondia
+ * lista vazia a quem estava logada. Quem é "eu" também deixou de sair do
+ * `localStorage` e passou a vir do `AuthProvider`, pelo mesmo motivo de
+ * sempre: cache não é credencial.
+ *
+ * Estes testes dublam as duas coisas, e ganham com isso — o que importa aqui
+ * é quem a tela deixa decidir, não por qual cano ela perguntou.
+ */
+let usuarioLogado: { id: string; nome: string } | null = null
+const listarMock = vi.fn(async (_arteId?: string) => [] as any[])
+const decidirMock = vi.fn(async (..._a: unknown[]) => undefined)
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: usuarioLogado }),
+}))
+
+vi.mock('@/lib/aprovacoesDaArte', () => ({
+  listarAprovacoes: (a: string) => listarMock(a),
+  decidirAprovacao: (a: string, b: string, c: unknown) => decidirMock(a, b, c),
+}))
+
 const EU = 'cliente-1'
 
 function aprovacao(over: Record<string, unknown> = {}) {
@@ -33,21 +57,18 @@ function aprovacao(over: Record<string, unknown> = {}) {
 }
 
 function responder(aprovacoes: unknown[]) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ aprovacoes }),
-    }),
-  )
+  listarMock.mockResolvedValue(aprovacoes as any[])
 }
 
-/** Sessão é o perfil em cache — é o que `perfilEmCache()` lê. */
+/** Sessão é quem o `AuthProvider` diz que está logado. */
 function logadoComo(id: string) {
-  localStorage.setItem('viu_user', JSON.stringify({ id, nome: 'Cliente' }))
+  usuarioLogado = { id, nome: 'Cliente' }
 }
 
 beforeEach(() => {
+  usuarioLogado = null
+  listarMock.mockReset().mockResolvedValue([])
+  decidirMock.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
   vi.clearAllMocks()
 })
@@ -57,7 +78,7 @@ afterEach(() => {
   localStorage.clear()
 })
 
-const props = { arteId: 'arte1', token: 'tok123' }
+const props = { arteId: 'arte1' }
 
 describe('quem pode decidir', () => {
   it('mostra Aprovar e Pedir ajustes para o aprovador da vez', async () => {
@@ -90,15 +111,13 @@ describe('quem pode decidir', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Enviar pedido' }))
 
+    /*
+     * Pelo id DESTA linha. O painel mandava o `aprovadorId` e deixava o
+     * servidor redescobrir qual pendência era — com duas abertas na mesma
+     * arte, dava para registrar a decisão na versão errada.
+     */
     await waitFor(() => {
-      const chamada = (globalThis.fetch as any).mock.calls.find(
-        ([, init]: any[]) => init?.method === 'PATCH',
-      )
-      expect(chamada).toBeTruthy()
-      expect(JSON.parse(chamada[1].body)).toMatchObject({
-        decisao: 'REJEITADO',
-        comentario: 'o azul saiu errado',
-      })
+      expect(decidirMock).toHaveBeenCalledWith('ap1', 'REJEITADO', 'o azul saiu errado')
     })
   })
 

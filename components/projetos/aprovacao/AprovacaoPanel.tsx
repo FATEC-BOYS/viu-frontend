@@ -137,10 +137,21 @@ export default function AprovacaoPanel({
         </ul>
       )}
 
-      {/* Uma linha: "não há nada" não merece a maior caixa da tela. */}
+      {/*
+        Uma linha: "não há nada" não merece a maior caixa da tela.
+
+        O texto depende de quem lê. "Solicite a aprovação de uma arte para o
+        cliente decidir" é instrução para o designer, e era o que o CLIENTE
+        lia — mandando-o fazer algo que o servidor recusa dele, e falando
+        dele mesmo na terceira pessoa. `acoes` é a presença do botão, ou
+        seja, exatamente "esta pessoa pode pedir": a mesma condição decide
+        as duas coisas, então elas não têm como divergir.
+      */}
       {!items.length && (
         <p className="py-6 text-sm text-muted-foreground">
-          Nenhuma arte em aprovação. Solicite a aprovação de uma arte para o cliente decidir.
+          {acoes
+            ? 'Nenhuma arte em aprovação. Solicite a aprovação de uma arte para o cliente decidir.'
+            : 'Nenhuma arte em aprovação. Quando o designer pedir uma decisão, ela aparece aqui.'}
         </p>
       )}
     </div>

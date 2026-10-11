@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { rotuloFeedback } from "@/lib/rotulos";
 import { api } from "@/lib/api";
-import { podeComentar } from "@/lib/viewerApi";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 import {
@@ -39,6 +38,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import {
+  enviarComentario,
+  enviarComentarioDeAudio,
+  listarRespostas,
+  responder,
+} from "@/lib/feedbacksDaArte";
 import { paraFeedbackItem, type FeedbackItem } from "./types";
 // Reexportado porque o tipo nasceu aqui e há quem importe daqui; some
 // em runtime, então não arrasta nada do módulo cliente junto.
@@ -452,9 +457,17 @@ export default function FeedbackViewer({
 
   /* — Send text feedback — */
   async function handleAddComment() {
-    // Comentar exige conta: Feedback.autorId é obrigatório e o autor sai do
-    // token. Ler pelo link segue público.
-    if (!podeComentar()) {
+    /*
+     * Comentar exige conta: Feedback.autorId é obrigatório e o autor sai da
+     * sessão. Ler pelo link segue público.
+     *
+     * Era `podeComentar()`, que lia o `localStorage`. Cache não é credencial:
+     * vem vazio em aba anônima, com armazenamento bloqueado, e na primeira
+     * carga antes de o `AuthProvider` preencher — e aí esta guarda recusava
+     * o envio de quem estava perfeitamente logada. `temSessao` vem do
+     * provider, que pergunta ao servidor.
+     */
+    if (!temSessao) {
       toast.error("Entre na sua conta para comentar nesta arte.");
       return;
     }
@@ -463,32 +476,17 @@ export default function FeedbackViewer({
 
     try {
       setSending("text");
-      const res = await fetch("/api/feedbacks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          token,
-          arteId: arte.id,
-          tipo: "TEXTO",
-          conteudo: payload,
-          posicao_x: pin?.x ?? null,
-          posicao_y: pin?.y ?? null,
-        }),
+      // Vai direto ao backend, e não mais pela rota do Next: só o navegador
+      // tem o cookie da sessão quando a API mora em outro domínio.
+      const corpo = await enviarComentario({
+        token,
+        arteId: arte.id,
+        conteudo: payload,
+        posicaoX: pin?.x ?? null,
+        posicaoY: pin?.y ?? null,
       });
 
-      if (!res.ok) {
-        let msg = "Erro ao criar feedback.";
-        try { const j = await res.json(); msg = j?.error || msg; } catch {}
-        toast.error(msg);
-        return;
-      }
-
-      // O backend responde no envelope { message, data, success } — sem
-      // desembrulhar, o envelope inteiro entrava na lista como se fosse o
-      // feedback, e a tela morria lendo campo de um objeto que não existia.
-      const corpo = await res.json();
-      const created = paraFeedbackItem(corpo?.data ?? corpo);
+      const created = paraFeedbackItem(corpo);
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setComment("");
@@ -516,30 +514,17 @@ export default function FeedbackViewer({
   async function uploadAudioBlob(blob: Blob) {
     try {
       setSending("audio");
-      const fd = new FormData();
-      fd.append("token", token);
-      fd.append("arteId", arte.id);
-      fd.append("email", viewer!.email);
-      if (viewer!.nome) fd.append("nome", viewer!.nome!);
-      if (pin) {
-        fd.append("posicao_x", String(pin.x));
-        fd.append("posicao_y", String(pin.y));
-      }
-      fd.append("file", blob, `gravacao_${Date.now()}.webm`);
+      // `email` e `nome` iam no formulário e o backend nunca os leu — o autor
+      // sai da sessão. Saíram junto com o repasse pela rota do Next.
+      const corpo = await enviarComentarioDeAudio({
+        token,
+        arteId: arte.id,
+        audio: blob,
+        posicaoX: pin?.x ?? null,
+        posicaoY: pin?.y ?? null,
+      });
 
-      const res = await fetch("/api/feedbacks", { method: "POST", body: fd });
-      if (!res.ok) {
-        let msg = "Erro ao enviar áudio.";
-        try { const j = await res.json(); msg = j?.error || msg; } catch {}
-        toast.error(msg);
-        return;
-      }
-
-      // O backend responde no envelope { message, data, success } — sem
-      // desembrulhar, o envelope inteiro entrava na lista como se fosse o
-      // feedback, e a tela morria lendo campo de um objeto que não existia.
-      const corpo = await res.json();
-      const created = paraFeedbackItem(corpo?.data ?? corpo);
+      const created = paraFeedbackItem(corpo);
       if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
       setFeedbacks((f) => [...f, created]);
       setPin(null);
@@ -625,9 +610,7 @@ export default function FeedbackViewer({
   /* — Thread / replies — */
   async function loadReplies(feedbackId: string) {
     try {
-      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await listarRespostas(feedbackId);
       setReplies((prev) => ({ ...prev, [feedbackId]: Array.isArray(data) ? data : [] }));
     } catch {}
   }
@@ -650,12 +633,7 @@ export default function FeedbackViewer({
     if (!text) return;
     try {
       setReplyLoading((p) => ({ ...p, [feedbackId]: true }));
-      const res = await fetch(`/api/feedbacks/${feedbackId}/respostas`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conteudo: text }),
-      });
-      if (!res.ok) { toast.error("Erro ao responder."); return; }
+      await responder(feedbackId, text);
       setReplyText((p) => ({ ...p, [feedbackId]: "" }));
       await loadReplies(feedbackId);
     } catch {
@@ -1206,8 +1184,11 @@ export default function FeedbackViewer({
                             <p className="text-muted-foreground mt-0.5">{r.conteudo}</p>
                           </div>
                         ))}
-                        {/* Reply input */}
-                        {!readOnly && (
+                        {/* Reply input — responder exige conta, como comentar.
+                            Era gated só por `!readOnly`, então o visitante
+                            anônimo de um link gravável via o campo e o botão
+                            de uma ação que o servidor recusa. */}
+                        {!readOnly && temSessao && (
                           <div className="flex gap-1.5 mt-1">
                             <Input
                               className="h-7 text-xs"

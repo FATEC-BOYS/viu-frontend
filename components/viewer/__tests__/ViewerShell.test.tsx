@@ -20,6 +20,32 @@ import ViewerShell from '../ViewerShell'
  * aprovações" pelo motivo errado.
  */
 
+/*
+ * A sessão agora vem do `AuthProvider`, e não mais de um `sessaoNoServidor`
+ * passado pela página. Aquela prop era o cookie lido pelo SERVIDOR NEXT, e o
+ * cookie é host-only no domínio do backend: publicados em domínios
+ * diferentes, o servidor Next nunca o via e a resposta era sempre `false`.
+ * O provider pergunta de onde dá para perguntar — do navegador, que tem o
+ * cookie — então é ele que estes testes precisam controlar.
+ */
+let usuarioLogado: { id: string; nome: string; email: string } | null = null
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: usuarioLogado }),
+}))
+
+/*
+ * As aprovações deixaram de passar pela rota do Next e vão direto ao backend,
+ * pelo mesmo motivo: o servidor Next não tem o cookie da sessão quando a API
+ * mora em outro domínio.
+ */
+let aprovacoesDaArte: any[] = []
+
+vi.mock('@/lib/aprovacoesDaArte', () => ({
+  listarAprovacoes: async () => aprovacoesDaArte,
+  decidirAprovacao: async () => undefined,
+}))
+
 vi.mock('@/components/viewer/FeedbackViewer', () => ({
   default: ({
     aprovacoes,
@@ -55,9 +81,6 @@ function renderViewer(props: Partial<React.ComponentProps<typeof ViewerShell>> =
       versoes={[]}
       aprovacoesByVersao={{}}
       readOnly={false}
-      // O padrão dos testes é o visitante de link sem sessão; quem tem sessão
-      // passa `sessaoNoServidor` explicitamente, como a página faz.
-      sessaoNoServidor={false}
       token="tok123"
       {...props}
     />,
@@ -65,42 +88,49 @@ function renderViewer(props: Partial<React.ComponentProps<typeof ViewerShell>> =
 }
 
 /*
- * `temSessao()` só olha se a chave existe — é o cookie que manda no acesso.
- * Já `perfilEmCache()` exige `id`, e é ele que alimenta a etiqueta de quem
- * está comentando; sem o id a tela cai no genérico "com sua conta".
+ * Quem está logado, segundo o provider — que é o que o componente consulta.
+ * O e-mail importa: é ele que alimenta a etiqueta de com qual conta o
+ * comentário vai sair, e sem ele a tela cai no genérico "com sua conta".
  */
 function comSessao() {
-  localStorage.setItem(
-    'viu_user',
-    JSON.stringify({ id: 'cliente1', nome: 'Cliente', email: 'c@t.com' }),
-  )
+  usuarioLogado = { id: 'cliente1', nome: 'Cliente', email: 'c@t.com' }
 }
 
 beforeEach(() => {
+  usuarioLogado = null
+  aprovacoesDaArte = []
   localStorage.clear()
   vi.clearAllMocks()
 })
 
 afterEach(() => localStorage.clear())
 
-describe('sessão que só o servidor enxerga', () => {
+describe('quem responde se há sessão', () => {
   /*
-   * O caso que quebrava: cookie HttpOnly válido e `localStorage` vazio.
+   * O caso que quebrava em produção: pessoa logada, cookie válido no
+   * navegador, e a tela entregando a porta de login no lugar dos próprios
+   * controles.
    *
-   * Acontece em aba anônima, com armazenamento bloqueado, e — o mais comum —
-   * na primeira carga, antes de o `AuthProvider` preencher o cache. A tela
-   * lia `localStorage` uma vez e concluía "deslogado", entregando a porta de
-   * login a quem já estava dentro. E nunca mais, porque o efeito não relê.
+   * A resposta vinha do servidor Next lendo o cookie — que ele não tem, por
+   * ser host-only no domínio do backend. Quem sabe é o navegador, e é o
+   * `AuthProvider` quem pergunta por ele.
    */
-  it('dá os controles a quem o servidor diz estar logado, mesmo sem cache', () => {
-    renderViewer({ sessaoNoServidor: true })
+  it('dá os controles a quem o provider diz estar logado', () => {
+    comSessao()
+    renderViewer()
     expect(screen.getByTestId('approvals-panel')).toBeInTheDocument()
   })
 
-  it('o cache confirma a sessão, nunca a nega', () => {
-    // Sem cache e sem sessão no servidor continua sendo visitante — o `||` não
-    // pode transformar ausência de cache em sessão.
-    renderViewer({ sessaoNoServidor: false })
+  it('sem usuário no provider, continua sendo visitante', () => {
+    renderViewer()
+    expect(screen.queryByTestId('approvals-panel')).not.toBeInTheDocument()
+  })
+
+  it('não depende do localStorage: cache cheio sem sessão não vira sessão', () => {
+    // O cache é conveniência de interface, não credencial. Quem manda é o
+    // cookie, e quem o confirma é o /auth/me por trás do provider.
+    localStorage.setItem('viu_user', JSON.stringify({ id: 'x', email: 'x@t.com' }))
+    renderViewer()
     expect(screen.queryByTestId('approvals-panel')).not.toBeInTheDocument()
   })
 })
@@ -201,22 +231,13 @@ describe('link somente leitura', () => {
    */
   it('mostra a decisão pendente mesmo com o link só-leitura', async () => {
     comSessao()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          aprovacoes: [
-            { id: 'ap1', status: 'PENDENTE', versaoNumero: 2, aprovador: { id: 'cliente1' } },
-          ],
-        }),
-      }),
-    )
+    aprovacoesDaArte = [
+      { id: 'ap1', status: 'PENDENTE', versaoNumero: 2, aprovador: { id: 'cliente1' } },
+    ]
 
     renderViewer({ readOnly: true })
 
     expect(await screen.findByText(/aguarda sua decisão/i)).toBeInTheDocument()
-    vi.unstubAllGlobals()
   })
 })
 

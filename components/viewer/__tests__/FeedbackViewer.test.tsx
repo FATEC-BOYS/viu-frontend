@@ -7,6 +7,25 @@ import FeedbackViewer, { type FeedbackItem, getInitials, avatarColor, posicaoDoC
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+/*
+ * Comentar e responder deixaram de passar pelas rotas do Next
+ * (`/api/feedbacks`) e falam direto com o backend: só o navegador tem o
+ * cookie da sessão quando a API mora em outro domínio. Estes testes passam a
+ * dublar esse módulo em vez de `fetch`, e ganham com isso — o que importa
+ * aqui é o que a tela PEDE e como ela reage, não por qual cano o pedido foi.
+ */
+const enviarComentarioMock = vi.fn();
+const enviarAudioMock = vi.fn();
+const listarRespostasMock = vi.fn(async (_id?: string) => [] as any[]);
+const responderMock = vi.fn();
+
+vi.mock("@/lib/feedbacksDaArte", () => ({
+  enviarComentario: (a: any) => enviarComentarioMock(a),
+  enviarComentarioDeAudio: (a: any) => enviarAudioMock(a),
+  listarRespostas: (a: any) => listarRespostasMock(a),
+  responder: (a: any, b: any) => responderMock(a, b),
+}));
+
 // Mock sonner toast
 vi.mock("sonner", () => ({
   toast: {
@@ -116,6 +135,10 @@ const defaultProps = {
 
 beforeEach(() => {
   mockFetch.mockReset();
+  enviarComentarioMock.mockReset().mockResolvedValue({ id: "fb_novo", conteudo: "", tipo: "TEXTO" });
+  enviarAudioMock.mockReset().mockResolvedValue({ id: "fb_audio", tipo: "AUDIO" });
+  listarRespostasMock.mockReset().mockResolvedValue([]);
+  responderMock.mockReset().mockResolvedValue({ id: "r1", conteudo: "", criado_em: "", autor: { id: "", nome: "" } });
   mockStart.mockReset();
   mockStop.mockReset();
   vi.mocked(toast.success).mockReset();
@@ -233,10 +256,7 @@ describe("FeedbackViewer", () => {
       autor_email: "viewer@test.com",
     };
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(newFeedback),
-    });
+    enviarComentarioMock.mockResolvedValueOnce(newFeedback);
 
     render(<FeedbackViewer {...defaultProps} />);
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");
@@ -250,10 +270,7 @@ describe("FeedbackViewer", () => {
   });
 
   it("shows toast.error on failed submission", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve({ error: "Token expirado" }),
-    });
+    enviarComentarioMock.mockRejectedValueOnce(new Error("Token expirado"));
 
     render(<FeedbackViewer {...defaultProps} />);
     const textarea = screen.getByPlaceholderText("Escreva um comentário…");
@@ -261,7 +278,7 @@ describe("FeedbackViewer", () => {
     await userEvent.click(screen.getByText("Enviar comentário"));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Token expirado");
+      expect(toast.error).toHaveBeenCalledWith("Não foi possível enviar seu comentário.");
     });
   });
 
@@ -596,10 +613,7 @@ describe("FeedbackViewer", () => {
       autor_email: "viewer@test.com",
     };
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(newFeedback),
-    });
+    enviarComentarioMock.mockResolvedValueOnce(newFeedback);
 
     render(<FeedbackViewer {...defaultProps} />);
 
@@ -623,10 +637,9 @@ describe("FeedbackViewer", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enviar" }));
 
     await waitFor(() => {
-      const fetchCall = mockFetch.mock.calls[0];
-      const body = JSON.parse(fetchCall[1].body);
-      expect(body.posicao_x).toBeTypeOf("number");
-      expect(body.posicao_y).toBeTypeOf("number");
+      const [args] = enviarComentarioMock.mock.calls[0];
+      expect(args.posicaoX).toBeTypeOf("number");
+      expect(args.posicaoY).toBeTypeOf("number");
     });
   });
 
@@ -778,10 +791,7 @@ describe("marcação: escrever no pin e poder desistir", () => {
   });
 
   it("depois de enviar, o modo segue ligado para a próxima marcação", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ id: "fb_1", conteudo: "primeiro", tipo: "TEXTO" }),
-    });
+    enviarComentarioMock.mockResolvedValueOnce({ id: "fb_1", conteudo: "primeiro", tipo: "TEXTO" });
     render(<FeedbackViewer {...defaultProps} />);
     await userEvent.click(screen.getByText("Comentar"));
     marcar(100, 50);
@@ -795,16 +805,12 @@ describe("marcação: escrever no pin e poder desistir", () => {
   });
 
   it("o comentário recém-enviado já aparece com autor e data", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      // Como o backend responde: camelCase, autor aninhado.
-      json: () => Promise.resolve({
-        data: {
-          id: "fb_2", conteudo: "com autor", tipo: "TEXTO",
-          criadoEm: "2026-01-02T10:00:00.000Z",
-          autor: { nome: "João Santos", email: "joao@empresa.com" },
-        },
-      }),
+    // Como o backend responde: camelCase, autor aninhado. O módulo já
+    // desembrulha o envelope { data }, então o que chega aqui é o feedback.
+    enviarComentarioMock.mockResolvedValueOnce({
+      id: "fb_2", conteudo: "com autor", tipo: "TEXTO",
+      criadoEm: "2026-01-02T10:00:00.000Z",
+      autor: { nome: "João Santos", email: "joao@empresa.com" },
     });
     render(<FeedbackViewer {...defaultProps} />);
     await userEvent.type(screen.getByPlaceholderText(/escreva um comentário/i), "com autor");

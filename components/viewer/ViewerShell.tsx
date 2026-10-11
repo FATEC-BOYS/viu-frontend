@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { perfilEmCache, temSessao } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
 import BarraDecisao from "@/components/viewer/BarraDecisao";
@@ -49,18 +49,6 @@ type Props = {
   versoes: { id: string | null; numero: number; criado_em: string; status: string | null }[];
   aprovacoesByVersao: Record<string, any[]>;
   readOnly: boolean;
-  /**
-   * Se o cookie de sessão veio na requisição, segundo o servidor.
-   *
-   * Esta tela decidia isso sozinha, lendo `localStorage` uma vez num efeito de
-   * montagem. Mas o perfil em cache é conveniência de interface, não a
-   * credencial: quem manda é o cookie HttpOnly, que o JavaScript não enxerga.
-   * Com o armazenamento vazio, bloqueado, ou ainda não preenchido pelo
-   * `AuthProvider` na primeira carga, a leitura dava `false` e a pessoa logada
-   * recebia a porta de login no lugar dos próprios controles — e nunca mais,
-   * porque o efeito não relê.
-   */
-  sessaoNoServidor: boolean;
   token: string;
   /**
    * Estado da licença de uso, da cláusula 7.1 do anexo. `null` quando o projeto
@@ -73,7 +61,6 @@ export default function ViewerShell({
   arte,
   initialFeedbacks,
   readOnly,
-  sessaoNoServidor,
   token,
   licenca,
 }: Props) {
@@ -83,24 +70,28 @@ export default function ViewerShell({
    * Ler pelo link é público, mas comentar exige conta (Feedback.autorId é
    * obrigatório com FK) e aprovar exige ainda ser o cliente do projeto.
    *
-   * Começa `false` e só sobe no efeito: no servidor não há localStorage, e
-   * decidir na primeira renderização daria divergência de hidratação.
+   * Quem responde é o `AuthProvider`, e não mais um `sessaoNoServidor` vindo
+   * da página. Aquela resposta era o cookie LIDO PELO SERVIDOR NEXT — e o
+   * cookie é gravado pelo backend, que em produção mora em outro domínio.
+   * Cookie sem atributo `Domain` é host-only: o navegador só o entrega ao
+   * host que o criou, então o servidor Next NUNCA o via e a resposta era
+   * sempre `false`. Quem estava logada abria o link e recebia a porta de
+   * login no lugar dos próprios controles.
+   *
+   * O provider não tem esse problema: ele mostra o perfil em cache de
+   * imediato e confirma com `/auth/me`, que o navegador chama direto no
+   * backend — levando o cookie, porque aí o host confere. Ele começa `null`
+   * nos dois lados da hidratação, então a primeira renderização continua
+   * casando.
    */
-  // Nasce com o que o servidor sabe, em vez de `false` até um efeito rodar.
-  const [temConta, setTemConta] = useState(sessaoNoServidor);
-  const [viewer, setViewer] = useState<{ email: string; nome: string | null } | null>(null);
+  const { user } = useAuth();
+  const temConta = !!user;
+  const viewer = useMemo(
+    () => (user ? { email: user.email ?? "", nome: user.nome ?? null } : null),
+    [user],
+  );
 
   const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
-
-  useEffect(() => {
-    // O `||`, e não substituição: o cache só pode CONFIRMAR sessão, nunca
-    // negar a que o servidor viu. `temSessao` lê `localStorage`, que vem vazio
-    // em aba anônima, com armazenamento bloqueado, ou antes de o
-    // `AuthProvider` preencher — e nenhum desses casos significa deslogado.
-    setTemConta((antes) => antes || temSessao());
-    const perfil = perfilEmCache();
-    setViewer(perfil ? { email: perfil.email ?? "", nome: perfil.nome ?? null } : null);
-  }, []);
 
   /*
    * Para onde mandar quem precisa entrar — e de volta para ESTA arte.
@@ -233,7 +224,7 @@ export default function ViewerShell({
              inteira sai, em vez de existir para devolver 401. */
           aprovacoes={
             temConta ? (
-              <ApprovalsPanel key={chaveDoPainel} arteId={arte.id} token={token} />
+              <ApprovalsPanel key={chaveDoPainel} arteId={arte.id} />
             ) : null
           }
           /* Só quando é a vez de quem está olhando — caso contrário a barra

@@ -132,7 +132,6 @@ export default function GerenciarAcessosDrawer({
                   tipo="CLIENTE"
                   value={convidadoId}
                   onChange={setConvidadoId}
-                  route="/api/contacts/search"
                   placeholder="Buscar por nome ou e-mail"
                 />
                 <Button

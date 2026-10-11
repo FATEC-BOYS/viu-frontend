@@ -1,9 +1,9 @@
 // app/viewer/arte/[id]/page.tsx
-import { notFound, redirect } from 'next/navigation'
-import ViewerShell from '@/components/viewer/ViewerShell'
-import { paraFeedbackItem } from '@/components/viewer/types'
-import LinkIndisponivel from '@/components/viewer/LinkIndisponivel'
-import { backendFetch, credenciaisDaSessao } from '@/lib/serverBackend'
+import { notFound } from 'next/navigation'
+import ArteNaTela from '@/components/viewer/ArteNaTela'
+import ArtePorSessao from '@/components/viewer/ArtePorSessao'
+import LinkIndisponivel, { motivoDaResposta } from '@/components/viewer/LinkIndisponivel'
+import { backendFetch } from '@/lib/serverBackend'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,59 +15,26 @@ type Props = {
 }
 
 /**
- * A arte pela sessão — sem token nenhum.
+ * A arte por duas origens, e só uma delas cabe no servidor.
  *
- * Este endereço era exclusivo de quem tinha o link, e por isso a peça não
- * tinha endereço nenhum para quem está logado: o dashboard apontava para
- * `/artes/<id>`, que é 404, e a única porta para a arte era o WhatsApp.
+ * Por TOKEN continua aqui: `GET /preview/:token` é leitura pública, não
+ * precisa de cookie nenhum, e resolver no servidor dá a primeira pintura já
+ * com a arte — o link vai para o WhatsApp e abre em rede de celular.
  *
- * `GET /artes/:id` aplica a mesma regra de acesso do resto da API — um 200
- * aqui É a autorização. Os comentários vêm à parte porque `/preview` (que os
- * traz junto) só existe para token.
+ * Por SESSÃO saiu para o navegador. Este arquivo lia o cookie com
+ * `credenciaisDaSessao()`, e isso só podia funcionar em desenvolvimento: o
+ * cookie vem do backend sem atributo `Domain`, logo host-only, e o navegador
+ * só o entrega ao host que o criou. Local o host é o mesmo (`localhost`, e
+ * porta não conta para cookie); publicados são dois domínios, o servidor Next
+ * nunca via o cookie, e toda abertura pela conta virava `/login?next=…` —
+ * inclusive logo depois de fazer login, de novo e de novo.
  */
-async function porSessao(id: string) {
-  const auth = await credenciaisDaSessao()
-  if (!auth) redirect(`/login?next=${encodeURIComponent(`/viewer/arte/${id}`)}`)
-
-  const res = await backendFetch(`/artes/${encodeURIComponent(id)}`, { headers: { ...auth } })
-  if (res.status === 401) redirect(`/login?next=${encodeURIComponent(`/viewer/arte/${id}`)}`)
-  if (!res.ok) return null
-
-  const arte = (await res.json())?.data
-  if (!arte?.id) return null
-
-  const resFb = await backendFetch(
-    `/feedbacks?arteId=${encodeURIComponent(id)}&limit=200`,
-    { headers: { ...auth } },
-  )
-  const feedbacks = resFb.ok ? ((await resFb.json())?.data ?? []) : []
-
-  return {
-    arte,
-    feedbacks,
-    licenca: arte.licenca ?? null,
-    /*
-     * `somenteLeitura` é do LINK, e aqui não há link. A permissão de quem está
-     * na própria conta vem do acesso ao projeto — que o backend já checou para
-     * devolver esta arte. Herdar o switch de algum link faria a mesma pessoa
-     * poder ou não comentar conforme qual link o designer configurou por
-     * último.
-     */
-    somenteLeitura: false,
-  }
-}
-
 export default async function ArteViewerPage({ params, searchParams }: Props) {
   const { id } = await params
   const sp = (await searchParams) ?? {}
   const token = sp.token ?? ''
 
-  if (!token) {
-    const daSessao = await porSessao(id)
-    if (!daSessao) return notFound()
-    // Chegou aqui pela própria conta: `credenciaisDaSessao` provou o cookie.
-    return <ArteNaTela token="" d={daSessao} sessaoNoServidor />
-  }
+  if (!token) return <ArtePorSessao id={id} />
 
   let raw: any
   try {
@@ -82,131 +49,39 @@ export default async function ArteViewerPage({ params, searchParams }: Props) {
        * inexistente como a mesma coisa: nada. O cliente abria no celular, via
        * branco, e voltava para o WhatsApp dizendo "não abriu" — e cada um
        * desses casos tem um próximo passo diferente.
+       *
+       * A classificação é lista de PERMISSÃO, a mesma de `/l/[token]`: só os
+       * motivos que o backend atribui ao link acusam o link, e qualquer outra
+       * recusa — 429 do limitador, 403, 502 — cai em falha nossa. Enumerar as
+       * falhas em vez das recusas é o que fazia um link bom ser chamado de
+       * incompleto.
        */
       const corpo = await res.json().catch(() => null)
-      return (
-        <LinkIndisponivel
-          motivo={corpo?.motivo ?? 'NAO_ENCONTRADO'}
-          expiraEm={corpo?.expiraEm ?? null}
-        />
-      )
+      const motivo = motivoDaResposta(corpo)
+      if (motivo === 'FALHA_TEMPORARIA') {
+        console.error('[/viewer/arte] backend recusou sem motivo de link', {
+          status: res.status,
+          token: token.slice(0, 8),
+        })
+        return <LinkIndisponivel motivo={motivo} tentarEm={`/viewer/arte/${id}?token=${token}`} />
+      }
+      return <LinkIndisponivel motivo={motivo} expiraEm={corpo?.expiraEm ?? null} />
     }
     raw = await res.json()
   } catch {
-    // Rede fora, backend fora: não dá para dizer o motivo, e chutar um seria
-    // pior do que o genérico.
-    return <LinkIndisponivel motivo="NAO_ENCONTRADO" />
+    // Rede fora, backend fora: o problema é nosso, e insistir é o que resolve.
+    console.error('[/viewer/arte] falha ao falar com o backend', { token: token.slice(0, 8) })
+    return (
+      <LinkIndisponivel
+        motivo="FALHA_TEMPORARIA"
+        tentarEm={`/viewer/arte/${id}?token=${token}`}
+      />
+    )
   }
 
   const d = raw.data ?? raw
   if (!d?.arte) return notFound()
   if (d.arte.id !== id) return notFound()
 
-  /*
-   * Quem abre por link pode estar logado também — o designer conferindo o que
-   * o cliente vê, o cliente que já tem conta. O cookie está na requisição e
-   * só o servidor o enxerga; perguntar aqui é a única forma de a tela saber.
-   */
-  const sessaoNoServidor = (await credenciaisDaSessao()) !== null
-
-  return <ArteNaTela token={token} d={d} sessaoNoServidor={sessaoNoServidor} />
-}
-
-/** A tela em si, alimentada por qualquer uma das duas origens. */
-function ArteNaTela({
-  token,
-  d,
-  sessaoNoServidor,
-}: {
-  token: string
-  d: any
-  /**
-   * Se o cookie de sessão veio nesta requisição, segundo o servidor.
-   *
-   * O `ViewerShell` decidia isso sozinho lendo `localStorage` uma vez, num
-   * efeito de montagem. O perfil em cache é conveniência de interface, não a
-   * credencial — quem manda é o cookie HttpOnly, que o JavaScript não vê. Com
-   * o armazenamento vazio, bloqueado, ou simplesmente ainda não preenchido
-   * pelo `AuthProvider` na primeira carga, a leitura dava `false` e a pessoa
-   * logada recebia a porta de login no lugar dos próprios controles de
-   * comentar e decidir — e nunca mais, porque o efeito não relê.
-   *
-   * O servidor já sabe. Passar o que ele sabe é mais barato e mais correto do
-   * que a tela adivinhar.
-   */
-  sessaoNoServidor: boolean
-}) {
-  const arte = d.arte
-
-  const feedbacks = (d.feedbacks ?? []).map(paraFeedbackItem)
-
-  // `canComment` nunca existiu: GET /preview/:token devolve
-  // { somenteLeitura, acessos, arte, feedbacks }. Como `!undefined` é sempre
-  // true, TODO link ficava em modo leitura — o cliente nunca conseguiu
-  // comentar por link, que é a promessa central do produto. Quem decide é o
-  // somenteLeitura do link, e o backend ja recusa feedback nele (403).
-  const readOnly = Boolean(d.somenteLeitura)
-
-  const arteForClient = {
-    id: arte.id,
-    nome: arte.nome,
-    arquivo: arte.previewUrl ?? arte.arquivo ?? '',
-    largura_px: arte.larguraPx ?? arte.largura_px ?? null,
-    altura_px: arte.alturaPx ?? arte.altura_px ?? null,
-    versao: arte.versao ?? 1,
-    status: arte.status ?? null,
-    tipo: arte.tipo ?? null,
-    projeto_id: arte.projetoId ?? arte.projeto_id ?? null,
-  }
-
-  if (!arteForClient.arquivo) {
-    /*
-     * Sem URL de exibição não há o que olhar, e este é o único caminho honesto
-     * entre mostrar a tela inteira vazia e não mostrar nada. Acontece quando a
-     * assinatura do arquivo falha — `signPath` devolve `null` e a arte existe,
-     * mas não tem por onde ser vista.
-     */
-    return (
-      <main className="flex h-[100dvh] flex-col overflow-hidden bg-background">
-        <header className="flex shrink-0 items-baseline gap-2 border-b px-4 py-2.5">
-          <h1 className="truncate text-sm font-semibold tracking-tight">{arte.nome}</h1>
-          <span className="font-mono text-xs text-muted-foreground">v{arte.versao}</span>
-        </header>
-        <div className="grid flex-1 place-items-center bg-canvas p-6 text-center">
-          <div className="max-w-sm space-y-1">
-            <p className="text-sm font-medium">Não consegui abrir esta arte</p>
-            <p className="text-sm text-muted-foreground">
-              O arquivo existe, mas o endereço de visualização não foi gerado. Recarregue a
-              página; se continuar assim, avise quem mandou o link.
-            </p>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  const versoes = [
-    {
-      id: arte.id,
-      numero: arte.versao ?? 1,
-      criado_em: arte.criadoEm ?? arte.criado_em ?? new Date().toISOString(),
-      status: arte.status ?? null,
-    },
-  ]
-
-  return (
-    <ViewerShell
-      arte={arteForClient}
-      initialFeedbacks={feedbacks}
-      versoes={versoes}
-      aprovacoesByVersao={{}}
-      readOnly={readOnly}
-      sessaoNoServidor={sessaoNoServidor}
-      token={token}
-      /* Cláusula 7.1 do anexo: quem abre o link é quem vai usar a peça, e o
-         uso só é licenciado depois da quitação. Vem calculado do backend a
-         partir das faturas do projeto. */
-      licenca={d.licenca ?? null}
-    />
-  )
+  return <ArteNaTela token={token} d={d} />
 }
