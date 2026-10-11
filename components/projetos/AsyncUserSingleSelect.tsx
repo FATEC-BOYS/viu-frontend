@@ -115,6 +115,8 @@ export default function AsyncUserSingleSelect({
   const ofereceConvite =
     Boolean(query) && !loading && options.length === 0 && EMAIL_RE.test(query);
 
+  const ancoraRef = React.useRef<HTMLDivElement>(null);
+
   return (
     <div className="space-y-2">
       {/*
@@ -135,7 +137,7 @@ export default function AsyncUserSingleSelect({
         onOpenChange={(aberto) => { if (!aberto) setOptions([]); }}
       >
         <PopoverAnchor asChild>
-          <div className="relative">
+          <div ref={ancoraRef} className="relative">
             <Input
               placeholder={placeholder ?? "Buscar cliente..."}
               value={query !== "" ? query : (displayLabel || "")}
@@ -154,6 +156,14 @@ export default function AsyncUserSingleSelect({
           // acompanhava com `w-full`. E `p-0` porque o padrão do componente
           // tem padding, que aqui viraria moldura em volta dos itens.
           className="w-[var(--radix-popover-trigger-width)] p-0"
+          // O campo é PopoverAnchor, não Trigger, então o Radix o considera
+          // "fora" do conteúdo: clicar nele para reposicionar o cursor
+          // disparava a dispensa, que zera `options` e descarta o que já
+          // tinha sido carregado. Interação dentro da âncora não é dispensa.
+          onInteractOutside={(e) => {
+            const alvo = (e.detail?.originalEvent?.target ?? null) as Node | null;
+            if (alvo && ancoraRef.current?.contains(alvo)) e.preventDefault();
+          }}
           // Sem isto o Popover rouba o foco ao abrir e a pessoa para de
           // digitar no meio da busca.
           onOpenAutoFocus={(e) => e.preventDefault()}

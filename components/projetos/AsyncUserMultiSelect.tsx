@@ -75,6 +75,8 @@ export default function AsyncUserMultiSelect({
 
   const current = value.map((v) => ({ id: v, label: v }));
 
+  const ancoraRef = React.useRef<HTMLDivElement>(null);
+
   return (
     <div className="space-y-2">
       {/* Selected items */}
@@ -110,7 +112,7 @@ export default function AsyncUserMultiSelect({
         onOpenChange={(aberto) => { if (!aberto) setOptions([]); }}
       >
         <PopoverAnchor asChild>
-          <div className="relative">
+          <div ref={ancoraRef} className="relative">
             <Input
               placeholder={placeholder ?? "Buscar..."}
               value={query}
@@ -128,6 +130,14 @@ export default function AsyncUserMultiSelect({
           // Largura da âncora, como o `w-full` de antes. `p-0` porque o
           // padrão do componente tem padding, que aqui viraria moldura.
           className="w-[var(--radix-popover-trigger-width)] p-0"
+          // O campo é PopoverAnchor, não Trigger, então o Radix o considera
+          // "fora" do conteúdo: clicar nele para reposicionar o cursor
+          // disparava a dispensa, que zera `options` e descarta o que já
+          // tinha sido carregado. Interação dentro da âncora não é dispensa.
+          onInteractOutside={(e) => {
+            const alvo = (e.detail?.originalEvent?.target ?? null) as Node | null;
+            if (alvo && ancoraRef.current?.contains(alvo)) e.preventDefault();
+          }}
           // Sem isto o Popover rouba o foco ao abrir e a pessoa para de
           // digitar no meio da busca.
           onOpenAutoFocus={(e) => e.preventDefault()}
