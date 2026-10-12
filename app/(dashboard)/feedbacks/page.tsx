@@ -62,6 +62,16 @@ type RowBase = {
   autor_tipo: AutorTipo;
   posicao_x?: number | null;
   posicao_y?: number | null;
+  /*
+   * Quantas respostas a thread já tem.
+   *
+   * Sem isto a lista não sabia se alguém tinha respondido — e o selo
+   * "Aguardando resposta" era, na verdade, `!isResolved`: uma frase sobre
+   * RESPOSTA decidida por um campo sobre RESOLUÇÃO. O painel de detalhe, na
+   * mesma tela, mostrava "1 RESPOSTA" ao lado do cartão que dizia estar
+   * aguardando.
+   */
+  respostas: number;
 };
 
 type FeedbackRow = RowBase & {
@@ -114,6 +124,7 @@ function mapFeedback(fb: any): FeedbackRow {
     autor_id: fb.autor?.id ?? '',
     autor_nome: fb.autor?.nome ?? '',
     autor_tipo: (fb.autor?.tipo ?? 'CLIENTE') as AutorTipo,
+    respostas: fb._count?.respostas ?? 0,
     audio_signed_url: fb.arquivo_url ?? null,
     preview_signed_url: fb.arte_preview_url ?? null,
   };
@@ -183,7 +194,10 @@ function ListItem({
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {!isResolved && (
+        {/* Some assim que existe qualquer resposta: a conversa começou, e o
+            cartão não tem mais por que pedir atenção como se ninguém tivesse
+            falado. Resolver continua sendo um ato à parte. */}
+        {!isResolved && fb.respostas === 0 && (
           <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
             Aguardando resposta
           </span>
@@ -252,12 +266,14 @@ function AudioInline({ src }: { src: string }) {
 }
 
 function FeedbackDetail({
-  fb, onVerNaArte, onAlternarResolvido, onCriarTarefa,
+  fb, onVerNaArte, onAlternarResolvido, onCriarTarefa, onRespondeu,
 }: {
   fb: FeedbackRow;
   onVerNaArte: (f: FeedbackRow) => void;
   onAlternarResolvido: (f: FeedbackRow) => void;
   onCriarTarefa: (f: FeedbackRow) => void;
+  /* A resposta precisa chegar à LISTA, não só a esta coluna — ver `sendReply`. */
+  onRespondeu: (id: string) => void;
 }) {
   const isResolved = fb.status === 'RESOLVIDO';
   const [reply, setReply] = useState('');
@@ -291,6 +307,16 @@ function FeedbackDetail({
       setSending(true);
       const resposta = await responder(fb.id, reply.trim());
       setThread((prev) => [...prev, resposta]);
+      /*
+       * E avisa a lista.
+       *
+       * Sem isto a resposta ficava só nesta coluna: o cartão à esquerda
+       * continuava dizendo "Aguardando resposta" ao lado da resposta que a
+       * própria tela acabara de mostrar — a mesma contradição que este
+       * conserto existe para tirar, só que durando até o próximo refetch em
+       * vez de para sempre. `moverPara` já avisa a lista assim ao resolver.
+       */
+      onRespondeu(fb.id);
       setReply('');
       toast.success('Resposta enviada!');
     } catch (e: any) {
@@ -449,7 +475,11 @@ function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; on
                   {fb.conteudo || fb.arte_nome}
                 </p>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="truncate text-[11px] text-muted-foreground">{fb.autor_nome} · {fb.projeto_nome}</span>
+                  {/* A arte, não o projeto: a Lista e o "Por dia" dizem a arte,
+                      e era ela que distinguia um cartão do outro. No quadro,
+                      três comentários sobre três peças liam todos
+                      "Identidade Visual - TechStart". */}
+                  <span className="truncate text-[11px] text-muted-foreground">{fb.autor_nome} · {fb.arte_nome}</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -687,6 +717,15 @@ function TelaFeedbacks() {
    * compartilhada pela lista, pelo painel de detalhe e pelo quadro — com o
    * mesmo desfazer otimista nos três.
    */
+  /* A contagem que o selo lê, mantida viva sem refetch — como `moverPara`
+     faz com o estado. Aqui não há rollback porque a resposta já está gravada:
+     `sendReply` só chama depois do 201. */
+  const contarResposta = (fbId: string) => {
+    setRows((prev) =>
+      prev.map((x) => (x.id === fbId ? { ...x, respostas: x.respostas + 1 } : x)),
+    );
+  };
+
   const moverPara = async (fbId: string, to: FeedbackStatus) => {
     const anterior = rows.find((r) => r.id === fbId)?.status;
     if (!anterior || anterior === to) return;
@@ -928,6 +967,7 @@ function TelaFeedbacks() {
                     onVerNaArte={handleVerNaArte}
                     onAlternarResolvido={handleAlternarResolvido}
                     onCriarTarefa={handleCriarTarefa}
+                    onRespondeu={contarResposta}
                   />
                 )}
               </div>

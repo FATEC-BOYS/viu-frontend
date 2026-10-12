@@ -202,7 +202,16 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           await Promise.allSettled([
             ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
             ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?limit=1'),
+            /*
+             * `status=ABERTO`, como todos os vizinhos aqui filtram.
+             *
+             * Sem ele o crachá contava TODO feedback já recebido e nunca
+             * baixava: resolver um não mudava o número, nem recarregando. Um
+             * crachá que não desce deixa de ser aviso e vira enfeite — e o
+             * Quadro da própria tela de Feedbacks já calculava "Aberto 2 /
+             * Resolvido 1" enquanto a barra lateral dizia 3.
+             */
+            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?status=ABERTO&limit=1'),
             // O único que todo papel exibe.
             api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
             ehCliente ? zero : api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
