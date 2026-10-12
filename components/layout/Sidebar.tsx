@@ -433,8 +433,22 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
 
         <Separator className="my-2" />
 
-        {/* Navegação */}
-        <ScrollArea className="flex-1 px-2">
+        {/*
+          Navegação — `min-h-0` junto do `flex-1`.
+
+          O `ScrollArea` já estava aqui e já pedia `overflow: scroll`, mas
+          `flex-1` sozinho não o limita: um item flex nasce com
+          `min-height: auto`, então ele cresce até caber o conteúdo em vez de
+          caber na casca. Medido: viewport de 942px dentro de uma casca de
+          600px, `scrollHeight === clientHeight`, logo nada para rolar — e o
+          rodapé da barra ficava inalcançável.
+
+          Com ~24 itens, o último ("Configurações") terminava em 1015px: em
+          qualquer janela mais baixa que isso — ou seja, todo notebook — FINANCEIRO
+          e CONTA inteiros, e o cartão da própria pessoa, ficavam fora da tela
+          sem nenhum jeito de chegar lá.
+        */}
+        <ScrollArea className="min-h-0 flex-1 px-2">
           <nav className="space-y-5">
             {navigationSections.map((section) => {
               const isCollapsedSection = sectionsCollapsed[section.title];
