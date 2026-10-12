@@ -126,8 +126,19 @@ function montarPassos(projetoId?: string): Passo[] {
        *
        * "Sem app" continua valendo e continua dito: é navegador, não há o que
        * instalar.
+       *
+       * A primeira correção desta frase ainda errava, e pelo mesmo motivo que
+       * a original: eu medi o caminho FAVORÁVEL. Criei o link com
+       * `somenteLeitura: false` e concluí que bastava entrar. O link que o
+       * produto cria nasce ao contrário — `ArteWizard` começa com
+       * `somenteLeitura = true` —, e nele nem quem entra comenta: o viewer
+       * mostra "Somente leitura" e a barra diz "toque para LER", não "para
+       * escrever". Medido nos dois links, lado a lado.
+       *
+       * Por isso a frase cita as duas condições. São duas mesmo, e a designer
+       * controla a primeira no próprio wizard.
        */
-      convite: 'O cliente abre no navegador e já vê a arte. Para comentar no ponto exato e aprovar, ele entra com a conta dele.',
+      convite: 'O cliente abre no navegador e já vê a arte. Para ele comentar no ponto exato e aprovar, libere comentários no link e peça que ele entre com a conta dele.',
       feitoTexto: 'Link enviado.',
       precisa: 'Envie uma arte primeiro.',
       icone: Share2,
