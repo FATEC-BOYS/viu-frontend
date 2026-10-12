@@ -1258,7 +1258,19 @@ export default function FeedbackViewer({
                         <p className={`text-sm whitespace-pre-wrap flex-1 ${isResolved ? "line-through" : ""}`}>
                           {fb.conteudo}
                         </p>
-                        {fb.conteudo && (
+                        {/*
+                          `temSessao` junto: ouvir exige conta.
+                          O backend pede sessão para sintetizar — custa
+                          dinheiro na conta da OpenAI. Sem esta condição, o
+                          visitante anônimo via o botão, clicava, levava 401, e
+                          o `apiBlob` tentava renovar e mandava a página
+                          INTEIRA para o login: quem só queria ouvir um
+                          comentário era expulso do link público que tinha todo
+                          o direito de estar lendo. É o mesmo acidente que já
+                          aconteceu com "Respostas", e que `listarRespostas`
+                          resolveu com `redirecionarNo401: false`.
+                        */}
+                        {fb.conteudo && temSessao && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleTTS(fb.id); }}
                             className={`shrink-0 p-1 rounded hover:bg-muted transition-colors ${

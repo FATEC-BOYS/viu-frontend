@@ -504,20 +504,34 @@ async function enviarMultipart<T>(
  * Renova uma vez e repete, como `enviarMultipart`: a sessão vencer no meio não
  * pode custar a ação, e um GET é seguro repetir.
  */
-export async function apiBlob(path: string, podeRenovar = true): Promise<Blob> {
+export async function apiBlob(
+  path: string,
+  renovacoesRestantes = ORCAMENTO_RENOVACAO,
+): Promise<Blob> {
   const res = await buscar(`${BASE_URL}${path}`, { method: 'GET', credentials: 'include' })
 
   if (!res.ok) {
     // Só aqui o corpo é lido como texto: no caminho de erro ele é JSON.
     const body = await lerCorpo(res)
     if (res.status === 401) {
-      if (!podeRenovar) {
-        irParaLogin()
-        throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+      /*
+       * O MESMO orçamento do cliente JSON, e pela mesma razão: outra aba.
+       *
+       * A primeira versão tinha um `podeRenovar` booleano — uma renovação só.
+       * Com duas abas, a aba B pode rotacionar a sessão entre a renovação da
+       * aba A e a repetição dela; aí a repetição volta 401 e, com orçamento
+       * de uma, a aba A ia direto para o login com a sessão viva. É
+       * exatamente o acidente que `ORCAMENTO_RENOVACAO` existe para evitar, e
+       * que `request` documenta logo acima.
+       */
+      if (renovacoesRestantes > 0) {
+        if (renovacoesRestantes < ORCAMENTO_RENOVACAO) esquecerRenovacao()
+        const renovacao = await renovarOuSair(true)
+        if (renovacao === 'ok') return apiBlob(path, renovacoesRestantes - 1)
+        throw erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body)
       }
-      const renovacao = await renovarOuSair(true)
-      if (renovacao === 'ok') return apiBlob(path, false)
-      throw erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body)
+      irParaLogin()
+      throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
     }
     throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
   }

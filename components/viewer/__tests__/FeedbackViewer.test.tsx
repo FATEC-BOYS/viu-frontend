@@ -743,6 +743,35 @@ describe("visitante sem sessão", () => {
   });
 
   /*
+   * E não oferece "ouvir comentário" — pela mesma regra, com uma consequência
+   * pior se oferecesse.
+   *
+   * Sintetizar custa dinheiro na conta da OpenAI, então o backend exige
+   * sessão. Com o botão visível, o visitante anônimo clicava, levava 401, e o
+   * `apiBlob` tentava renovar e mandava a página INTEIRA para o login: quem
+   * só queria ouvir era EXPULSO do link público que tinha todo o direito de
+   * estar lendo. É o mesmo acidente que já aconteceu com "Respostas".
+   *
+   * A leitura continua pública: o comentário aparece escrito, e os áudios
+   * gravados tocam normalmente — esses não passam pela síntese.
+   */
+  it("não oferece ouvir em voz alta — e por isso não expulsa ninguém da página", () => {
+    render(
+      <FeedbackViewer {...semSessao} initialFeedbacks={[baseFeedback]} />
+    );
+    expect(screen.queryByTitle("Ouvir comentário")).not.toBeInTheDocument();
+    // O texto do comentário continua lá: ler nunca dependeu de conta.
+    expect(screen.getByText("Muito bom!")).toBeInTheDocument();
+  });
+
+  it("o áudio gravado continua tocando sem conta", () => {
+    render(
+      <FeedbackViewer {...semSessao} initialFeedbacks={[audioFeedback]} />
+    );
+    expect(document.querySelector("audio")).toBeInTheDocument();
+  });
+
+  /*
    * Duas portas, e as duas voltando para esta arte.
    *
    * Só havia o login — porta para quem JÁ tem conta. Quem recebe o link no
