@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { rotuloFeedback } from "@/lib/rotulos";
-import { api } from "@/lib/api";
+import { api, apiBlob } from "@/lib/api";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 import {
@@ -44,7 +44,7 @@ import {
   listarRespostas,
   responder,
 } from "@/lib/feedbacksDaArte";
-import { paraFeedbackItem, type FeedbackItem } from "./types";
+import { paraFeedbackItem, ehAudio, type FeedbackItem } from "./types";
 // Reexportado porque o tipo nasceu aqui e há quem importe daqui; some
 // em runtime, então não arrasta nada do módulo cliente junto.
 export type { FeedbackItem };
@@ -205,7 +205,6 @@ export default function FeedbackViewer({
   const [pin, setPin] = useState<PinPosition>(null);
   const [activeFeedback, setActiveFeedback] = useState<string | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState<string | null>(null);
-  const [transcribing, setTranscribing] = useState(false);
   const [showResolved, setShowResolved] = useState(true);
   const [internalCommentMode, setInternalCommentMode] = useState(false);
   /*
@@ -550,12 +549,12 @@ export default function FeedbackViewer({
   }
 
   async function handleStopRecording() {
-    const blob = await recorder.stop();
-    if (!blob) return;
-    await uploadAudioBlob(blob);
+    const gravacao = await recorder.stop();
+    if (!gravacao) return;
+    await uploadAudioBlob(gravacao.blob, gravacao.extensao);
   }
 
-  async function uploadAudioBlob(blob: Blob) {
+  async function uploadAudioBlob(blob: Blob, extensao: string) {
     try {
       setSending("audio");
       // `email` e `nome` iam no formulário e o backend nunca os leu — o autor
@@ -564,6 +563,7 @@ export default function FeedbackViewer({
         token,
         arteId: arte.id,
         audio: blob,
+        extensao,
         posicaoX: pin?.x ?? null,
         posicaoY: pin?.y ?? null,
       });
@@ -573,7 +573,6 @@ export default function FeedbackViewer({
       setFeedbacks((f) => [...f, created]);
       setPin(null);
       toast.success("Áudio enviado!");
-      transcribeAudioFeedback(created.id, blob);
     } catch (e) {
       console.error("[FeedbackViewer] Erro ao enviar áudio:", e);
       toast.error("Não foi possível enviar o áudio.");
@@ -582,28 +581,25 @@ export default function FeedbackViewer({
     }
   }
 
-  async function transcribeAudioFeedback(feedbackId: string, blob: Blob) {
-    try {
-      setTranscribing(true);
-      const fd = new FormData();
-      fd.append("file", blob, "audio.webm");
-      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-      if (!res.ok) return;
-      const { text } = await res.json();
-      if (!text) return;
-      setFeedbacks((prev) =>
-        prev.map((f) => f.id === feedbackId ? { ...f, transcricao: text, conteudo: text } : f)
-      );
-      toast.success("Áudio transcrito automaticamente!");
-    } catch (e) {
-      console.warn("[transcribe] erro:", e);
-    } finally {
-      setTranscribing(false);
-    }
-  }
+  /*
+   * A transcrição NÃO é pedida daqui.
+   *
+   * Havia um `transcribeAudioFeedback` que, logo depois de enviar, mandava o
+   * MESMO blob para `/api/transcribe` — uma rota do Next que falava direto com
+   * a OpenAI. Só que o backend já transcreve ao receber o áudio e GRAVA o
+   * texto. Então o produto pagava o Whisper duas vezes por comentário, e a
+   * segunda transcrição era jogada fora: ela só chamava `setFeedbacks`, sem
+   * gravar nada, e desaparecia ao recarregar a página.
+   *
+   * O texto agora vem na própria resposta da criação (`transcricao`), que é o
+   * que ficou no banco. Quando não vem, a OpenAI falhou — e a tela diz isso
+   * em vez de inventar, com `GET /feedbacks/:id/transcricao` como caminho
+   * para tentar de novo.
+   */
 
   /* — TTS — */
-  const handleTTS = useCallback(async (feedbackId: string, text: string) => {
+  // Só o `id`: o texto sai do próprio comentário, no servidor.
+  const handleTTS = useCallback(async (feedbackId: string) => {
     if (ttsPlaying === feedbackId) {
       audioRef.current?.pause();
       audioRef.current = null;
@@ -612,13 +608,27 @@ export default function FeedbackViewer({
     }
     try {
       setTtsPlaying(feedbackId);
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: "nova" }),
-      });
-      if (!res.ok) { toast.error("Falha ao gerar áudio do texto."); setTtsPlaying(null); return; }
-      const audioBlob = await res.blob();
+      /*
+       * Vai ao backend, pelas mesmas duas portas de comentar.
+       *
+       * Antes isto era `fetch("/api/tts")`, uma rota do Next sem autenticação
+       * nenhuma: medido sem cookie, ela respondia 503 por falta de chave — e
+       * não 401. Com a chave configurada, qualquer pessoa na internet
+       * sintetizaria texto na conta da OpenAI da Alessandra.
+       *
+       * O backend, além de exigir sessão, GUARDA o mp3 no bucket: a segunda
+       * vez que alguém ouve o mesmo comentário não custa nada. A rota do Next
+       * sintetizava de novo a cada clique.
+       *
+       * O texto não vai mais no corpo — o backend o lê do próprio comentário,
+       * pelo `id`. Mandar o texto daqui permitiria sintetizar QUALQUER coisa
+       * por uma rota que existe para ler comentários.
+       */
+      const audioBlob = await apiBlob(
+        token
+          ? `/links/${encodeURIComponent(token)}/feedbacks/${encodeURIComponent(feedbackId)}/audio`
+          : `/feedbacks/${encodeURIComponent(feedbackId)}/audio`,
+      );
       const url = URL.createObjectURL(audioBlob);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -626,10 +636,23 @@ export default function FeedbackViewer({
       audio.play();
     } catch (e) {
       console.error("[TTS] erro:", e);
-      toast.error("Não foi possível reproduzir o áudio.");
+      /*
+       * 503 é "o recurso não está ligado", e não "deu errado".
+       *
+       * O backend responde 503 quando falta a chave da OpenAI — e a frase
+       * genérica fazia a pessoa tentar de novo, e de novo, por algo que não
+       * vai funcionar enquanto ninguém configurar. São conclusões opostas
+       * para quem lê: uma pede insistir, a outra pede avisar alguém.
+       */
+      const status = (e as { status?: number })?.status;
+      toast.error(
+        status === 503
+          ? "A leitura em voz alta ainda não está configurada."
+          : "Não foi possível reproduzir o áudio.",
+      );
       setTtsPlaying(null);
     }
-  }, [ttsPlaying]);
+  }, [ttsPlaying, token]);
 
   /* — Resolve / reopen feedback — */
   async function toggleResolve(fb: FeedbackItem) {
@@ -847,11 +870,6 @@ export default function FeedbackViewer({
                       <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
                     </span>
                   )}
-                  {transcribing && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Transcrevendo…
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Desistir precisa estar ao lado de enviar. Antes a única
@@ -986,8 +1004,18 @@ export default function FeedbackViewer({
                       <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0 ${color}`}>
                         {isResolved ? <Check className="h-3 w-3" /> : initials}
                       </div>
-                      {/* Expand on active */}
-                      {isActive && f.conteudo && f.conteudo !== "Áudio" && (
+                      {/*
+                        Expande no pino ativo.
+                        A condição era `f.conteudo !== "Áudio"`, guarda contra
+                        um valor que o produto nunca gravou: "Áudio" era o
+                        texto de EXIBIÇÃO que esta mesma tela usava quando
+                        faltava transcrição, e alguém o tomou por dado.
+                        Procurado no histórico dos dois repositórios: nenhum
+                        código jamais escreveu isso em `conteudo`. Áudio sem
+                        transcrição tem `conteudo` vazio, e `f.conteudo` já
+                        resolve isso.
+                      */}
+                      {isActive && f.conteudo && (
                         <span className="text-[10px] max-w-[120px] truncate pr-1">
                           {f.conteudo}
                         </span>
@@ -1007,7 +1035,7 @@ export default function FeedbackViewer({
                 <TooltipContent side="top" className="max-w-[200px]">
                   <p className="text-xs font-medium">{f.autor_nome || f.autor_email || "Anônimo"}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {f.tipo === "AUDIO" ? (f.transcricao || "Áudio") : (f.conteudo || "(sem texto)")}
+                    {ehAudio(f) ? (f.transcricao || "Áudio sem transcrição") : (f.conteudo || "(sem texto)")}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -1204,26 +1232,47 @@ export default function FeedbackViewer({
                     </div>
 
                     {/* Content */}
-                    {fb.tipo === "AUDIO" ? (
+                    {ehAudio(fb) ? (
                       <div className="mt-2 space-y-1.5">
                         <audio src={fb.arquivo || ""} controls className="w-full" />
-                        {(fb.transcricao || fb.conteudo) && fb.conteudo !== "Áudio" && (
-                          <div className="flex items-start gap-1.5 text-xs bg-muted/50 rounded p-2">
-                            <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                            <p className="whitespace-pre-wrap text-muted-foreground">
-                              {fb.transcricao || fb.conteudo}
-                            </p>
-                          </div>
-                        )}
+                        {/*
+                          A falta de transcrição é DITA, e não escondida.
+                          Antes, sem texto, este bloco simplesmente não
+                          aparecia — e a tela ficava igual à de um áudio que
+                          ninguém tentou transcrever. Agora que a transcrição
+                          pode falhar sem derrubar o comentário, esse é um
+                          estado normal, e calar sobre ele faz a pessoa achar
+                          que o recurso não existe.
+                        */}
+                        <div className="flex items-start gap-1.5 text-xs bg-muted/50 rounded p-2">
+                          <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                          <p className="whitespace-pre-wrap text-muted-foreground">
+                            {fb.transcricao || fb.conteudo || (
+                              <em>Áudio sem transcrição</em>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-start justify-between gap-2 mt-1">
                         <p className={`text-sm whitespace-pre-wrap flex-1 ${isResolved ? "line-through" : ""}`}>
                           {fb.conteudo}
                         </p>
-                        {fb.conteudo && (
+                        {/*
+                          `temSessao` junto: ouvir exige conta.
+                          O backend pede sessão para sintetizar — custa
+                          dinheiro na conta da OpenAI. Sem esta condição, o
+                          visitante anônimo via o botão, clicava, levava 401, e
+                          o `apiBlob` tentava renovar e mandava a página
+                          INTEIRA para o login: quem só queria ouvir um
+                          comentário era expulso do link público que tinha todo
+                          o direito de estar lendo. É o mesmo acidente que já
+                          aconteceu com "Respostas", e que `listarRespostas`
+                          resolveu com `redirecionarNo401: false`.
+                        */}
+                        {fb.conteudo && temSessao && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleTTS(fb.id, fb.conteudo); }}
+                            onClick={(e) => { e.stopPropagation(); handleTTS(fb.id); }}
                             className={`shrink-0 p-1 rounded hover:bg-muted transition-colors ${
                               ttsPlaying === fb.id ? "text-blue-500 animate-pulse" : "text-muted-foreground"
                             }`}

@@ -72,11 +72,25 @@ const baseFeedback: FeedbackItem = {
   autor_email: "joao@test.com",
 };
 
+/*
+ * `arquivo` é o endereço TOCÁVEL, e é `paraFeedbackItem` quem o resolve.
+ *
+ * As fixturas deste arquivo nasceram com `arquivo: "https://example.com/…"`,
+ * uma URL pronta — contrato que o backend NUNCA cumpriu: a coluna guarda a
+ * chave do bucket (`feedbacks/<arte>/<ts>_gravacao.webm`) e a URL assinada vem
+ * ao lado, em `arquivo_url`. Com a URL já posta na fixtura, estes testes
+ * passavam enquanto o `<audio src>` da produção apontava para
+ * `/viewer/arte/feedbacks/…` e dava 404. Foi assim que o defeito durou.
+ *
+ * As fixturas continuam tendo URL aqui porque este é o tipo DEPOIS da
+ * conversão; quem trava a conversão em si são os testes de `paraFeedbackItem`,
+ * em `types.test.ts` — que é onde o bug morava.
+ */
 const audioFeedback: FeedbackItem = {
   id: "fb_2",
   conteudo: "",
   tipo: "AUDIO",
-  arquivo: "https://example.com/audio.webm",
+  arquivo: "https://r2.exemplo/feedbacks/arte_1/123_gravacao.webm?assinado",
   status: "ABERTO",
   criado_em: "2024-06-15T15:00:00Z",
   autor_nome: "Maria",
@@ -109,7 +123,7 @@ const audioWithTranscription: FeedbackItem = {
   id: "fb_4",
   conteudo: "Texto transcrito do áudio",
   tipo: "AUDIO",
-  arquivo: "https://example.com/audio2.webm",
+  arquivo: "https://r2.exemplo/feedbacks/arte_1/124_gravacao.webm?assinado",
   transcricao: "Texto transcrito do áudio",
   status: "ABERTO",
   criado_em: "2024-06-15T17:00:00Z",
@@ -221,7 +235,35 @@ describe("FeedbackViewer", () => {
     expect(screen.getByText("Maria")).toBeInTheDocument();
     const audio = document.querySelector("audio");
     expect(audio).toBeInTheDocument();
-    expect(audio?.src).toContain("audio.webm");
+    /*
+     * O `src` é usado COMO VEIO, sem a página se meter no meio. A asserção
+     * antiga conferia só o nome do arquivo, e passaria igual com o endereço
+     * resolvido contra a origem da página — que era exatamente o bug:
+     * `localhost:3000/viewer/arte/feedbacks/…`, 404.
+     */
+    expect(audio?.src).toBe(audioFeedback.arquivo);
+  });
+
+  /*
+   * O áudio com pino: tem gravação E posição.
+   *
+   * A tela perguntava `tipo === "AUDIO"` para decidir se desenhava o player, e
+   * o backend rotulava gravação com pino como `POSICIONAL` — então o áudio
+   * mais específico que o produto sabe fazer não tinha player nenhum. Medido
+   * no link público: dois áudios na arte, UM elemento <audio> na página.
+   */
+  it("áudio com pino também tem player, mesmo com o rótulo antigo", () => {
+    const audioComPino: FeedbackItem = {
+      ...audioFeedback,
+      id: "fb_audio_pino",
+      tipo: "POSICIONAL",
+      posicao_x: 30,
+      posicao_y: 40,
+    };
+    render(<FeedbackViewer {...defaultProps} initialFeedbacks={[audioComPino]} />);
+    const audio = document.querySelector("audio");
+    expect(audio).toBeInTheDocument();
+    expect(audio?.src).toBe(audioComPino.arquivo);
   });
 
   /*
@@ -494,17 +536,29 @@ describe("FeedbackViewer", () => {
     expect(screen.getByText("Texto transcrito do áudio")).toBeInTheDocument();
   });
 
-  it("does not show 'Áudio' as transcription text", () => {
-    const audioNoTranscription: FeedbackItem = {
+  /*
+   * Este teste afirmava que a tela não mostra "Áudio" como transcrição, e
+   * montava a situação com `conteudo: "Áudio"` — um valor que o produto nunca
+   * gravou. "Áudio" era o texto de EXIBIÇÃO desta própria tela para quando
+   * faltava transcrição; alguém o tomou por dado e escreveu uma guarda
+   * (`conteudo !== "Áudio"`) contra o próprio fallback. Procurado no histórico
+   * completo dos dois repositórios: nenhum código jamais escreveu isso.
+   *
+   * A INTENÇÃO estava certa, e é a que fica: um áudio sem transcrição não pode
+   * exibir um texto que se leia como se fosse a transcrição. Mas o caso real é
+   * `conteudo: ""` — que agora é o normal, porque a transcrição pode falhar
+   * sem derrubar o comentário —, e a resposta honesta é dizer que falta.
+   */
+  it("áudio sem transcrição diz que falta, em vez de parecer transcrito", () => {
+    const audioSemTranscricao: FeedbackItem = {
       ...audioFeedback,
-      conteudo: "Áudio",
+      conteudo: "",
+      transcricao: null,
     };
     render(
-      <FeedbackViewer {...defaultProps} initialFeedbacks={[audioNoTranscription]} />
+      <FeedbackViewer {...defaultProps} initialFeedbacks={[audioSemTranscricao]} />
     );
-    // Should NOT display "Áudio" as transcription text anywhere
-    const transcriptionText = screen.queryByText("Áudio");
-    expect(transcriptionText).not.toBeInTheDocument();
+    expect(screen.getByText("Áudio sem transcrição")).toBeInTheDocument();
   });
 
   /* ---------------------------------------------------------------- */
@@ -686,6 +740,35 @@ describe("visitante sem sessão", () => {
   it("não oferece marcar ponto na arte — marcar só serve para escrever", () => {
     render(<FeedbackViewer {...semSessao} />);
     expect(screen.queryByRole("button", { name: /^comentar$/i })).not.toBeInTheDocument();
+  });
+
+  /*
+   * E não oferece "ouvir comentário" — pela mesma regra, com uma consequência
+   * pior se oferecesse.
+   *
+   * Sintetizar custa dinheiro na conta da OpenAI, então o backend exige
+   * sessão. Com o botão visível, o visitante anônimo clicava, levava 401, e o
+   * `apiBlob` tentava renovar e mandava a página INTEIRA para o login: quem
+   * só queria ouvir era EXPULSO do link público que tinha todo o direito de
+   * estar lendo. É o mesmo acidente que já aconteceu com "Respostas".
+   *
+   * A leitura continua pública: o comentário aparece escrito, e os áudios
+   * gravados tocam normalmente — esses não passam pela síntese.
+   */
+  it("não oferece ouvir em voz alta — e por isso não expulsa ninguém da página", () => {
+    render(
+      <FeedbackViewer {...semSessao} initialFeedbacks={[baseFeedback]} />
+    );
+    expect(screen.queryByTitle("Ouvir comentário")).not.toBeInTheDocument();
+    // O texto do comentário continua lá: ler nunca dependeu de conta.
+    expect(screen.getByText("Muito bom!")).toBeInTheDocument();
+  });
+
+  it("o áudio gravado continua tocando sem conta", () => {
+    render(
+      <FeedbackViewer {...semSessao} initialFeedbacks={[audioFeedback]} />
+    );
+    expect(document.querySelector("audio")).toBeInTheDocument();
   });
 
   /*

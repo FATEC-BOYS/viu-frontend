@@ -58,17 +58,28 @@ export async function enviarComentarioDeAudio({
   token,
   arteId,
   audio,
+  extensao = 'webm',
   posicaoX,
   posicaoY,
 }: {
   token: string
   arteId: string
   audio: Blob
+  /**
+   * A extensão do que foi REALMENTE gravado — `webm` no Chrome e no Firefox,
+   * `m4a` no Safari.
+   *
+   * Era fixa em `.webm`, e isso não era só cosmético: o backend valida o PAR
+   * tipo/extensão (`validateMimeType`), então um blob `audio/mp4` com nome
+   * `.webm` é recusado com 400 — o que aconteceria com toda gravação feita no
+   * iPhone, assim que o gravador passasse a saber gravar lá.
+   */
+  extensao?: string
   posicaoX: number | null
   posicaoY: number | null
 }): Promise<any> {
   const form = new FormData()
-  form.append('audio', audio, `gravacao_${Date.now()}.webm`)
+  form.append('audio', audio, `gravacao_${Date.now()}.${extensao}`)
   // Com token a arte sai do próprio token; sem ele é preciso dizer qual é.
   if (!token) form.append('arteId', arteId)
   if (posicaoX !== null) form.append('posicaoX', String(posicaoX))

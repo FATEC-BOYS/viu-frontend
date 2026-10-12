@@ -492,6 +492,54 @@ async function enviarMultipart<T>(
   return body as T
 }
 
+/**
+ * Uma resposta BINÁRIA do backend, com o mesmo contrato de sessão do resto.
+ *
+ * `request` não serve para isto: ele lê o corpo com `res.text()` e tenta
+ * `JSON.parse` — um MP3 chega como texto corrompido. E `fetch` cru, que era o
+ * que a leitura em voz alta usava para falar com `/api/tts`, nunca teve
+ * cookie, renovação de sessão nem erro com status: era uma porta própria, sem
+ * autenticação nenhuma do outro lado.
+ *
+ * Renova uma vez e repete, como `enviarMultipart`: a sessão vencer no meio não
+ * pode custar a ação, e um GET é seguro repetir.
+ */
+export async function apiBlob(
+  path: string,
+  renovacoesRestantes = ORCAMENTO_RENOVACAO,
+): Promise<Blob> {
+  const res = await buscar(`${BASE_URL}${path}`, { method: 'GET', credentials: 'include' })
+
+  if (!res.ok) {
+    // Só aqui o corpo é lido como texto: no caminho de erro ele é JSON.
+    const body = await lerCorpo(res)
+    if (res.status === 401) {
+      /*
+       * O MESMO orçamento do cliente JSON, e pela mesma razão: outra aba.
+       *
+       * A primeira versão tinha um `podeRenovar` booleano — uma renovação só.
+       * Com duas abas, a aba B pode rotacionar a sessão entre a renovação da
+       * aba A e a repetição dela; aí a repetição volta 401 e, com orçamento
+       * de uma, a aba A ia direto para o login com a sessão viva. É
+       * exatamente o acidente que `ORCAMENTO_RENOVACAO` existe para evitar, e
+       * que `request` documenta logo acima.
+       */
+      if (renovacoesRestantes > 0) {
+        if (renovacoesRestantes < ORCAMENTO_RENOVACAO) esquecerRenovacao()
+        const renovacao = await renovarOuSair(true)
+        if (renovacao === 'ok') return apiBlob(path, renovacoesRestantes - 1)
+        throw erroDeApi(mensagemDe401(renovacao, body.message), statusDe401(renovacao), body)
+      }
+      irParaLogin()
+      throw erroDeApi(body.message ?? 'Sessão expirada. Faça login novamente.', 401, body)
+    }
+    throw erroDeApi(body.message ?? `Erro ${res.status}`, res.status, body)
+  }
+
+  sessaoRespondeu()
+  return res.blob()
+}
+
 /** Mesma leitura tolerante de `lerCorpo`, para a resposta que vem do XHR. */
 function lerTexto(texto: string): any {
   if (!texto) return {}
