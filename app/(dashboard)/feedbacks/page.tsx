@@ -62,6 +62,16 @@ type RowBase = {
   autor_tipo: AutorTipo;
   posicao_x?: number | null;
   posicao_y?: number | null;
+  /*
+   * Quantas respostas a thread já tem.
+   *
+   * Sem isto a lista não sabia se alguém tinha respondido — e o selo
+   * "Aguardando resposta" era, na verdade, `!isResolved`: uma frase sobre
+   * RESPOSTA decidida por um campo sobre RESOLUÇÃO. O painel de detalhe, na
+   * mesma tela, mostrava "1 RESPOSTA" ao lado do cartão que dizia estar
+   * aguardando.
+   */
+  respostas: number;
 };
 
 type FeedbackRow = RowBase & {
@@ -114,6 +124,7 @@ function mapFeedback(fb: any): FeedbackRow {
     autor_id: fb.autor?.id ?? '',
     autor_nome: fb.autor?.nome ?? '',
     autor_tipo: (fb.autor?.tipo ?? 'CLIENTE') as AutorTipo,
+    respostas: fb._count?.respostas ?? 0,
     audio_signed_url: fb.arquivo_url ?? null,
     preview_signed_url: fb.arte_preview_url ?? null,
   };
@@ -183,7 +194,10 @@ function ListItem({
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {!isResolved && (
+        {/* Some assim que existe qualquer resposta: a conversa começou, e o
+            cartão não tem mais por que pedir atenção como se ninguém tivesse
+            falado. Resolver continua sendo um ato à parte. */}
+        {!isResolved && fb.respostas === 0 && (
           <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
             Aguardando resposta
           </span>
@@ -449,7 +463,11 @@ function FeedbackBoardView({ items, onOpen, onMove }: { items: FeedbackRow[]; on
                   {fb.conteudo || fb.arte_nome}
                 </p>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="truncate text-[11px] text-muted-foreground">{fb.autor_nome} · {fb.projeto_nome}</span>
+                  {/* A arte, não o projeto: a Lista e o "Por dia" dizem a arte,
+                      e era ela que distinguia um cartão do outro. No quadro,
+                      três comentários sobre três peças liam todos
+                      "Identidade Visual - TechStart". */}
+                  <span className="truncate text-[11px] text-muted-foreground">{fb.autor_nome} · {fb.arte_nome}</span>
                   <Button
                     variant="ghost"
                     size="sm"
