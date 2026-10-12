@@ -266,12 +266,14 @@ function AudioInline({ src }: { src: string }) {
 }
 
 function FeedbackDetail({
-  fb, onVerNaArte, onAlternarResolvido, onCriarTarefa,
+  fb, onVerNaArte, onAlternarResolvido, onCriarTarefa, onRespondeu,
 }: {
   fb: FeedbackRow;
   onVerNaArte: (f: FeedbackRow) => void;
   onAlternarResolvido: (f: FeedbackRow) => void;
   onCriarTarefa: (f: FeedbackRow) => void;
+  /* A resposta precisa chegar à LISTA, não só a esta coluna — ver `sendReply`. */
+  onRespondeu: (id: string) => void;
 }) {
   const isResolved = fb.status === 'RESOLVIDO';
   const [reply, setReply] = useState('');
@@ -305,6 +307,16 @@ function FeedbackDetail({
       setSending(true);
       const resposta = await responder(fb.id, reply.trim());
       setThread((prev) => [...prev, resposta]);
+      /*
+       * E avisa a lista.
+       *
+       * Sem isto a resposta ficava só nesta coluna: o cartão à esquerda
+       * continuava dizendo "Aguardando resposta" ao lado da resposta que a
+       * própria tela acabara de mostrar — a mesma contradição que este
+       * conserto existe para tirar, só que durando até o próximo refetch em
+       * vez de para sempre. `moverPara` já avisa a lista assim ao resolver.
+       */
+      onRespondeu(fb.id);
       setReply('');
       toast.success('Resposta enviada!');
     } catch (e: any) {
@@ -705,6 +717,15 @@ function TelaFeedbacks() {
    * compartilhada pela lista, pelo painel de detalhe e pelo quadro — com o
    * mesmo desfazer otimista nos três.
    */
+  /* A contagem que o selo lê, mantida viva sem refetch — como `moverPara`
+     faz com o estado. Aqui não há rollback porque a resposta já está gravada:
+     `sendReply` só chama depois do 201. */
+  const contarResposta = (fbId: string) => {
+    setRows((prev) =>
+      prev.map((x) => (x.id === fbId ? { ...x, respostas: x.respostas + 1 } : x)),
+    );
+  };
+
   const moverPara = async (fbId: string, to: FeedbackStatus) => {
     const anterior = rows.find((r) => r.id === fbId)?.status;
     if (!anterior || anterior === to) return;
@@ -946,6 +967,7 @@ function TelaFeedbacks() {
                     onVerNaArte={handleVerNaArte}
                     onAlternarResolvido={handleAlternarResolvido}
                     onCriarTarefa={handleCriarTarefa}
+                    onRespondeu={contarResposta}
                   />
                 )}
               </div>
