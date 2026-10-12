@@ -109,7 +109,25 @@ function montarPassos(projetoId?: string): Passo[] {
     {
       id: 'link',
       titulo: 'Compartilhe o link',
-      convite: 'O cliente abre, comenta no ponto exato e aprova. Sem conta, sem app.',
+      /*
+       * "Sem conta, sem app" prometia metade do que o produto faz.
+       *
+       * Medido percorrendo o laço num navegador limpo, como o cliente que
+       * recebe o link no WhatsApp: ele abre sem conta nenhuma, vê a arte e lê
+       * os comentários. Comentar exige sessão — `POST /links/:token/feedbacks`
+       * tem `authenticate` antes, porque o autor sai de `usuario.id` — e
+       * aprovar exige, além disso, ser o cliente do projeto. O viewer é
+       * honesto sobre isso: a porta de lá diz "Entrar para comentar".
+       *
+       * Esta frase era a última coisa que a designer lia antes de apertar
+       * "Gerar link", e era a expectativa que ela repassava ao cliente dela.
+       * Prometer "sem conta" e o cliente topar com um login é a pior hora
+       * possível para o produto desmentir quem o vendeu.
+       *
+       * "Sem app" continua valendo e continua dito: é navegador, não há o que
+       * instalar.
+       */
+      convite: 'O cliente abre no navegador e já vê a arte. Para comentar no ponto exato e aprovar, ele entra com a conta dele.',
       feitoTexto: 'Link enviado.',
       precisa: 'Envie uma arte primeiro.',
       icone: Share2,
