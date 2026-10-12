@@ -24,7 +24,19 @@ export type ArtePreview = {
 export type FeedbackItem = {
   id: string;
   conteudo: string;
-  tipo: "TEXTO" | "AUDIO";
+  /**
+   * O rótulo do backend, incluindo o legado.
+   *
+   * `POSICIONAL` está aqui porque EXISTE no banco: `createFeedbackComAudio`
+   * gravava esse valor para toda gravação feita sobre um ponto da arte. O
+   * backend não escreve mais assim, mas as linhas antigas continuam lá — e
+   * declarar só `"TEXTO" | "AUDIO"` não as fazia desaparecer, só fazia o tipo
+   * mentir sobre elas.
+   *
+   * Quem pergunta "isto é áudio?" deve usar `ehAudio`, não este campo.
+   */
+  tipo: "TEXTO" | "AUDIO" | "POSICIONAL";
+  /** O endereço TOCÁVEL do áudio — veja `paraFeedbackItem`. */
   arquivo?: string | null;
   transcricao?: string | null;
   // derivado de resolvidoEm — o schema não guarda estados intermediários
@@ -104,12 +116,46 @@ export type ViewerIdentity = {
  * na união do tipo. Passava batido porque a página montava o objeto a partir
  * de um `any`, sem ninguém conferir contra o tipo declarado.
  */
+/**
+ * Isto é um comentário em áudio?
+ *
+ * Tem áudio quem tem ARQUIVO — e não quem o rótulo `tipo` chama de `AUDIO`. A
+ * tela perguntava `tipo === "AUDIO"`, e o backend gravava `POSICIONAL` para
+ * toda gravação feita sobre um ponto da arte: a resposta era "não é áudio"
+ * justamente para o comentário em áudio mais específico que o produto sabe
+ * fazer. Medido no link público, com dois áudios na arte: UM elemento
+ * `<audio>` na página — o do pino não existia, e nada na tela dizia que havia
+ * uma gravação ali.
+ *
+ * Esta formulação é a mesma do painel de feedbacks (`ehAudio`) e a mesma do
+ * `assinarAudioDeFeedback` no backend. Nos três lugares, pela mesma razão.
+ */
+export function ehAudio(f: Pick<FeedbackItem, "arquivo">): boolean {
+  return !!f.arquivo;
+}
+
 export function paraFeedbackItem(f: any): FeedbackItem {
   return {
     id: f.id,
     conteudo: f.conteudo,
     tipo: f.tipo,
-    arquivo: f.arquivo ?? null,
+    /*
+     * `arquivo_url` ANTES de `arquivo` — é o que torna o áudio tocável.
+     *
+     * A coluna `arquivo` guarda a chave do bucket, não um endereço. O backend
+     * manda a URL assinada ao lado, em `arquivo_url`, e este conversor a
+     * descartava: o `<audio src="feedbacks/…">` resolvia contra a origem da
+     * página e dava 404. Medido no link público:
+     *
+     *   src resolvido: localhost:3000/viewer/arte/feedbacks/…/gravacao.webm
+     *   resposta:      404
+     *
+     * No MESMO payload vinha `arquivo_url` assinada e correta. É a mesma
+     * precedência que `arte.previewUrl ?? arte.arquivo` já usa para a imagem
+     * da arte — foi exatamente este bug, e o áudio não tinha recebido o
+     * conserto equivalente.
+     */
+    arquivo: f.arquivo_url ?? f.arquivo ?? null,
     transcricao: f.transcricao ?? null,
     status: f.status === "RESOLVIDO" ? "RESOLVIDO" : "ABERTO",
     criado_em: f.criadoEm ?? f.criado_em ?? new Date().toISOString(),
