@@ -240,6 +240,40 @@
     transition: border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
+  /* Um ritmo consistente para todas as páginas: títulos fortes, metadados leves. */
+  main h1 {
+    font-feature-settings: "ss01" 1, "cv11" 1;
+  }
+
+  [data-slot="card-header"] {
+    gap: 0.4rem;
+  }
+
+  [data-slot="card-title"] {
+    letter-spacing: -0.025em;
+  }
+
+  [data-slot="badge"] {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+
+  @media (max-width: 640px) {
+    main {
+      padding-bottom: 6rem;
+    }
+  }
+
+
   [data-slot="card"]:has(button:hover, a:hover) {
     border-color: color-mix(in oklch, var(--primary) 22%, var(--border));
     box-shadow: 0 2px 4px color-mix(in oklch, var(--foreground) 5%, transparent), 0 18px 40px color-mix(in oklch, var(--primary) 8%, transparent);

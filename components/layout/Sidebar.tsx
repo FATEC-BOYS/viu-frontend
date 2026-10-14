@@ -549,7 +549,7 @@ function NavItemRow({
     bloqueio
       ? "cursor-not-allowed text-muted-foreground/60"
       : "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
-    active && !bloqueio ? "bg-card text-foreground shadow-sm ring-1 ring-border/70" : !bloqueio && "text-muted-foreground",
+    active && !bloqueio ? "bg-primary/10 text-foreground shadow-sm ring-1 ring-primary/15" : !bloqueio && "text-muted-foreground",
     item.disabled && "pointer-events-none opacity-50",
   );
 
@@ -606,7 +606,7 @@ function NavItemRow({
         aria-hidden
       />
 
-      <Icon className={cn("h-4 w-4", collapsed ? "mx-auto" : "mr-3")} />
+      <Icon className={cn("h-4 w-4 transition-colors", active ? "text-primary" : "", collapsed ? "mx-auto" : "mr-3")} />
 
       {!collapsed && (
         <div className="ml-1 flex w-full items-center justify-between">
