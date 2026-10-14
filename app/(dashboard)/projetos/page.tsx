@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Loader2, FolderOpen } from "lucide-react";
 import EmptyState from "@/components/layout/EmptyState";
+import ProjetosDoCliente from "@/components/projetos/ProjetosDoCliente";
 import ProjetoModal from "@/components/projetos/ProjetoModal";
 import { toast } from "sonner";
 import {
@@ -504,6 +505,9 @@ function ProjetosPageContent() {
  * a renderizar sob demanda.
  */
 export default function ProjetosPage() {
+  const { user, loading } = useAuth();
+  if (loading || !user) return <p className="p-6 text-sm text-muted-foreground">Carregando seus projetos…</p>;
+  if (user.tipo === 'CLIENTE') return <ProjetosDoCliente usuarioId={user.id} />;
   return (
     <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Carregando projetos…</div>}>
       <ProjetosPageContent />

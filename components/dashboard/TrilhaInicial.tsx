@@ -328,8 +328,8 @@ function Espera({ clienteNome }: { clienteNome?: string | null }) {
             {clienteNome ? `Aguardando ${clienteNome} revisar` : 'Aguardando a revisão do cliente'}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            O link está com {clienteNome ?? 'seu cliente'}. Quando houver comentário ou decisão,
-            aparece aqui — e você recebe notificação.
+            O link de revisão foi criado. Compartilhe com {clienteNome ?? 'seu cliente'} para
+            receber comentários e decisões.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm">

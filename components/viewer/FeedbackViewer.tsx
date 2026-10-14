@@ -312,6 +312,23 @@ export default function FeedbackViewer({
   const [trilhaAberta, setTrilhaAberta] = useState(false);
   const [abaTrilha, setAbaTrilha] = useState<"comentarios" | "aprovacoes">("comentarios");
 
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("feedback");
+    if (!id || !initialFeedbacks.some(f => f.id === id)) return;
+    setActiveFeedback(id);
+    setTrilhaAberta(true);
+    setShowResolved(true);
+    setAbaTrilha("comentarios");
+  }, [initialFeedbacks]);
+
+  useEffect(() => {
+    if (!activeFeedback) return;
+    const el = Array.from(feedbackListRef.current?.querySelectorAll("[data-feedback-id]") ?? [])
+      .find(node => node.getAttribute("data-feedback-id") === activeFeedback);
+    el?.scrollIntoView?.({ block: "nearest" });
+  }, [activeFeedback, trilhaAberta]);
+
+
   const commentModeActive = externalCommentMode ?? internalCommentMode;
   const setCommentMode = onCommentModeChange ?? setInternalCommentMode;
 

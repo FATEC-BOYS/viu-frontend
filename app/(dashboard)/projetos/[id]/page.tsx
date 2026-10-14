@@ -1,6 +1,7 @@
 // app/(dashboard)/projetos/[id]/page.tsx
 "use client";
 
+import ExecucaoDoProjeto from "@/components/projetos/tarefas/ExecucaoDoProjeto";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -31,8 +32,6 @@ import GerenciarAcessosDrawer from "@/components/projetos/pessoas/GerenciarAcess
 import EstadoDoProjeto from "@/components/projetos/overview/EstadoDoProjeto";
 import NumerosDoProjeto from "@/components/projetos/overview/NumerosDoProjeto";
 import ProximosPassos from "@/components/projetos/overview/ProximosPassos";
-import MicroKanban from "@/components/projetos/overview/MicroKanban";
-import TarefasEmLinha from "@/components/projetos/overview/TarefasEmLinha";
 import OverviewSkeleton from "@/components/projetos/overview/OverviewSkeleton";
 
 import ArtesToolbar from "@/components/projetos/artes/ArtesToolbar";
@@ -631,7 +630,7 @@ export default function ProjetoPage() {
                 faz sentido; aqui a pergunta é "o que está na minha mão", e
                 isso é lista.
               */}
-              <div className="grid grid-cols-1 divide-y rounded-xl border bg-card md:grid-cols-[2fr_3fr] md:divide-x md:divide-y-0">
+              <div className="rounded-xl border bg-card">
                 <div className="p-4">
                   <ProximosPassos
                     passos={passos}
@@ -660,13 +659,6 @@ export default function ProjetoPage() {
                   />
                 </div>
 
-                <div className="p-4">
-                  <TarefasEmLinha
-                    kanban={kanban}
-                    onAbrir={() => setTab("tasks")}
-                    onVerTodas={() => setTab("tasks")}
-                  />
-                </div>
               </div>
 
               <NumerosDoProjeto
@@ -740,21 +732,7 @@ export default function ProjetoPage() {
         )}
 
         {tab === "tasks" && (
-          ovLoading && !kanban ? (
-            <OverviewSkeleton />
-          ) : (
-            <MicroKanban
-              kanban={kanban ?? {
-                pendente: { top: [], total: 0 },
-                em_andamento: { top: [], total: 0 },
-                concluida: { top: [], total: 0 },
-              }}
-              /* Mandava para a tela global de Tarefas — que agora redireciona,
-                 e que mesmo antes tirava a pessoa do projeto que ela estava
-                 lendo. O outro MicroKanban desta mesma tela já fazia certo. */
-              onAbrir={() => setTab("tasks")}
-            />
-          )
+          <ExecucaoDoProjeto projetoId={id} podeEditar={ehDesignerDoProjeto} />
         )}
 
         {tab === "approval" && (
