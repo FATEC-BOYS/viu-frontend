@@ -13,8 +13,9 @@ export default function StepParticipants({
 }) {
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
+      <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:p-5">
         <Label>Designers adicionais</Label>
+        <p className="text-sm text-muted-foreground">Quem vai criar junto com você?</p>
         <AsyncUserMultiSelect
           tipo="DESIGNER"
           value={values.participantes.designersAdicionaisIds}
@@ -24,8 +25,9 @@ export default function StepParticipants({
       </div>
 
       {!souCliente && (
-        <div className="space-y-1">
+        <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:p-5">
           <Label>Clientes adicionais</Label>
+            <p className="text-sm text-muted-foreground">Inclua outras pessoas do lado do cliente.</p>
           <AsyncUserMultiSelect
             tipo="CLIENTE"
             value={values.participantes.clientesAdicionaisIds}
