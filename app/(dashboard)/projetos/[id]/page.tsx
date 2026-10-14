@@ -57,6 +57,7 @@ import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton"
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
 import ProjetoDoCliente from "@/components/projetos/ProjetoDoCliente";
 import { rotuloProjeto } from "@/lib/rotulos";
+import { podeMexerNoProjeto } from "@/lib/permissoesDoProjeto";
 import NovaVersaoDialog from "@/components/artes/NovaVersaoDialog";
 import ArteWizard from "@/components/artes/ArteWizard";
 import {
@@ -261,8 +262,8 @@ export default function ProjetoPage() {
    * O painel de acompanhamento continua visível para todos: ver em que pé
    * está a aprovação é de quem é do projeto; pedir é do designer.
    */
-  const ehDesignerDoProjeto =
-    !!user && !!projeto?.designer?.id && projeto.designer.id === user.id;
+  // A mesma regra da lista, do mesmo lugar — ver `lib/permissoesDoProjeto`.
+  const ehDesignerDoProjeto = podeMexerNoProjeto(user, projeto);
 
   /** Quem contratou — para quem a tela é outra, e não a mesma com menos. */
   const ehClienteDoProjeto =
