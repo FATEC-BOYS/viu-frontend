@@ -437,9 +437,83 @@ select:focus {
     scrollbar-width: none;
   }
   [role="tablist"]::-webkit-scrollbar { display: none; }
-  table { min-width: 42rem; }
+
+  [data-slot="card"] {
+    border-radius: calc(var(--radius) + 2px);
+  }
 }
 
+/* Acabamento transversal: menos ruído, mais foco e uma sensação de produto
+   contínuo entre dashboard, cadastros, financeiro e administração. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--primary) 48%, transparent);
+  background-clip: padding-box;
+}
+
+/* Links de navegação e ações textuais ganham resposta sem transformar cada
+   elemento em um botão chamativo. */
+a:not([class*="bg-"]):not([class*="border-"]) {
+  transition: color 180ms ease, opacity 180ms ease;
+}
+a:not([class*="bg-"]):not([class*="border-"]):hover {
+  color: var(--primary);
+}
+
+/* Divisores de seção ficam leves e arejados nas telas densas. */
+[data-slot="card-content"] > h2,
+[data-slot="card-content"] > h3 {
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 640px) {
+  [data-slot="card-header"],
+  [data-slot="card-content"],
+  [data-slot="card-footer"] {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  table {
+    min-width: 42rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [data-slot="card"] {
+    transition: none !important;
+  }
+}
+
+/* Impede que uma longa sequência de rotas deixe a interface visualmente
+   parada enquanto o conteúdo troca. */
+@keyframes viu-content-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+main > header + * {
+  animation: viu-content-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  main > header + * { animation: none; }
+}
 
 /* O contrário: o aviso que só faz sentido para quem não tem cursor — um selo
    de câmera no avatar, por exemplo, onde o véu de hover nunca vai aparecer. */
