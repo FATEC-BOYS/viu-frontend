@@ -98,10 +98,10 @@
   --primary: oklch(0.57 0.19 40);
   --primary-foreground: oklch(0.99 0.004 95);
 
-  --secondary: oklch(0.955 0.006 95);
+  --secondary: oklch(0.955 0.012 95);
   --secondary-foreground: var(--foreground);
 
-  --muted: oklch(0.955 0.006 95);
+  --muted: oklch(0.955 0.012 95);
   --muted-foreground: oklch(0.47 0.015 265);   /* 6,8:1 sobre card */
 
   --accent: oklch(0.955 0.006 95);
@@ -115,10 +115,10 @@
 
   /* Charts */
   --chart-1: var(--primary);
-  --chart-2: var(--foreground);
-  --chart-3: oklch(0.80 0.11 95);
-  --chart-4: oklch(0.65 0.14 75);
-  --chart-5: oklch(0.55 0.06 95);
+  --chart-2: oklch(0.58 0.13 190);
+  --chart-3: oklch(0.72 0.14 95);
+  --chart-4: oklch(0.64 0.16 290);
+  --chart-5: oklch(0.60 0.12 350);
 
   /* Sidebar — acompanha o fundo, para o conteúdo em card ficar à frente dela */
   --sidebar: var(--background);
@@ -220,8 +220,14 @@
     font-feature-settings: "cv11" 1, "ss01" 1;
   }
   button, a, input, textarea, select {
-    transition-duration: 180ms;
+    transition-duration: 220ms;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  button:not(:disabled):hover, [role="button"]:not([aria-disabled="true"]):hover {
+    filter: saturate(1.04);
+  }
+  [data-slot="card"] {
+    isolation: isolate;
   }
 
   button:not(:disabled), a, [role="button"] {
