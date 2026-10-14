@@ -318,8 +318,94 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .acoes-hover { transition: none; }
+  .so-no-toque { transition: none; }
 }
+
+/* ==========================================================================
+   Camada transversal de produto
+   Todas as rotas compartilham estes detalhes para que a plataforma pareça um
+   produto único, não uma coleção de telas independentes.
+   ========================================================================== */
+
+/* Superfícies de dados ganham ritmo sem virar uma grade pesada. */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+thead th {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+tbody tr {
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+tbody tr:hover {
+  background: color-mix(in oklch, var(--primary) 3.5%, transparent);
+}
+tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius); }
+tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
+
+/* Campos parecem parte do mesmo sistema que os cards, com foco bem visível. */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  background-color: color-mix(in oklch, var(--card) 76%, var(--secondary));
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus,
+select:focus {
+  background-color: var(--card);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 16%, transparent);
+}
+
+/* Abas e filtros têm uma linguagem de navegação consistente. */
+[role="tablist"] {
+  background: color-mix(in oklch, var(--secondary) 72%, transparent);
+  border: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+  border-radius: 999px;
+  padding: 0.25rem;
+}
+[role="tab"] {
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-weight: 600;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+[role="tab"][aria-selected="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+/* Dialogs e drawers: mais respiro, contraste e sensação de camada. */
+[data-slot="dialog-content"],
+[data-slot="drawer-content"],
+[data-slot="sheet-content"] {
+  box-shadow: 0 24px 80px color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+
+/* Listas e cartões clicáveis comunicam ação sem depender de cor saturada. */
+[data-slot="card"] a:focus-visible,
+[data-slot="card"] button:focus-visible,
+[data-slot="card"] [role="button"]:focus-visible {
+  border-radius: calc(var(--radius) - 2px);
+}
+
+@media (max-width: 767px) {
+  [role="tablist"] {
+    max-width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  [role="tablist"]::-webkit-scrollbar { display: none; }
+  table { min-width: 42rem; }
+}
+
 
 /* O contrário: o aviso que só faz sentido para quem não tem cursor — um selo
    de câmera no avatar, por exemplo, onde o véu de hover nunca vai aparecer. */
