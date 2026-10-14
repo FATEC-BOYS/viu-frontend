@@ -10,7 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
-import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Eye, EyeOff, FolderKanban, LockKeyhole, Palette, ShieldCheck, Sparkles, UsersRound } from 'lucide-react';
 import { loginSchema, validarCampos } from '@/lib/schemas';
 
 function LoginContent() {
@@ -128,7 +128,41 @@ function LoginContent() {
   }
 
   return (
-    <div className="w-full max-w-md">
+    <div className="mx-auto grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-16">
+      <section className="relative hidden min-h-[470px] overflow-hidden rounded-[2rem] border border-white/70 bg-white/35 p-9 shadow-2xl shadow-primary/10 backdrop-blur-2xl lg:flex lg:flex-col lg:justify-between">
+        <div aria-hidden className="absolute -right-20 -top-20 size-64 rounded-full bg-pastel-lavanda/60 blur-2xl" />
+        <div aria-hidden className="absolute -bottom-24 -left-16 size-72 rounded-full bg-pastel-pessego/70 blur-2xl" />
+        <div className="relative">
+          <div className="mb-10 flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-foreground text-background shadow-lg">
+              <Sparkles data-icon="inline-start" />
+            </div>
+            <span className="font-display text-xl font-semibold tracking-tight">Seu estúdio, mais leve.</span>
+          </div>
+          <p className="max-w-md text-sm font-semibold uppercase tracking-[0.18em] text-primary">Bem-vindo ao VIU</p>
+          <h2 className="mt-4 max-w-lg font-display text-5xl font-semibold leading-[1.02] tracking-[-0.05em] text-foreground">
+            Ideias bonitas também merecem organização.
+          </h2>
+          <p className="mt-6 max-w-md text-base leading-7 text-muted-foreground">
+            Centralize projetos, clientes e entregas em um espaço feito para o seu ritmo criativo.
+          </p>
+        </div>
+        <div className="relative grid grid-cols-3 gap-3">
+          {[
+            { icon: FolderKanban, value: 'Projetos', label: 'em um só lugar' },
+            { icon: UsersRound, value: 'Clientes', label: 'mais próximos' },
+            { icon: Palette, value: 'Criação', label: 'sem ruído' },
+          ].map(({ icon: Icon, value, label }) => (
+            <div key={value} className="rounded-2xl border border-white/80 bg-white/55 p-4 shadow-sm backdrop-blur-xl">
+              <Icon className="mb-7 text-primary" aria-hidden />
+              <p className="text-sm font-semibold text-foreground">{value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="w-full max-w-md lg:justify-self-end">
       <div className="mb-6 flex items-center gap-3 text-sm text-muted-foreground">
         <div className="flex size-9 items-center justify-center rounded-xl bg-pastel-pessego text-primary">
           <Sparkles data-icon="inline-start" />
@@ -138,8 +172,14 @@ function LoginContent() {
           <p>Projetos, clientes e ideias em um só lugar.</p>
         </div>
       </div>
-      <Card className="w-full max-w-md overflow-hidden border-border/70 shadow-xl shadow-primary/5">
-        <div className="h-1.5 bg-gradient-to-r from-primary via-pastel-pessego to-pastel-lavanda" />
+      <Card className="w-full max-w-md overflow-hidden border-white/75 bg-white/70 shadow-2xl shadow-primary/10 backdrop-blur-2xl">
+        <div className="flex items-center justify-between border-b border-white/70 bg-white/45 px-6 py-3 backdrop-blur-xl">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Acesso seguro</span>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+            <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
+            VIU protegido
+          </span>
+        </div>
         {/*
           Aqui havia um "← Voltar" com `router.back()`, e um `<div>` invisível
           ao lado só para equilibrar o flex.
@@ -232,6 +272,7 @@ function LoginContent() {
           </Link>
         </CardFooter>
       </Card>
+      </div>
     </div>
   );
 }
