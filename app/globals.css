@@ -215,6 +215,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image: radial-gradient(circle at 100% 0%, color-mix(in oklch, var(--primary) 4%, transparent), transparent 32rem);
     text-rendering: optimizeLegibility;
     font-feature-settings: "cv11" 1, "ss01" 1;
   }

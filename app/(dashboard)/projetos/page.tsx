@@ -340,7 +340,7 @@ function ProjetosPageContent() {
   };
 
   return (
-    <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
+    <FadeIn className="mx-auto w-full max-w-[1440px] space-y-7 p-4 pb-16 sm:p-6 sm:pb-20 lg:px-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -415,7 +415,7 @@ function ProjetosPageContent() {
                   onPrazo={(d) => bulkSetPrazo(d)}
                 />
               )}
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {filtered.map((p) => (
                   <ProjectCard
                     key={p.id}
