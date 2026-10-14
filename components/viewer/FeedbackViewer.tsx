@@ -842,6 +842,12 @@ export default function FeedbackViewer({
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
               />
+              {aprovacoes && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  O comentário é enviado ao publicar. Para concluir a revisão,
+                  use a aba Aprovações e escolha Aprovar ou Pedir ajustes.
+                </p>
+              )}
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   {recorder.state === "idle" ? (

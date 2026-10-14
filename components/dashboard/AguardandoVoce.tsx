@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { api } from '@/lib/api'
+import { getAll } from '@/lib/api'
+import { Button } from '@/components/ui/button'
 import { Miniatura } from '@/components/dashboard/pecasDoCartao'
 
 /**
@@ -71,15 +72,18 @@ export default function AguardandoVoce({
 }) {
   const [itens, setItens] = useState<ArteEsperando[]>([])
   const [carregou, setCarregou] = useState(false)
+  const [erro, setErro] = useState(false)
 
   const carregar = useCallback(async () => {
     if (!usuarioId) return
+    setErro(false)
+    setCarregou(false)
     try {
-      const res = await api.get<{ data: any[] }>(
-        `/aprovacoes?status=PENDENTE&aprovadorId=${encodeURIComponent(usuarioId)}&limit=20`,
+      const linhas = await getAll<any>(
+        `/aprovacoes?status=PENDENTE&aprovadorId=${encodeURIComponent(usuarioId)}`,
       )
       setItens(
-        (res.data ?? []).map((a: any) => ({
+        linhas.map((a: any) => ({
           id: String(a.id),
           arteId: String(a.arte?.id ?? ''),
           arteNome: a.arte?.nome ?? 'Arte sem nome',
@@ -93,8 +97,7 @@ export default function AguardandoVoce({
         })),
       )
     } catch {
-      // Faixa de contexto: se falhar, o resto do painel segue na tela.
-      setItens([])
+      setErro(true)
     } finally {
       setCarregou(true)
     }
@@ -105,6 +108,14 @@ export default function AguardandoVoce({
   }, [carregar])
 
   if (!carregou) return null
+  if (erro) return (
+    <section role="alert" className="rounded-xl border bg-card p-4">
+      <p className="text-sm">Não foi possível carregar as peças aguardando sua revisão.</p>
+      <Button variant="outline" size="sm" className="mt-2" onClick={carregar}>
+        Tentar novamente
+      </Button>
+    </section>
+  )
   if (itens.length === 0) return <>{vazio}</>
 
   const maisAntiga = Math.max(...itens.map((i) => diasDesde(i.criadoEm)))

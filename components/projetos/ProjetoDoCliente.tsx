@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, MessageSquare, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { formatarDia, formatarInstante } from "@/lib/diaDeCalendario";
 import { rotuloProjeto } from "@/lib/rotulos";
-import { decidirAprovacao } from "@/lib/aprovacoesDaArte";
 import {
   listarDecisoesDoProjeto,
   esperandoVoce,
@@ -136,7 +133,7 @@ export default function ProjetoDoCliente({
             ) : (
               <ul className="space-y-3">
                 {pendentes.map((d) => (
-                  <CartaoDeDecisao key={d.id} decisao={d} aoDecidir={carregar} />
+                  <CartaoDeDecisao key={d.id} decisao={d} />
                 ))}
               </ul>
             )}
@@ -219,39 +216,12 @@ function Miniatura({
   );
 }
 
-/**
- * Uma arte esperando a decisão — com a decisão ali, e não em outra tela.
- *
- * "Abrir e comentar" leva ao visualizador, que é onde se marca o ponto exato
- * da arte. Aqui ficam as duas respostas que não precisam de pino: aprovar, e
- * pedir ajuste com o motivo escrito.
- */
+/** A decisão acontece no visualizador, junto da arte e de seus comentários. */
 function CartaoDeDecisao({
   decisao,
-  aoDecidir,
 }: {
   decisao: DecisaoDoCliente;
-  aoDecidir: () => Promise<void> | void;
 }) {
-  const [pedindoAjuste, setPedindoAjuste] = useState(false);
-  const [motivo, setMotivo] = useState("");
-  const [enviando, setEnviando] = useState(false);
-
-  async function decidir(status: "APROVADO" | "REJEITADO", comentario?: string) {
-    setEnviando(true);
-    try {
-      await decidirAprovacao(decisao.id, status, comentario ?? null);
-      toast.success(status === "APROVADO" ? "Arte aprovada" : "Pedido de ajuste enviado");
-      setPedindoAjuste(false);
-      setMotivo("");
-      await aoDecidir();
-    } catch {
-      toast.error("Não foi possível registrar sua decisão.");
-    } finally {
-      setEnviando(false);
-    }
-  }
-
   return (
     <li className="rounded-xl border bg-card p-4">
       <div className="flex gap-3">
@@ -259,82 +229,16 @@ function CartaoDeDecisao({
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{decisao.arte.nome}</p>
           <p className="text-xs text-muted-foreground">
-            {decisao.versaoNumero != null
-              ? `Versão ${decisao.versaoNumero}`
-              : `Versão ${decisao.arte.versao}`}
+            Versão {decisao.versaoNumero ?? decisao.arte.versao}
             {decisao.criadoEm && ` · enviada em ${formatarInstante(decisao.criadoEm)}`}
           </p>
-          <Button variant="link" size="sm" asChild className="mt-1 h-auto p-0 text-xs">
+          <Button size="sm" asChild className="mt-3">
             <Link href={`/viewer/arte/${decisao.arte.id}`}>
-              Abrir e comentar na arte
+              Revisar e decidir
             </Link>
           </Button>
         </div>
       </div>
-
-      {!pedindoAjuste ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            className="gap-1.5"
-            disabled={enviando}
-            onClick={() => decidir("APROVADO")}
-          >
-            {enviando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-            Aprovar
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            disabled={enviando}
-            onClick={() => setPedindoAjuste(true)}
-          >
-            <MessageSquare className="h-4 w-4" />
-            Pedir ajustes
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {/*
-            O motivo é obrigatório: "pedir ajustes" sem dizer quais devolve a
-            arte sem devolver a informação, e o designer fica com a rodada
-            gasta e nada para fazer.
-          */}
-          <Textarea
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="O que precisa mudar?"
-            rows={3}
-            autoFocus
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={enviando || !motivo.trim()}
-              onClick={() => decidir("REJEITADO", motivo.trim())}
-            >
-              {enviando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-              Enviar pedido de ajuste
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={enviando}
-              onClick={() => {
-                setPedindoAjuste(false);
-                setMotivo("");
-              }}
-            >
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      )}
     </li>
   );
 }
