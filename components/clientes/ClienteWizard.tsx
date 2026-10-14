@@ -77,7 +77,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (submitting) return;
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
         if (!isLast) { e.preventDefault(); handleNext(); }
       } else if (e.key === "Enter" && e.shiftKey) {
         e.preventDefault(); if (!isFirst) setStep((s) => s - 1);
@@ -179,15 +179,15 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetAll(); onOpenChange(v); }}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[92dvh] max-w-xl overflow-hidden rounded-2xl border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur">
         <DialogClose asChild>
           <Button variant="ghost" size="icon" className="absolute right-2 top-2" title="Fechar">
             <X className="h-4 w-4" />
           </Button>
         </DialogClose>
 
-        <DialogHeader>
-          <DialogTitle>Novo cliente</DialogTitle>
+        <DialogHeader className="border-b bg-muted/20 px-6 py-5">
+          <DialogTitle className="text-xl tracking-tight">Novo cliente</DialogTitle>
           <DialogDescription>
             Use <kbd>Enter</kbd> para avançar e <kbd>Shift</kbd>+<kbd>Enter</kbd> para voltar.
           </DialogDescription>

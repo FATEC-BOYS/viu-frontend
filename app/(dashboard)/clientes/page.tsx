@@ -88,7 +88,7 @@ function ClienteCard({
   const prazo = prazoEmAberto(c.projetos);
 
   return (
-    <div className={`border rounded-lg p-3 card-interativo ${selected ? "ring-2 ring-primary" : ""}`}>
+    <div className={`group rounded-2xl border border-border/70 bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md card-interativo ${selected ? "ring-2 ring-primary ring-offset-2" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
