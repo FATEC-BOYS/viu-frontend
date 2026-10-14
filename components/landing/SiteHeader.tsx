@@ -16,8 +16,8 @@ export default function SiteHeader() {
   const autenticado = !!user
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
+      <div className="mx-auto flex h-[4.5rem] max-w-6xl items-center justify-between px-5 sm:px-6">
         <Link href="/" className="flex items-center gap-2.5" aria-label="VIU — página inicial">
           <span aria-hidden className="size-6 rounded-md bg-primary" />
           <span className="text-[15px] font-semibold tracking-[-0.02em]">VIU</span>

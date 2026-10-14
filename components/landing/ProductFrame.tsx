@@ -33,7 +33,7 @@ export default function ProductFrame() {
     <div
       role="img"
       aria-label="Ilustração da interface do VIU: uma arte com dois pontos comentados, a coluna de feedbacks ao lado com um comentário de texto, um áudio e a arte aprovada."
-      className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.03),0_20px_60px_-30px_rgba(0,0,0,0.35)]"
+      className="overflow-hidden rounded-[1.25rem] border border-border/70 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_28px_80px_-34px_rgba(0,0,0,0.42)] ring-1 ring-foreground/[0.03]"
     >
       <div aria-hidden className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
         <span className="size-2 rounded-full bg-foreground/10" />

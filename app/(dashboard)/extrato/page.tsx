@@ -59,13 +59,13 @@ export default function ExtratoPage() {
   )
 
   return (
-    <FadeIn className="space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-6xl space-y-7 p-4 sm:p-6">
       <PageHeader
         title="Extrato"
         description="Cada entrada e saída que compõe o seu saldo disponível."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <ResumoCard titulo="Saldo disponível" valor={saldo?.saldoFormatado} destaque />
         <ResumoCard titulo="Total recebido" valor={saldo?.totalRecebidoFormatado} />
         <ResumoCard titulo="Total sacado" valor={saldo?.totalSacadoFormatado} />
@@ -93,11 +93,11 @@ export default function ExtratoPage() {
           }
         />
       ) : (
-        <ul className="grid gap-2">
+        <ul className="grid gap-2.5">
           {filtradas.map((entry) => {
             const credito = entry.tipo === 'CREDITO'
             return (
-              <li key={entry.id} className="flex items-center gap-3 rounded-xl border p-3">
+              <li key={entry.id} className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-card/85 p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
                 <div
                   className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
                     credito
@@ -154,7 +154,7 @@ function ResumoCard({
   destaque?: boolean
 }) {
   return (
-    <Card className="space-y-1 p-4">
+    <Card className={`group relative overflow-hidden space-y-2 rounded-2xl border-border/70 p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md ${destaque ? 'bg-gradient-to-br from-primary/12 via-card to-card' : 'bg-card/90'}`}>
       <p className="text-xs text-muted-foreground">{titulo}</p>
       <p className={`tabular-nums ${destaque ? 'text-2xl font-semibold' : 'text-lg font-medium'}`}>
         {/* Só o card em destaque ganha a caixa de seleção. Se todos ganhassem,

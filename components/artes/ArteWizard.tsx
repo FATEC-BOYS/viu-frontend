@@ -140,13 +140,13 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   }
 
   return (
-    <div className="w-full">
-      <div className="mb-4 grid grid-cols-3 gap-2 text-xs">
+    <div className="w-full overflow-hidden">
+      <div className="mb-5 grid grid-cols-3 gap-2 text-xs">
         {(["1. Detalhes", "2. Upload", "3. Opções"] as const).map((label, i) => (
           <div
             key={label}
-            className={`rounded-full py-1 text-center ${
-              step >= i + 1 ? "bg-primary text-primary-foreground" : "bg-muted"
+            className={`rounded-xl border px-2 py-2 text-center font-medium transition-colors ${
+              step >= i + 1 ? "border-primary/20 bg-primary text-primary-foreground shadow-sm" : "border-border/70 bg-muted/50 text-muted-foreground"
             }`}
           >
             {label}

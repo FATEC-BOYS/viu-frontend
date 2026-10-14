@@ -19,7 +19,7 @@ import { Selecionado } from '@/components/ui/Selecionado'
  */
 export default function Hero({ ctaHref }: { ctaHref: string }) {
   return (
-    <section className="relative overflow-hidden px-6 pt-16 pb-20 md:pt-24 md:pb-28">
+    <section className="relative overflow-hidden px-5 pb-20 pt-14 sm:px-6 md:pb-32 md:pt-24">
       {/* Lavanda bem diluída atrás do topo: dá temperatura sem tocar em nada
           que precise ser lido — e some por completo onde a arte aparece. */}
       <div

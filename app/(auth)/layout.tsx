@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CookieConsent } from '@/components/layout/CookieConsent';
 
 export const dynamic = 'force-dynamic'; // força render dinâmico
 export const revalidate = 0;            // não revalida (sem SSG)
@@ -33,7 +34,7 @@ export const fetchCache = 'default-no-store';
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="border-b border-border/60">
+      <header className="relative z-10 border-b border-white/50 bg-white/55 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center px-6">
           <Link
             href="/"
@@ -46,9 +47,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-4 py-10">
-        {children}
+      <main className="relative flex flex-1 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_12%_12%,hsl(var(--pastel-lavanda)/.72),transparent_32%),radial-gradient(circle_at_88%_82%,hsl(var(--pastel-pessego)/.68),transparent_34%),linear-gradient(135deg,hsl(var(--background)),hsl(var(--pastel-azul)/.28))] px-4 py-10 before:pointer-events-none before:absolute before:inset-0 before:bg-white/15">
+        <div aria-hidden className="pointer-events-none absolute -left-24 top-16 size-72 rounded-full bg-primary/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -right-24 bottom-8 size-80 rounded-full bg-pastel-pessego/30 blur-3xl" />
+        <div className="relative z-10 w-full">{children}</div>
       </main>
+
+      <CookieConsent />
 
       <footer className="border-t border-border/60">
         <div className="mx-auto flex h-14 max-w-6xl flex-wrap items-center justify-between gap-x-4 px-6 text-xs text-muted-foreground">

@@ -11,24 +11,24 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Abaixo de `md` a barra sai do fluxo e vira gaveta — ver MobileNav. */}
-      <div className="hidden md:flex">
+      <div className="hidden shrink-0 md:flex">
         <Sidebar />
       </div>
-      <main className="flex-1 overflow-auto">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-auto bg-[radial-gradient(circle_at_top_right,color-mix(in_oklch,var(--primary)_5%,transparent),transparent_34rem)]">
         {/* Acima de tudo, inclusive da barra superior: é o primeiro fato que a
             pessoa precisa saber ao olhar a tela. */}
         <FaixaImpersonacao />
-        <div className="flex items-center gap-2 border-b p-3 sm:p-4">
+        <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur-xl sm:px-6">
           <MobileNav />
           <div className="ml-auto flex items-center gap-2">
             <BuscaGlobal />
             <SignOutButton />
           </div>
-        </div>
+        </header>
         <EmailVerificationBanner />
-        {children}
+        <div className="relative flex-1">{children}</div>
       </main>
     </div>
   )

@@ -327,9 +327,10 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         além da tela do celular e leva "Voltar/Próximo" junto — a pessoa vê o
         formulário e não alcança o botão que o conclui.
       */}
-      <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-[640px]">
-        <DialogHeader>
-          <DialogTitle>{initial ? "Editar Projeto" : "Novo Projeto"}</DialogTitle>
+      <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden rounded-2xl border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur sm:max-w-[680px]">
+        <DialogHeader className="border-b bg-muted/20 px-6 py-5">
+          <DialogTitle className="text-xl tracking-tight">{initial ? "Editar projeto" : "Novo projeto"}</DialogTitle>
+          <p className="text-sm text-muted-foreground">Organize as informações em etapas simples e revise tudo antes de salvar.</p>
         </DialogHeader>
 
         <div className="min-w-0 shrink-0 overflow-x-auto pb-1">

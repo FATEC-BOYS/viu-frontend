@@ -393,7 +393,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
     <TooltipProvider delayDuration={50}>
       <div
         className={cn(
-          "group/sidebar flex h-full flex-col border-r bg-background transition-[width] duration-300 ease-out",
+          "group/sidebar flex h-full flex-col border-r border-border/70 bg-sidebar/80 backdrop-blur-xl transition-[width] duration-300 ease-out shadow-[8px_0_30px_-24px_color-mix(in_oklch,var(--foreground)_28%,transparent)]",
           semColapso ? "w-full border-r-0" : collapsed ? "w-16" : "w-64"
         )}
         aria-label="Barra lateral de navegação"
@@ -545,11 +545,11 @@ function NavItemRow({
   const Icon = item.icon;
 
   const classe = cn(
-    "group/item relative flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors outline-none",
+    "group/item relative flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 outline-none",
     bloqueio
       ? "cursor-not-allowed text-muted-foreground/60"
       : "hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
-    active && !bloqueio ? "bg-accent text-accent-foreground" : !bloqueio && "text-muted-foreground",
+    active && !bloqueio ? "bg-primary/10 text-foreground shadow-sm ring-1 ring-primary/15" : !bloqueio && "text-muted-foreground",
     item.disabled && "pointer-events-none opacity-50",
   );
 
@@ -606,7 +606,7 @@ function NavItemRow({
         aria-hidden
       />
 
-      <Icon className={cn("h-4 w-4", collapsed ? "mx-auto" : "mr-3")} />
+      <Icon className={cn("h-4 w-4 transition-colors", active ? "text-primary" : "", collapsed ? "mx-auto" : "mr-3")} />
 
       {!collapsed && (
         <div className="ml-1 flex w-full items-center justify-between">
