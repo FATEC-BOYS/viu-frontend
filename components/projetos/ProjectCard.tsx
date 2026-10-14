@@ -41,8 +41,16 @@ export default function ProjectCard({
   selectMode: boolean;
   selected: boolean;
   onToggle: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  /**
+   * Editar e excluir — de quem pode.
+   *
+   * Opcionais porque a lista é vista por duas pessoas com direitos
+   * diferentes. Para o cliente os dois respondem 403 desde que escrever no
+   * projeto virou do designer, e "Excluir" aparecia em vermelho no cartão do
+   * trabalho que não é dele.
+   */
+  onEdit?: () => void;
+  onDelete?: () => void;
   formatBRLFromCents: (cents: number) => string;
 }) {
   const prog = useProjetoProgress(p);
@@ -141,17 +149,21 @@ export default function ProjectCard({
           grade, ele virava a coisa mais chamativa da tela.
         */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-2">
-          <div className="flex gap-1 acoes-hover">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={onDelete}
-            >
-              Excluir
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onEdit}>Editar</Button>
-          </div>
+          {(onDelete || onEdit) && (
+            <div className="flex gap-1 acoes-hover">
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={onDelete}
+                >
+                  Excluir
+                </Button>
+              )}
+              {onEdit && <Button variant="ghost" size="sm" onClick={onEdit}>Editar</Button>}
+            </div>
+          )}
           <Button variant="outline" size="sm" asChild><Link href={`/projetos/${p.id}`}>Abrir</Link></Button>
         </div>
       </CardContent>

@@ -5,6 +5,7 @@ import { diasAte } from '@/lib/diaDeCalendario';
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,6 +48,20 @@ type ProjetoInitial = {
 function ProjetosPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+
+  /*
+   * Mexer no projeto é do designer DELE — a mesma regra da tela do projeto,
+   * e a mesma que o servidor aplica desde que `requireDesignerDoProjeto`
+   * entrou. Aqui ela é por CARTÃO: a lista mistura projetos, e numa equipe a
+   * pessoa pode ser designer de um e não de outro.
+   *
+   * Sem isto, "Editar" e "Excluir" apareciam para o cliente e respondiam 403
+   * — a tela prometendo o que o servidor recusa. "Excluir" ainda por cima em
+   * vermelho, no cartão do trabalho que não é dele.
+   */
+  const podeMexer = (p: Projeto) =>
+    !!user && (user.tipo === "ADMIN" || p.designer?.id === user.id);
 
   // data
   const [rows, setRows] = useState<Projeto[]>([]);
@@ -360,9 +375,17 @@ function ProjetosPageContent() {
               <TabsTrigger value="calendar">Calendário</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button onClick={() => { setEditing(null); setOpenModal(true); }} title="Criar projeto — vamos dar um nome bonito?">
-            <Plus className="h-4 w-4 mr-2" /> Novo
-          </Button>
+          {/*
+            "Novo" é do designer: quem abre trabalho é quem foi contratado, e
+            o backend recusa cliente como designer do projeto. Era o botão
+            mais chamativo da tela — em laranja, no topo — para quem não
+            começa projeto nenhum.
+          */}
+          {user?.tipo !== "CLIENTE" && (
+            <Button onClick={() => { setEditing(null); setOpenModal(true); }} title="Criar projeto — vamos dar um nome bonito?">
+              <Plus className="h-4 w-4 mr-2" /> Novo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -423,8 +446,8 @@ function ProjetosPageContent() {
                     selectMode={selectMode}
                     selected={!!selected[p.id]}
                     onToggle={() => setSelected((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
-                    onEdit={() => { setEditing(p); setOpenModal(true); }}
-                    onDelete={() => onDelete(p.id)}
+                    onEdit={podeMexer(p) ? () => { setEditing(p); setOpenModal(true); } : undefined}
+                    onDelete={podeMexer(p) ? () => onDelete(p.id) : undefined}
                     formatBRLFromCents={formatBRLFromCents}
                   />
                 ))}
