@@ -78,11 +78,34 @@ describe('DESIGNER', () => {
 describe('CLIENTE', () => {
   it('vê só o que é dele', () => {
     renderComo('CLIENTE')
-    expect(link(/projetos/i)).toBeInTheDocument()
+    expect(link(/dashboard/i)).toBeInTheDocument()
     expect(link(/notificações/i)).toBeInTheDocument()
     // Escopada por clienteId no backend; a página abre em `tipo: 'cliente'`.
     expect(link(/faturas/i)).toBeInTheDocument()
     expect(link(/perfil/i)).toBeInTheDocument()
+  })
+
+  /*
+   * "Projetos" sai do menu do cliente — e esta asserção existe porque a
+   * ausência é DE PROPÓSITO, não esquecimento.
+   *
+   * Era a segunda porta do mesmo cômodo, e a pior: o dashboard dele já abre
+   * com "Aguardando você" e lista os projetos dele logo abaixo, com o
+   * contexto que lhe importa. `/projetos` entregava a lista do DESIGNER sem
+   * adaptação — "+ Novo" como botão principal, "Editar" e "Excluir" em cada
+   * cartão (os dois respondendo 403), abas Board e Calendário, e um filtro
+   * "Cliente" na tela do próprio cliente.
+   *
+   * A rota continua existindo e escopada no backend: o que sai é a oferta.
+   */
+  it('não é mandado para a lista de projetos — a casa dele é o dashboard', () => {
+    renderComo('CLIENTE')
+    expect(link(/projetos/i)).not.toBeInTheDocument()
+  })
+
+  it('o designer continua com a lista de projetos', () => {
+    renderComo('DESIGNER')
+    expect(link(/projetos/i)).toBeInTheDocument()
   })
 
   it('não vê as telas que o backend recusa para ele', () => {

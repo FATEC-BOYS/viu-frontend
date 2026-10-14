@@ -277,8 +277,24 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
         {
           title: 'Principal',
           items: [
+            /*
+             * Sem "Projetos" para o cliente — era a SEGUNDA porta do mesmo
+             * cômodo, e a pior das duas.
+             *
+             * O dashboard dele já abre com "Aguardando você" e, abaixo, a
+             * lista "Seus projetos" com o contexto que lhe importa: com quem
+             * é, e como vai o prazo. `/projetos` entregava a lista do
+             * DESIGNER sem adaptação nenhuma — "+ Novo" como o botão mais
+             * chamativo da tela, "Editar" e "Excluir" em cada cartão (os dois
+             * respondem 403 desde que a escrita no projeto virou do designer),
+             * abas Board e Calendário, e um filtro "Cliente" na tela do
+             * próprio cliente.
+             *
+             * A rota continua existindo e abrindo por URL: ela é escopada no
+             * backend e não vaza projeto de ninguém. O que muda é parar de
+             * oferecê-la.
+             */
             { title: 'Dashboard', href: '/dashboard', icon: Home },
-            { title: 'Projetos', href: '/projetos', icon: FolderOpen },
             { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
             // Escopada por clienteId no backend, e a página já abre em
             // `tipo: 'cliente'` — não é a tela do designer reaproveitada.

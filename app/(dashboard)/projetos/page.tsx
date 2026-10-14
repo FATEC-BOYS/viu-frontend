@@ -2,9 +2,11 @@
 
 import { FadeIn } from "@/components/layout/Motion";
 import { diasAte } from '@/lib/diaDeCalendario';
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { podeMexerNoProjeto, podeCriarProjeto } from "@/lib/permissoesDoProjeto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,10 +49,28 @@ type ProjetoInitial = {
 function ProjetosPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+
+  /*
+   * As duas regras vêm de `lib/permissoesDoProjeto`, e não daqui.
+   *
+   * Elas nasceram espalhadas — uma na tela do projeto, outra aqui — e já
+   * divergiam: esta abria exceção para ADMIN e aquela não, então o admin via
+   * "Editar" num lugar e não no outro. Duas cópias da mesma verdade divergem.
+   */
+  const podeMexer = (p: Projeto) => podeMexerNoProjeto(user, p);
+  const podeCriar = podeCriarProjeto(user);
 
   // data
   const [rows, setRows] = useState<Projeto[]>([]);
   const [filtered, setFiltered] = useState<Projeto[]>([]);
+
+  /*
+   * A seleção em massa só existe para quem tem ao menos um projeto seu na
+   * lista. Ela muda status e prazo — escrita —, e para o cliente era mais um
+   * caminho aberto para o que o servidor recusa.
+   */
+  const temAlgoParaMexer = filtered.some(podeMexer);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loaderLine, setLoaderLine] = useState(LOADER_LINES[0]);
@@ -59,6 +79,21 @@ function ProjetosPageContent() {
   // ui
   const [mode, setMode] = useState<Mode>(parseMode(searchParams.get("view")));
   const [openModal, setOpenModal] = useState(false);
+  const [editing, setEditing] = useState<Projeto | null>(null);
+
+  /*
+   * Uma porta só para o modal de criação.
+   *
+   * O modal tem quatro entradas — o botão do cabeçalho, `?novo=1` na URL, a
+   * ação do estado vazio e o "+" do calendário — e a regra de quem pode abrir
+   * mora aqui, uma vez. Trancar uma entrada deixaria três abertas, e a pessoa
+   * só descobriria no "Salvar", com a recusa do servidor.
+   */
+  const abrirCriacao = useCallback(() => {
+    if (!podeCriar) return;
+    setEditing(null);
+    setOpenModal(true);
+  }, [podeCriar]);
 
   /**
    * `?novo=1` abre o modal de criação direto. Mesma história de /clientes:
@@ -66,11 +101,9 @@ function ProjetosPageContent() {
    */
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('novo') === '1') {
-      setEditing(null);
-      setOpenModal(true);
+      abrirCriacao();
     }
-  }, []);
-  const [editing, setEditing] = useState<Projeto | null>(null);
+  }, [abrirCriacao]);
 
   /*
    * Filtros — TODOS vêm da URL, e todos voltam para ela.
@@ -360,9 +393,17 @@ function ProjetosPageContent() {
               <TabsTrigger value="calendar">Calendário</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button onClick={() => { setEditing(null); setOpenModal(true); }} title="Criar projeto — vamos dar um nome bonito?">
-            <Plus className="h-4 w-4 mr-2" /> Novo
-          </Button>
+          {/*
+            "Novo" é do designer: quem abre trabalho é quem foi contratado, e
+            o backend recusa cliente como designer do projeto. Era o botão
+            mais chamativo da tela — em laranja, no topo — para quem não
+            começa projeto nenhum.
+          */}
+          {podeCriar && (
+            <Button onClick={abrirCriacao} title="Criar projeto — vamos dar um nome bonito?">
+              <Plus className="h-4 w-4 mr-2" /> Novo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -376,10 +417,12 @@ function ProjetosPageContent() {
         orderBy={orderBy} setOrderBy={setOrderBy}
         ascending={ascending} setAscending={setAscending}
         rightSlot={
-          <Button variant={selectMode ? "secondary" : "outline"} size="sm" onClick={() => { setSelectMode((s) => !s); setSelected({}); }}>
-            <Settings2 className="h-4 w-4 mr-2" />
-            {selectMode ? "Cancelar seleção" : "Selecionar"}
-          </Button>
+          temAlgoParaMexer ? (
+            <Button variant={selectMode ? "secondary" : "outline"} size="sm" onClick={() => { setSelectMode((s) => !s); setSelected({}); }}>
+              <Settings2 className="h-4 w-4 mr-2" />
+              {selectMode ? "Cancelar seleção" : "Selecionar"}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -401,8 +444,8 @@ function ProjetosPageContent() {
                 tom="lavanda"
                 title="Nenhum projeto ainda"
                 description="O projeto é onde o trabalho entra no VIU: guarda as artes de um cliente e o histórico de cada versão."
-                actionLabel="Criar projeto"
-                onAction={() => { setEditing(null); setOpenModal(true); }}
+                actionLabel={podeCriar ? "Criar projeto" : undefined}
+                onAction={podeCriar ? abrirCriacao : undefined}
               />
             )
           ) : (
@@ -423,8 +466,8 @@ function ProjetosPageContent() {
                     selectMode={selectMode}
                     selected={!!selected[p.id]}
                     onToggle={() => setSelected((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
-                    onEdit={() => { setEditing(p); setOpenModal(true); }}
-                    onDelete={() => onDelete(p.id)}
+                    onEdit={podeMexer(p) ? () => { setEditing(p); setOpenModal(true); } : undefined}
+                    onDelete={podeMexer(p) ? () => onDelete(p.id) : undefined}
                     formatBRLFromCents={formatBRLFromCents}
                   />
                 ))}
@@ -438,6 +481,18 @@ function ProjetosPageContent() {
             projects={filtered}
             onMove={async (projectId, from, to) => {
               if (from === to) return;
+              /*
+               * Arrastar no Board é ESCRITA — `PUT /projetos/:id` com o status
+               * novo —, e estava fora da regra que o resto da tela já aplica.
+               * Quem não é o designer do projeto via o cartão mudar de coluna,
+               * levava 403 e o cartão voltava sozinho: a tela oferecendo o que
+               * o servidor recusa, com um passo a mais de confusão.
+               */
+              const alvo = rows.find((p) => p.id === projectId);
+              if (!alvo || !podeMexer(alvo)) {
+                toast.error("Mover este projeto é do designer dele.");
+                return;
+              }
               // otimista no estado local
               setRows(prev => prev.map(p => p.id === projectId ? { ...p, status: to } : p));
 
@@ -453,7 +508,7 @@ function ProjetosPageContent() {
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-0">
-          <CalendarView projects={filtered} onCreateAtDate={() => { setEditing(null); setOpenModal(true); }} />
+          <CalendarView projects={filtered} onCreateAtDate={abrirCriacao} />
         </TabsContent>
       </Tabs>
 
