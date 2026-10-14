@@ -19,7 +19,7 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 const get = vi.fn()
 const put = vi.fn()
-vi.mock('@/lib/api', () => ({ api: { get: (...a: any[]) => get(...a), put: (...a: any[]) => put(...a) } }))
+vi.mock('@/lib/api', () => ({ api: { get: (...a: any[]) => get(...a), put: (...a: any[]) => put(...a) }, getAll: async (...a: any[]) => (await get(...a)).data }))
 
 const EU = 'cliente-1'
 
@@ -113,6 +113,28 @@ describe('AguardandoVoce', () => {
     render(<AguardandoVoce usuarioId={EU} vazio={<p>nada por aqui</p>} />)
 
     expect(await screen.findByText('nada por aqui')).toBeInTheDocument()
+  })
+
+  it('mostra erro em vez de afirmar que não há pendências e permite tentar de novo', async () => {
+    get.mockRejectedValueOnce(new Error('indisponível'))
+      .mockResolvedValueOnce({ data: [pendente()] })
+    render(<AguardandoVoce usuarioId={EU} vazio={<p>nada por aqui</p>} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar')
+    expect(screen.queryByText('nada por aqui')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    expect(await screen.findByText('Cartaz do show')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(get.mock.calls[1][0]).not.toContain('limit=20')
+  })
+
+  it('exibe também as pendências além da vigésima retornadas pela consulta paginada', async () => {
+    get.mockResolvedValue({ data: Array.from({ length: 25 }, (_, i) => pendente({
+      id: `ap${i}`,
+      arte: { id: `arte-${i}`, nome: `Peça ${i + 1}`, versao: 1, previewUrl: null },
+    })) })
+    render(<AguardandoVoce usuarioId={EU} />)
+    expect(await screen.findByText('Peça 25')).toBeInTheDocument()
+    expect(screen.getAllByRole('link')).toHaveLength(25)
   })
 
   it('sem usuário não pergunta nada', async () => {
