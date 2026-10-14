@@ -1,4 +1,5 @@
 import type { Projeto } from "@/lib/projects";
+import { rotuloProjeto } from "@/lib/rotulos";
 
 export type StatusFiltro = "todos" | "EM_ANDAMENTO" | "CONCLUIDO" | "PAUSADO";
 export type Mode = "cards" | "board" | "calendar";
@@ -97,16 +98,18 @@ export function filtrosDaQuery(params: URLSearchParams): FiltrosDeProjeto {
   };
 }
 
-const STATUS_LABEL: Record<Projeto["status"], string> = {
-  RASCUNHO: "Rascunho",
-  EM_ANDAMENTO: "Em andamento",
-  PAUSADO: "Pausado",
-  CONCLUIDO: "Concluído",
-  CANCELADO: "Cancelado",
-};
-
+/**
+ * O rótulo vem de `lib/rotulos`, não de um mapa daqui.
+ *
+ * Este arquivo tinha o seu, e ele era um dos quatro: o cartão da lista lia
+ * daqui ("Concluído"), a tela do projeto lia de `lib/rotulos` ("Fechado") e o
+ * painel do cliente tinha um terceiro — sem RASCUNHO, então o cliente com
+ * projeto esperando aceite via o enum cru na tela.
+ *
+ * A função fica, porque as telas a chamam; o mapa saiu.
+ */
 export function statusLabel(s: Projeto["status"]) {
-  return STATUS_LABEL[s] ?? s;
+  return rotuloProjeto(s);
 }
 export function orderLabel(o: OrdemProjeto) {
   return o === "prazo" ? "Prazo" : o === "criado_em" ? "Criação" : "Nome";

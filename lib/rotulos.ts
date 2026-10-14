@@ -44,7 +44,14 @@ const PROJETO: Record<string, string> = {
   RASCUNHO: 'Rascunho — aguardando aceite',
   EM_ANDAMENTO: 'Em andamento',
   PAUSADO: 'Pausado',
-  CONCLUIDO: 'Fechado',
+  /*
+   * "Concluído", e não "Fechado".
+   *
+   * Eram quatro mapas de rótulo de projeto no front, e este era o único que
+   * dizia "Fechado": o cartão da lista mostrava "Concluído", a tela do projeto
+   * "Fechado", para o mesmo status. A palavra é escolha da Alessandra.
+   */
+  CONCLUIDO: 'Concluído',
   CANCELADO: 'Cancelado',
 }
 
@@ -61,6 +68,22 @@ export const rotuloArte = (s?: string | null) => traduzir(ARTE, s, 'Em análise'
 export const rotuloAprovacao = (s?: string | null) => traduzir(APROVACAO, s, 'Aguardando decisão')
 export const rotuloFeedback = (s?: string | null) => traduzir(FEEDBACK, s, 'Em aberto')
 export const rotuloProjeto = (s?: string | null) => traduzir(PROJETO, s, 'Em andamento')
+
+/**
+ * O mesmo status, encurtado para cabeçalho de coluna do Board.
+ *
+ * Só a diferença deliberada mora aqui: "Rascunho — aguardando aceite" é uma
+ * frase, e frase não cabe num cabeçalho que ainda leva o contador do lado.
+ * Todo o resto vem de `rotuloProjeto`, para não haver dois lugares onde
+ * "Concluído" possa virar outra coisa — foi assim que apareceram quatro mapas
+ * discordando.
+ */
+const COLUNA_CURTA: Record<string, string> = {
+  RASCUNHO: 'Aguardando aceite',
+}
+
+export const rotuloColunaDoProjeto = (s?: string | null) =>
+  (s && COLUNA_CURTA[s]) || rotuloProjeto(s)
 
 /**
  * O tipo de uma arte chega em dois formatos diferentes, porque a origem é

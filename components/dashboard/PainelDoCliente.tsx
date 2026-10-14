@@ -9,6 +9,7 @@ import { pagamentosApi, type Fatura, formatReais } from '@/lib/pagamentos'
 import AguardandoVoce from '@/components/dashboard/AguardandoVoce'
 import { ChevronRight } from 'lucide-react'
 import { Pilula } from '@/components/dashboard/pecasDoCartao'
+import { rotuloProjeto } from '@/lib/rotulos'
 
 /**
  * O painel de quem CONTRATA.
@@ -38,12 +39,12 @@ type ProjetoDoCliente = {
   designer: string | null
 }
 
-const ROTULO_STATUS: Record<string, string> = {
-  EM_ANDAMENTO: 'Em andamento',
-  CONCLUIDO: 'Concluído',
-  PAUSADO: 'Pausado',
-  CANCELADO: 'Cancelado',
-}
+/*
+ * O rótulo vem de `lib/rotulos`. O mapa que morava aqui não tinha RASCUNHO —
+ * e é o status em que todo projeto com convite nasce —, então o cliente que
+ * ainda não aceitou via "RASCUNHO" em caixa alta na pílula, pelo `?? p.status`
+ * do fallback.
+ */
 
 const TOM_STATUS: Record<string, 'atencao' | 'neutro' | 'feito'> = {
   EM_ANDAMENTO: 'neutro',
@@ -126,7 +127,7 @@ function ListaDeProjetos({ projetos }: { projetos: ProjetoDoCliente[] }) {
                 </div>
 
                 <Pilula tom={TOM_STATUS[p.status] ?? 'neutro'}>
-                  {ROTULO_STATUS[p.status] ?? p.status}
+                  {rotuloProjeto(p.status)}
                 </Pilula>
                 <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
               </Link>

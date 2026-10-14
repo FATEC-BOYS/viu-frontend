@@ -8,26 +8,16 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { motivoDaRecusa } from "@/lib/transicoesDoProjeto";
+import { rotuloColunaDoProjeto } from "@/lib/rotulos";
 
 type Status = Projeto["status"];
 
-/**
- * Como o quadro chama cada status.
- *
- * Exportado porque a recusa de um arrasto precisa falar com estas palavras: a
- * mensagem dizia "Fechado" (o rótulo de `lib/rotulos`) sobre uma coluna
- * escrita "Concluído", e a tela se contradizia sozinha.
+/*
+ * Os títulos das colunas vinham de um mapa daqui — um dos quatro mapas de
+ * rótulo de projeto que o front tinha, e que discordavam. Agora vêm de
+ * `lib/rotulos`, que guarda a palavra e a forma curta de cabeçalho num lugar
+ * só.
  */
-export const TITLES: Record<Status, string> = {
-  RASCUNHO: "Aguardando aceite",
-  EM_ANDAMENTO: "Em andamento",
-  PAUSADO: "Pausado",
-  CONCLUIDO: "Concluído",
-  CANCELADO: "Cancelado",
-};
-
-/** O rótulo da coluna, para quem precisa citá-la fora daqui. */
-export const rotuloDaColuna = (s: Status) => TITLES[s] ?? s;
 
 // Projeto cancelado não vira coluna — ele sai do fluxo de trabalho, e uma
 // coluna vazia permanente só ocupa espaço no quadro.
@@ -76,12 +66,12 @@ export default function BoardView({
       {/* faixa horizontal, sem esmagar colunas */}
       <div className="flex gap-4 min-w-full">
         {COLS.map((status) => {
-          const recusa = arrastando ? motivoDaRecusa(arrastando.de, status, rotuloDaColuna) : null;
+          const recusa = arrastando ? motivoDaRecusa(arrastando.de, status, rotuloColunaDoProjeto) : null;
           return (
             <DroppableColumn
               key={status}
               status={status}
-              title={TITLES[status]}
+              title={rotuloColunaDoProjeto(status)}
               count={groups[status]?.length ?? 0}
               recusa={recusa}
               onDropCard={(dragId, from) => {

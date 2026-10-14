@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { podeMexerNoProjeto, podeCriarProjeto } from "@/lib/permissoesDoProjeto";
 import { motivoDaRecusa } from "@/lib/transicoesDoProjeto";
+import { rotuloColunaDoProjeto } from "@/lib/rotulos";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,7 +29,7 @@ import {
 
 import SkeletonCard from "@/components/projetos/SkeletonCard";
 import ProjectCard from "@/components/projetos/ProjectCard";
-import BoardView, { rotuloDaColuna } from "@/components/projetos/BoardView";
+import BoardView from "@/components/projetos/BoardView";
 import CalendarView from "@/components/projetos/CalendarView";
 import FilterChips from "@/components/projetos/FilterChips";
 import {
@@ -453,7 +454,7 @@ function ProjetosPageContent() {
                * caminho — e aí a recusa precisa dizer o motivo, não "não
                * consegui".
                */
-              const recusa = motivoDaRecusa(from, to, rotuloDaColuna);
+              const recusa = motivoDaRecusa(from, to, rotuloColunaDoProjeto);
               if (recusa) {
                 toast.error(recusa);
                 return;
