@@ -55,10 +55,10 @@ export default function ArteNaTela({ token, d }: { token: string; d: any }) {
         </header>
         <div className="grid flex-1 place-items-center bg-canvas p-6 text-center">
           <div className="max-w-sm space-y-1">
-            <p className="text-sm font-medium">Não consegui abrir esta arte</p>
+            <p className="text-sm font-medium">Não foi possível abrir esta arte</p>
             <p className="text-sm text-muted-foreground">
-              O arquivo existe, mas o endereço de visualização não foi gerado. Recarregue a
-              página; se continuar assim, avise quem mandou o link.
+              Recarregue a página para tentar abrir o arquivo. Se o problema continuar,
+              avise quem enviou a arte.
             </p>
           </div>
         </div>

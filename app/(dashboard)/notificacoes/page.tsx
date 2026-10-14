@@ -212,7 +212,7 @@ function Notificacoes() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Tudo que aconteceu nos seus projetos — aprovações, feedbacks e cobranças.
+          Acompanhe os avisos sobre aprovações, comentários, convites e pagamentos.
         </p>
       </header>
 

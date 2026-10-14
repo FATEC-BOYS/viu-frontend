@@ -90,7 +90,7 @@ function ResetPasswordForm() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Definir nova senha</CardTitle>
-          <CardDescription>Crie uma nova senha forte para sua conta.</CardDescription>
+          <CardDescription>Escolha uma nova senha para voltar a acessar sua conta.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">

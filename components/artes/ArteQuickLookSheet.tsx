@@ -114,7 +114,7 @@ export function ArteQuickLookSheet({
     > = {
       EM_ANALISE: { variant: "outline", label: "Em Análise" },
       APROVADO: { variant: "default", label: "Aprovado" },
-      REJEITADO: { variant: "destructive", label: "Rejeitado" },
+      REJEITADO: { variant: "destructive", label: "Ajustes pedidos" },
       REVISAO: { variant: "secondary", label: "Em revisão" },
     };
     const conf = map[status] ?? { variant: "outline", label: status };

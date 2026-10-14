@@ -119,7 +119,7 @@ export default function AssinaturaPage() {
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
       <PageHeader
         title="Minha assinatura"
-        description="Gerencie seu plano e pagamentos recorrentes."
+        description="Consulte seu plano, a situação da assinatura e a próxima cobrança."
       />
 
       <AnimatePresence mode="wait">

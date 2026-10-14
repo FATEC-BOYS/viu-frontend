@@ -17,14 +17,14 @@ const ARTE: Record<string, string> = {
   // resposta em cache, renderiza "Em revisão" em vez de gritar o enum cru.
   REVISAO: 'Em revisão',
   APROVADO: 'Aprovada',
-  REJEITADO: 'Recusada',
+  REJEITADO: 'Ajustes pedidos',
 }
 
 /** APROVACAO_TRANSITIONS: PENDENTE → APROVADO | REJEITADO */
 const APROVACAO: Record<string, string> = {
   PENDENTE: 'Aguardando decisão',
   APROVADO: 'Aprovado',
-  REJEITADO: 'Recusado',
+  REJEITADO: 'Ajustes pedidos',
 }
 
 /** Feedback: uma thread está aberta ou foi resolvida. */

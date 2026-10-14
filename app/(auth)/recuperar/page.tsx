@@ -72,7 +72,7 @@ function RecuperarPageConteudo() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Esqueci minha senha</CardTitle>
-          <CardDescription>Informe seu e-mail para receber o link de redefinição.</CardDescription>
+          <CardDescription>Informe o e-mail da sua conta para solicitar um link e criar uma nova senha.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

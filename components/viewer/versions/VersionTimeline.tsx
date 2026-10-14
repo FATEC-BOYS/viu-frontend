@@ -52,7 +52,7 @@ export default function VersionTimeline({
               </div>
               <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>{new Date(v.criado_em).toLocaleString('pt-BR')}</span>
-                <span>{countsByVersao[v.id ?? 'unknown'] ?? 0} msgs</span>
+                <span>{countsByVersao[v.id ?? 'unknown'] ?? 0} comentários</span>
               </div>
             </button>
           );

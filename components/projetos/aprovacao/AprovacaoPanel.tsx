@@ -104,7 +104,7 @@ export default function AprovacaoPanel({
                         rejeitados > 0 && "border-destructive/30 text-destructive",
                       )}
                     >
-                      {aprovado ? "Aprovada" : rejeitados > 0 ? "Rejeitada" : "Pendente"}
+                      {aprovado ? "Aprovada" : rejeitados > 0 ? "Ajustes pedidos" : "Pendente"}
                     </Badge>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">

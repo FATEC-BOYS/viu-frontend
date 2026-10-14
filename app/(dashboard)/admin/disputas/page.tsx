@@ -175,7 +175,7 @@ export default function AdminDisputasPage() {
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <PageHeader
         title="Disputas"
-        description="Enquanto uma disputa está de pé, o valor da fatura fica travado e o designer não saca. Decidir aqui libera o valor para o designer — ou estorna a fatura ao cliente."
+        description="Analise as disputas e registre a decisão. Enquanto estiverem abertas, os valores envolvidos ficam bloqueados para saque."
         actions={
           <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
             <RefreshCw className={`h-4 w-4 mr-2 ${carregando ? 'animate-spin' : ''}`} />

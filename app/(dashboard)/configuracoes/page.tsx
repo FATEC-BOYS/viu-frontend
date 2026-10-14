@@ -417,7 +417,7 @@ export default function ConfiguracoesPage() {
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
       <PageHeader
         title="Configurações"
-        description="Ajuste preferências da sua conta e do app"
+        description="Escolha suas preferências de uso, notificações e segurança."
         actions={
           <>
           <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
@@ -477,7 +477,7 @@ export default function ConfiguracoesPage() {
           <section className="space-y-4">
             <h3 className="text-sm font-medium">Notificações</h3>
             <div className="space-y-3">
-              <ToggleRow label="Notificações push" hint="Receba alertas no navegador" checked={configs.notificacoesPush} onCheckedChange={(v) => setConfigs((p) => ({ ...p, notificacoesPush: v }))} />
+              <ToggleRow label="Notificações no navegador" hint="Ative ou desative os alertas no navegador." checked={configs.notificacoesPush} onCheckedChange={(v) => setConfigs((p) => ({ ...p, notificacoesPush: v }))} />
               <ToggleRow label="Notificações por e-mail" checked={configs.notificacoesEmail} onCheckedChange={(v) => setConfigs((p) => ({ ...p, notificacoesEmail: v }))} />
               <ToggleRow label="Notificações por SMS" checked={configs.notificacoesSms} onCheckedChange={(v) => setConfigs((p) => ({ ...p, notificacoesSms: v }))} />
               <Row label="Resumo por e-mail" control={

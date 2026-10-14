@@ -108,8 +108,8 @@ export default function NovaVersaoDialog({
         <DialogHeader>
           <DialogTitle>Nova versão</DialogTitle>
           <DialogDescription>
-            Faça upload do novo arquivo. A versão será incrementada e o histórico ficará
-            disponível em “Versões”.
+            Envie o arquivo atualizado. A numeração avança e as versões anteriores
+            continuam disponíveis no histórico.
           </DialogDescription>
         </DialogHeader>
 
@@ -137,7 +137,7 @@ export default function NovaVersaoDialog({
               disabled={submitting}
             />
             <p className="text-xs text-muted-foreground">
-              Se vazio, mantém o nome atual ({arte.nome}).
+              Se você não preencher, o nome atual será mantido ({arte.nome}).
             </p>
           </div>
 

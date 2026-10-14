@@ -17,19 +17,19 @@ const PASSOS = [
   {
     icone: Upload,
     titulo: 'Envie',
-    texto: 'Organize suas artes por projeto. Cada ajuste vira uma versão, com histórico.',
+    texto: 'Organize as artes por projeto e envie novas versões para manter o histórico das entregas.',
     cor: 'bg-pastel-lavanda',
   },
   {
     icone: Link2,
     titulo: 'Compartilhe',
-    texto: 'Um link só. Seu cliente abre, comenta e some — sem criar conta, sem instalar nada.',
+    texto: 'Envie o link para o cliente visualizar a arte. Para comentar e aprovar, ele entra na conta.',
     cor: 'bg-pastel-pessego',
   },
   {
     icone: Check,
     titulo: 'Aprove',
-    texto: 'Comentário no ponto exato, áudio quando for mais rápido, e o aceite com data e hora.',
+    texto: 'O cliente comenta na arte, grava um áudio ou registra a aprovação com data e hora.',
     cor: 'bg-pastel-menta',
   },
 ]

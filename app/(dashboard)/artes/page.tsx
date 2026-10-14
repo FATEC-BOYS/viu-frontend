@@ -102,7 +102,7 @@ const STATUS_LABEL: Record<string, string> = {
   todos: "Todos",
   EM_ANALISE: "Em análise",
   APROVADO: "Aprovado",
-  REJEITADO: "Rejeitado",
+  REJEITADO: "Ajustes pedidos",
 };
 
 const ORDEM_LABEL: Record<OrdemDeArtes, string> = {
@@ -118,7 +118,7 @@ function StatusBadge({ status }: { status: string }) {
   const statusConfig = {
     EM_ANALISE: { label: "Em Análise", variant: "outline" as const, icon: Clock },
     APROVADO:   { label: "Aprovado",   variant: "default" as const, icon: CheckCircle2 },
-    REJEITADO:  { label: "Rejeitado",  variant: "destructive" as const, icon: XCircle },
+    REJEITADO:  { label: "Ajustes pedidos",  variant: "destructive" as const, icon: XCircle },
   };
   const config =
     statusConfig[status as keyof typeof statusConfig] ?? {
@@ -577,7 +577,7 @@ function ArtesPageInner() {
               <Badge variant="outline" className="gap-1 border-emerald-600/30 text-emerald-700 dark:text-emerald-400" title="Aprovadas"><CheckCircle2 className="h-3 w-3" /> {estatisticas.aprovadas}</Badge>
             )}
             {estatisticas.rejeitadas > 0 && (
-              <Badge variant="outline" className="gap-1 border-destructive/30 text-destructive" title="Rejeitadas"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
+              <Badge variant="outline" className="gap-1 border-destructive/30 text-destructive" title="Com ajustes pedidos"><XCircle className="h-3 w-3" /> {estatisticas.rejeitadas}</Badge>
             )}
           </div>
         </div>
@@ -585,10 +585,12 @@ function ArtesPageInner() {
         <div className="flex items-center gap-2">
           <Button onClick={handleOpenNewArte}>
             <Upload className="h-4 w-4 mr-2" />
-            Nova Arte
+            Nova arte
           </Button>
         </div>
       </div>
+
+      <p className="text-sm text-muted-foreground">Abra uma arte para revisar os comentários, consultar versões ou acompanhar a aprovação.</p>
 
       {/*
         Uma linha de filtros, como em /projetos.
@@ -788,7 +790,7 @@ function ArtesPageInner() {
             icon={FileImage}
             tom="menta"
             title="Nenhuma arte ainda"
-            description="Suba a primeira e mande o link. Seu cliente abre, comenta no ponto exato e aprova — sem criar conta."
+            description="Envie sua primeira arte e compartilhe o link. O cliente pode visualizar sem entrar; para comentar e aprovar, precisa acessar a conta."
             actionLabel="Nova arte"
             onAction={handleOpenNewArte}
           />
@@ -803,7 +805,7 @@ function ArtesPageInner() {
         defaultTab={defaultTab}
       />
 
-      {/* Modal — Nova Arte */}
+      {/* Modal — Nova arte */}
       <Dialog
         open={openWizard}
         onOpenChange={(o) => {

@@ -108,7 +108,7 @@ export default function AdminSaquesPage() {
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <PageHeader
         title="Saques"
-        description="Pagamentos solicitados pelos designers. O PIX é feito por fora — aqui você registra em que pé está."
+        description="Confira as solicitações de saque e registre o andamento. A transferência PIX é realizada fora do VIU."
         actions={
           <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
             <RefreshCw className={`h-4 w-4 mr-2 ${carregando ? 'animate-spin' : ''}`} />
