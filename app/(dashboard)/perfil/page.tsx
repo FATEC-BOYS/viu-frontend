@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import {
   User as UserIcon, Calendar, Edit, Save, X, Loader2,
-  Bell, Lock, Trash2, Download, Palette, UserRound,
+  Bell, Lock, Download, Palette, UserRound,
   BarChart3, Award, Clock, CheckCircle2, Camera,
   CreditCard, Wallet, ArrowDownToLine, ArrowRight,
 } from 'lucide-react'
@@ -557,12 +557,6 @@ export default function PerfilPage() {
               <Button variant="outline" className="w-full justify-start" disabled>
                 <Download className="h-4 w-4 mr-2" />
                 Exportar dados
-                <span className="ml-auto text-xs text-muted-foreground">em breve</span>
-              </Button>
-              <Separator />
-              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir Conta
                 <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
             </CardContent>
