@@ -221,6 +221,15 @@
   }
   button, a, input, textarea, select {
     transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  button:not(:disabled), a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    transition: outline-offset 160ms ease, box-shadow 160ms ease;
   }
   ::selection {
     background: color-mix(in oklch, var(--primary) 22%, transparent);
