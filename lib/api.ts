@@ -651,8 +651,8 @@ export async function getAll<T>(path: string, maxPages = 20): Promise<T[]> {
     out.push(...rows)
 
     const total = res.pagination?.total
-    if (total !== undefined ? out.length >= total : rows.length < MAX_PAGE_SIZE) break
+    if (total !== undefined ? out.length >= total : rows.length < MAX_PAGE_SIZE) return out
   }
 
-  return out
+  throw new Error('A lista excedeu o limite de páginas. Não foi possível carregar todos os registros.')
 }

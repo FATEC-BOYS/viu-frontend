@@ -1070,3 +1070,17 @@ describe("conversa: resposta é resposta, não comentário novo", () => {
     expect(screen.getAllByText("não era isso, é o contraste")).toHaveLength(1);
   });
 });
+
+
+it("abre e destaca o comentário indicado pelo link da fila", async () => {
+  window.history.replaceState({}, "", "/viewer/arte/arte_1?feedback=fb_1");
+  try {
+    render(<FeedbackViewer arte={mockArte} initialFeedbacks={[baseFeedback]} token="" temSessao />);
+    await waitFor(() => {
+      const cards = document.querySelectorAll('[data-feedback-id="fb_1"]');
+      expect(Array.from(cards).some(card => card.className.includes("ring-2"))).toBe(true);
+    });
+  } finally {
+    window.history.replaceState({}, "", "/");
+  }
+});

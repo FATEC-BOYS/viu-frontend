@@ -7,9 +7,9 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
-import { api } from '@/lib/api'
+import { api, getAll } from '@/lib/api'
 import { destinoDaNotificacao, type Notificacao } from '@/lib/notificacoes'
-import { formatarDia } from '@/lib/diaDeCalendario'
+import { diasAte, formatarDia } from '@/lib/diaDeCalendario'
 import { pagamentosApi, SaldoInfo, type Vigencia, Fatura } from '@/lib/pagamentos'
 
 import TrilhaInicial from '@/components/dashboard/TrilhaInicial'
@@ -19,7 +19,7 @@ import ParadoNoCliente, { type ItemParado } from '@/components/dashboard/ParadoN
 import FunilDoLink from '@/components/dashboard/FunilDoLink'
 import DesdeOntem, { type Evento } from '@/components/dashboard/DesdeOntem'
 import EstaSemana, { type SemanaResumo } from '@/components/dashboard/EstaSemana'
-import { prioridadeLabel } from '@/lib/tarefas'
+
 
 type Projeto = {
   id: string
@@ -44,16 +44,8 @@ type Feedback = {
   id: string
   conteudo: string
   criado_em: string
+  arteId: string
   autor?: { nome?: string | null } | null
-}
-
-type Tarefa = {
-  id: string
-  titulo: string
-  status: string
-  prioridade: string
-  prazo?: string | null
-  projeto?: { id?: string | null; nome?: string | null } | null
 }
 
 // --- mini financial card ---
@@ -233,14 +225,14 @@ export default function PainelDoDesigner() {
   const { user, loading: authLoading } = useAuth()
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([])
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
+  const [erro, setErro] = useState(false)
+  const [erroFinanceiro, setErroFinanceiro] = useState(false)
   const [loading, setLoading] = useState(true)
   const [metricas, setMetricas] = useState({
     totalProjetos: 0,
     projetosAtivos: 0,
     totalArtes: 0,
     feedbacksRecentes: 0,
-    tarefasPendentes: 0,
   })
 
   /*
@@ -263,80 +255,71 @@ export default function PainelDoDesigner() {
 
   const isDesigner = (user as any)?.tipo === 'DESIGNER'
 
-  useEffect(() => {
-    if (authLoading) return
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const [projetosRes, feedbacksRes, tarefasRes] = await Promise.allSettled([
-          api.get<{ data: any[] }>('/projetos?limit=10'),
-          api.get<{ data: any[] }>('/feedbacks?limit=10').catch(() => ({ data: [] as any[] })),
-          api.get<{ data: any[] }>('/tarefas?status=PENDENTE&limit=10').catch(() => ({ data: [] as any[] })),
-        ])
-
-        const projetosData: Projeto[] =
-          projetosRes.status === 'fulfilled'
-            ? (projetosRes.value.data ?? []).map((p: any) => ({
-                id: p.id, nome: p.nome, status: p.status,
-                prazo: p.prazo ?? null,
-                cliente: p.cliente ? { nome: p.cliente.nome } : null,
-                clienteId: p.cliente?.id ?? p.clienteId ?? null,
-                designer: p.designer ? { nome: p.designer.nome } : null,
-                _count: p._count,
-              }))
-            : []
-
-        const feedbacksData: Feedback[] =
-          feedbacksRes.status === 'fulfilled'
-            ? (feedbacksRes.value.data ?? []).map((f: any) => ({
-                id: f.id, conteudo: f.conteudo,
-                criado_em: f.criadoEm ?? f.criado_em ?? '',
-                autor: f.autor ? { nome: f.autor.nome } : null,
-              }))
-            : []
-
-        const tarefasData: Tarefa[] =
-          tarefasRes.status === 'fulfilled'
-            ? (tarefasRes.value.data ?? []).map((t: any) => ({
-                id: t.id, titulo: t.titulo, status: t.status,
-                prioridade: t.prioridade ?? 'MEDIA',
-                prazo: t.prazo ?? null,
-                // `/tarefas` já devolve projeto: { id, nome } — o id era jogado
-                // fora aqui, e sem ele a tarefa não tem como abrir no projeto.
-                projeto: t.projeto ? { id: t.projeto.id, nome: t.projeto.nome } : null,
-              }))
-            : []
-
-        setProjetos(projetosData)
-        setFeedbacks(feedbacksData)
-        setTarefas(tarefasData)
-
-        const totalArtes = projetosData.reduce((acc, p) => acc + (p._count?.artes ?? 0), 0)
-        setMetricas({
-          totalProjetos: projetosData.length,
-          projetosAtivos: projetosData.filter(p => p.status === 'EM_ANDAMENTO').length,
-          totalArtes,
-          feedbacksRecentes: feedbacksData.length,
-          tarefasPendentes: tarefasData.length,
-        })
-      } catch (e) {
-        console.error('Erro ao buscar dados do dashboard:', e)
-      } finally {
-        setLoading(false)
-      }
+  const carregar = useCallback(async () => {
+    if (!user?.id) return
+    setLoading(true)
+    setErro(false)
+    try {
+      const [todosProjetos, comentarios, linksData, eventos, decisoes] = await Promise.all([
+        getAll<any>('/projetos'),
+        getAll<any>('/feedbacks?status=ABERTO'),
+        api.get<{ data: any[] }>('/links').then(r => r.data ?? []),
+        getAll<any>('/notificacoes'),
+        getAll<any>('/aprovacoes'),
+      ])
+      // Aqui se acompanha o trabalho entregue pelo designer; suas contratações
+      // continuam na fila pessoal e na lista de projetos.
+      const meusProjetos = todosProjetos.filter(p => p.designer?.id === user.id)
+      const ids = new Set(meusProjetos.map(p => p.id))
+      const projetosData: Projeto[] = meusProjetos.map(p => ({
+        id: p.id, nome: p.nome, status: p.status, prazo: p.prazo ?? null,
+        cliente: p.cliente, clienteId: p.cliente?.id ?? p.clienteId,
+        designer: p.designer,
+        _count: { artes: p.metricas?.totalArtes ?? p._count?.artes ?? 0 },
+      }))
+      const comentariosAbertos = comentarios.filter(f =>
+        ids.has(f.arte?.projeto?.id) &&
+        (f.autorId ?? f.autor?.id) !== user.id &&
+        !f.resolvidoEm && f.status !== 'RESOLVIDO' && !f.parentId,
+      )
+      setProjetos(projetosData)
+      setFeedbacks(comentariosAbertos.map(f => ({
+        id: f.id, arteId: f.arteId ?? f.arte?.id,
+        conteudo: f.conteudo || f.transcricao || 'Comentário em áudio',
+        criado_em: f.criadoEm ?? '', autor: f.autor,
+      })))
+      setMetricas({
+        totalProjetos: projetosData.length,
+        projetosAtivos: projetosData.filter(p => p.status === 'EM_ANDAMENTO').length,
+        totalArtes: projetosData.reduce((n, p) => n + (p._count?.artes ?? 0), 0),
+        feedbacksRecentes: comentariosAbertos.length,
+          })
+      setLinks(linksData.filter(l => l.criadorId === user.id))
+      setNotificacoes(eventos)
+      setAprovacoes(decisoes.filter(a => ids.has(a.arte?.projetoId ?? a.arte?.projeto?.id)))
+      setContextoCarregado(true)
+    } catch {
+      setErro(true)
+    } finally {
+      setLoading(false)
     }
-    fetchData()
-  }, [authLoading])
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!authLoading) void carregar()
+  }, [authLoading, carregar])
 
   // financial data — separate effect, non-blocking
   useEffect(() => {
     if (authLoading) return
     const tipo = isDesigner ? 'designer' : 'cliente'
+    setErroFinanceiro(false)
     Promise.allSettled([
       pagamentosApi.getMinhaAssinatura(),
       pagamentosApi.getFaturas(tipo),
       isDesigner ? pagamentosApi.getSaldo() : Promise.resolve(null),
     ]).then(([assinaturaRes, faturasRes, saldoRes]) => {
+      setErroFinanceiro([assinaturaRes, faturasRes, saldoRes].some(r => r.status === 'rejected'))
       if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value.data)
       if (faturasRes.status === 'fulfilled') {
         const pendentes = (faturasRes.value.data ?? []).filter(f => f.status === 'PENDENTE')
@@ -345,25 +328,6 @@ export default function PainelDoDesigner() {
       if (saldoRes.status === 'fulfilled' && saldoRes.value) setSaldo(saldoRes.value.data)
     }).catch(console.error)
   }, [authLoading, isDesigner])
-
-  /*
-   * Efeito próprio: estas três faixas são contexto, não a ação do dia. Se uma
-   * delas demorar ou falhar, a fila já está na tela — por isso allSettled e
-   * nenhum setLoading aqui.
-   */
-  useEffect(() => {
-    if (authLoading) return
-    Promise.allSettled([
-      api.get<{ data: any[] }>('/links'),
-      api.get<{ data: any[] }>('/notificacoes?limit=100'),
-      api.get<{ data: any[] }>('/aprovacoes?status=APROVADO&limit=100'),
-    ]).then(([linksRes, notifRes, aprovRes]) => {
-      if (linksRes.status === 'fulfilled') setLinks(linksRes.value.data ?? [])
-      if (notifRes.status === 'fulfilled') setNotificacoes(notifRes.value.data ?? [])
-      if (aprovRes.status === 'fulfilled') setAprovacoes(aprovRes.value.data ?? [])
-      setContextoCarregado(true)
-    })
-  }, [authLoading])
 
   const displayName = user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
@@ -400,14 +364,19 @@ export default function PainelDoDesigner() {
       </div>
     )
 
+  if (erro) return (
+    <section role="alert" className="rounded-xl border bg-card p-5">
+      <h1 className="font-semibold">Não foi possível carregar seu painel</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Suas pendências não puderam ser verificadas. Tente novamente.</p>
+      <Button className="mt-3" onClick={() => void carregar()}>Tentar novamente</Button>
+    </section>
+  )
+
   const projetosEmAndamento = projetos.filter(p => p.status === 'EM_ANDAMENTO')
-  const proximosPrazos = [...projetos]
+  const proximosPrazos = [...projetosEmAndamento]
     .filter(p => p.prazo)
     .sort((a, b) => new Date(a.prazo as string).getTime() - new Date(b.prazo as string).getTime())
     .slice(0, 6)
-
-  const diasAte = (iso: string) =>
-    Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
 
   /**
    * Uma fila só, em ordem de quem está esperando: primeiro outra pessoa
@@ -415,24 +384,27 @@ export default function PainelDoDesigner() {
    * Eram três cartões do mesmo tamanho, como se escolher entre eles fosse
    * trabalho de quem lê.
    */
+  const ajustesPorArte = new Map<string, any>()
+  for (const a of aprovacoes) {
+    if (a.status === 'REJEITADO' && a.versaoNumero != null && a.versaoNumero === a.arte?.versao) {
+      ajustesPorArte.set(a.arte.id, a)
+    }
+  }
+  const ajustes = [...ajustesPorArte.values()]
+
   const fila: ItemDaFila[] = [
+    ...ajustes.slice(0, 4).map<ItemDaFila>(a => ({
+      id: `decisao-${a.id}`, tipo: 'feedback',
+      titulo: `Ajustes pedidos em ${a.arte.nome}`,
+      apoio: a.comentario || 'Confira a decisão antes de enviar a próxima versão.',
+      href: `/artes?arte=${encodeURIComponent(a.arte.id)}`,
+    })),
     ...feedbacks.slice(0, 4).map<ItemDaFila>(f => ({
       id: f.id,
       tipo: 'feedback',
       titulo: `${f.autor?.nome || 'Alguém'} comentou`,
       apoio: f.conteudo,
-      href: '/feedbacks',
-    })),
-    ...tarefas.slice(0, 3).map<ItemDaFila>(t => ({
-      id: t.id,
-      tipo: 'tarefa',
-      titulo: t.titulo,
-      apoio: [t.projeto?.nome, prioridadeLabel[t.prioridade] ?? t.prioridade]
-        .filter(Boolean)
-        .join(' · '),
-      // A tarefa mora dentro do projeto, e é lá que ela abre — /tarefas agora
-      // só redireciona. `/tarefas` já devolve projeto.id no include.
-      href: t.projeto?.id ? `/projetos/${t.projeto.id}?tab=tasks` : '/projetos',
+      href: f.arteId ? `/viewer/arte/${f.arteId}?feedback=${encodeURIComponent(f.id)}` : '/feedbacks',
     })),
     ...proximosPrazos.slice(0, 3).map<ItemDaFila>(p => {
       const dias = diasAte(p.prazo as string)
@@ -467,32 +439,24 @@ export default function PainelDoDesigner() {
     return d
   }
 
-  /* Uma arte já aprovada não está parada — está pronta. */
-  const artesAprovadas = new Set(
-    aprovacoes.map((a: any) => a.arteId ?? a.arte?.id).filter(Boolean),
-  )
-
-  const itensParados: ItemParado[] = links
-    .filter((l: any) => {
-      if (l.revogado) return false
-      if (l.expiraEm && new Date(l.expiraEm).getTime() < Date.now()) return false
-      const arteId = l.arte?.id
-      return !!arteId && !artesAprovadas.has(arteId)
+  // Espera é uma solicitação de aprovação pendente da versão atual,
+  // não a mera existência de um link. Uma linha por arte.
+  const vistas = new Set<string>()
+  const itensParados: ItemParado[] = aprovacoes
+    .filter((a: any) => a.status === 'PENDENTE' &&
+      a.versaoNumero != null && a.versaoNumero === a.arte?.versao && !ajustesPorArte.has(a.arte.id))
+    .filter((a: any) => {
+      if (vistas.has(a.arte.id)) return false
+      vistas.add(a.arte.id)
+      return true
     })
-    .map((l: any) => ({
-      id: String(l.id),
-      arte: l.arte?.nome || 'Arte sem nome',
-      cliente: l.arte?.projeto?.cliente?.nome || 'O cliente',
-      dias: Math.max(0, Math.floor((Date.now() - new Date(l.criadoEm).getTime()) / 86400000)),
-      aberto: (l.acessos ?? 0) > 0,
-      // `/artes/<id>` nunca existiu como página — a lista é `/artes` e o
-      // detalhe só abria clicando nela. O endereço da peça é o visualizador,
-      // que agora abre pela sessão também.
-      href: `/viewer/arte/${l.arte.id}`,
+    .map((a: any) => ({
+      id: a.id, arte: a.arte.nome, cliente: a.aprovador?.nome ?? 'Aprovador',
+      dias: Math.max(0, Math.floor((Date.now() - new Date(a.criadoEm).getTime()) / 86400000)),
+      aberto: null,
+      href: `/viewer/arte/${a.arte.id}`,
     }))
-    // Quem nunca abriu vem primeiro: o link pode nem ter chegado, e é a única
-    // das duas situações em que reenviar resolve.
-    .sort((a, b) => Number(a.aberto) - Number(b.aberto) || b.dias - a.dias)
+    .sort((a, b) => b.dias - a.dias)
     .slice(0, 4)
 
   /* ---------- Desde ontem ---------- */
@@ -529,6 +493,7 @@ export default function PainelDoDesigner() {
 
   /** `decididoEm` é quando a aprovação saiu de PENDENTE — é a data da entrega. */
   const decididasEm = aprovacoes
+    .filter((a: any) => a.status === 'APROVADO')
     .map((a: any) => a.decididoEm ?? a.decidido_em)
     .filter(Boolean)
     .map((d: string) => new Date(d).getTime())
@@ -614,7 +579,8 @@ export default function PainelDoDesigner() {
             comTrilha={mostrarTrilha}
             pendencia={{
               feedbacks: metricas.feedbacksRecentes,
-              tarefas: metricas.tarefasPendentes,
+              ajustes: ajustes.length ? { total: ajustes.length, href: `/artes?arte=${encodeURIComponent(ajustes[0].arte.id)}` } : undefined,
+              tarefas: 0,
               prazoProximo,
               temArte,
             }}
@@ -647,7 +613,7 @@ export default function PainelDoDesigner() {
 
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[3fr_2fr]">
             <DesdeOntem eventos={eventosDesdeOntem} proximoPasso={proximoPasso} />
-            <EstaSemana resumo={resumoSemana} />
+            {!erroFinanceiro && <EstaSemana resumo={resumoSemana} />}
           </div>
 
           {/* Contexto, como as duas faixas acima: diz onde a volta trava, não
@@ -718,12 +684,12 @@ export default function PainelDoDesigner() {
               )}
           </div>
 
-          <FinanceiroCard
+          {erroFinanceiro ? <p role="alert" className="rounded-xl border p-4 text-sm">Não foi possível carregar o financeiro. <Link className="underline" href="/faturas">Consultar faturas</Link></p> : <FinanceiroCard
             isDesigner={isDesigner}
             faturasPendentes={faturasPendentes}
             saldo={saldo}
             assinatura={assinatura}
-          />
+          />}
         </div>
       )}
     </div>

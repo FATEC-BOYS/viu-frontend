@@ -21,28 +21,28 @@ const ITEM: ItemParado = {
 }
 
 describe('ParadoNoCliente', () => {
-  it('diz "Parado em você" quando o que falta é você mandar o link', () => {
+  it('orienta a preparar a revisão quando o que falta é você mandar o link', () => {
     render(<ParadoNoCliente itens={[]} proximoPasso="link" />)
-    expect(screen.getByText(/parado em você/i)).toBeInTheDocument()
-    expect(screen.queryByText(/parado no cliente/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/prepare a revisão/i)).toBeInTheDocument()
+    expect(screen.queryByText(/aguardando decisão/i)).not.toBeInTheDocument()
   })
 
-  it('diz "Parado em você" quando nem a arte subiu ainda', () => {
+  it('orienta a preparar a revisão quando nem a arte subiu ainda', () => {
     render(<ParadoNoCliente itens={[]} proximoPasso="arte" />)
-    expect(screen.getByText(/parado em você/i)).toBeInTheDocument()
+    expect(screen.getByText(/prepare a revisão/i)).toBeInTheDocument()
   })
 
-  it('volta a ser "Parado no cliente" quando há de fato algo esperando ele', () => {
+  it('mostra a espera pela decisão quando há de fato algo esperando ele', () => {
     render(<ParadoNoCliente itens={[ITEM]} proximoPasso={null} />)
-    expect(screen.getByText(/parado no cliente/i)).toBeInTheDocument()
-    expect(screen.getByText(/João Santos ainda não abriu/i)).toBeInTheDocument()
+    expect(screen.getByText(/aguardando decisão/i)).toBeInTheDocument()
+    expect(screen.getByText(/Sem acesso registrado no link/i)).toBeInTheDocument()
   })
 
-  it('e continua "Parado no cliente" quando tudo já teve retorno', () => {
+  it('não presume que um link vazio já recebeu retorno', () => {
     // Vazio por calmaria, não por falta de ação sua: a bola não voltou para
     // você, simplesmente não há nada pendente.
     render(<ParadoNoCliente itens={[]} proximoPasso={null} />)
-    expect(screen.getByText(/parado no cliente/i)).toBeInTheDocument()
-    expect(screen.getByText(/já teve retorno/i)).toBeInTheDocument()
+    expect(screen.getByText(/aguardando decisão/i)).toBeInTheDocument()
+    expect(screen.getByText(/Nenhuma aprovação pendente/i)).toBeInTheDocument()
   })
 })

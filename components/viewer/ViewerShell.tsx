@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { getProjeto } from "@/lib/projects";
 import { useAuth } from "@/contexts/AuthContext";
 import FeedbackViewer from "@/components/viewer/FeedbackViewer";
 import ApprovalsPanel from "@/components/viewer/ApprovalsPanel";
@@ -86,6 +87,18 @@ export default function ViewerShell({
    */
   const { user } = useAuth();
   const temConta = !!user;
+  const [podeGerenciar, setPodeGerenciar] = useState(false);
+  useEffect(() => {
+    let ativo = true;
+    setPodeGerenciar(false);
+    if (user?.tipo === "DESIGNER" && arte.projeto_id) {
+      getProjeto(arte.projeto_id)
+        .then(p => { if (ativo) setPodeGerenciar(p.designer.id === user.id); })
+        .catch(() => { if (ativo) setPodeGerenciar(false); });
+    }
+    return () => { ativo = false; };
+  }, [user?.id, user?.tipo, arte.projeto_id]);
+
   const viewer = useMemo(
     () => (user ? { email: user.email ?? "", nome: user.nome ?? null } : null),
     [user],
@@ -194,6 +207,11 @@ export default function ViewerShell({
           `next`, entrar jogava a pessoa no dashboard e ela perdia o link que
           tinha recebido — que é o único endereço que ela tem.
         */}
+        {podeGerenciar && (
+          <Link href={`/artes?arte=${encodeURIComponent(arte.id)}`} className="text-xs font-medium underline underline-offset-2">
+            Nova versão e aprovação
+          </Link>
+        )}
         {situacao ? (
           <p className="ml-auto truncate text-xs text-muted-foreground">{situacao}</p>
         ) : (

@@ -2,25 +2,7 @@
 
 import Link from 'next/link'
 
-/**
- * O que não está na sua mão.
- *
- * A fila ao lado é o que depende de você. Esta faixa é o contrário: arte
- * enviada, link mandado, e do outro lado silêncio. É a informação que faz
- * alguém ir cobrar — e até agora só existia se o designer abrisse Links
- * compartilhados e contasse nos dedos.
- *
- * Dois silêncios diferentes, e o primeiro dói mais:
- *   ainda não abriu — o link pode nem ter chegado
- *   abriu, sem aprovar — parece que está andando, e não está
- *
- * A segunda frase diz "sem aprovar", não "sem responder": aprovação é o que
- * temos como prova aqui. Afirmar que o cliente não comentou exigiria contar os
- * feedbacks de cada arte, e a tela não tem esse dado.
- *
- * O selo de dias esquenta em pêssego a partir de quatro dias; antes disso é
- * cedo para cobrar e a cor só faria barulho.
- */
+/** Solicitações pendentes da versão atual, sem inferir envio ou leitura. */
 import type { ProximoPasso } from './FilaDoDia'
 
 export type ItemParado = {
@@ -28,7 +10,7 @@ export type ItemParado = {
   arte: string
   cliente: string
   dias: number
-  aberto: boolean
+  aberto: boolean | null
   href: string
 }
 
@@ -41,21 +23,12 @@ export default function ParadoNoCliente({
   itens: ItemParado[]
   proximoPasso?: ProximoPasso
 }) {
-  /*
-   * O título segue o que a faixa está mostrando.
-   *
-   * Era "Parado no cliente" fixo, e dois dos três estados vazios falavam de
-   * coisa parada em VOCÊ: "Você ainda não mandou nenhum link" e "primeiro sobe
-   * a arte". O título dizia de quem era a bola e o corpo dizia o contrário, na
-   * mesma caixa — e é justamente de quem é a bola que esta faixa existe para
-   * responder.
-   */
   const aindaNaoMandei = itens.length === 0 && proximoPasso !== null
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <h2 className="font-mono text-[11px] uppercase tracking-[0.09em] text-muted-foreground">
-        {aindaNaoMandei ? 'Parado em você' : 'Parado no cliente'}
+        {aindaNaoMandei ? 'Prepare a revisão' : 'Aguardando decisão'}
       </h2>
 
       {itens.length === 0 ? (
@@ -64,7 +37,7 @@ export default function ParadoNoCliente({
             ? 'Nada compartilhado ainda — primeiro sobe a arte, depois vai o link.'
             : proximoPasso === 'link'
               ? 'Você ainda não mandou nenhum link. É ele que põe a arte na mão do cliente.'
-              : 'Nenhum link esperando resposta. Tudo que você mandou já teve retorno.'}
+              : 'Nenhuma aprovação pendente da versão atual nas suas artes.'}
         </p>
       ) : (
         <ul className="flex flex-col">
@@ -77,9 +50,11 @@ export default function ParadoNoCliente({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{item.arte}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {item.aberto
-                      ? `${item.cliente} abriu, ainda sem aprovar`
-                      : `${item.cliente} ainda não abriu`}
+                    {item.aberto === null
+                      ? `Decisão solicitada a ${item.cliente}`
+                      : item.aberto
+                      ? `Há acesso registrado no link; aprovação pendente`
+                      : `Sem acesso registrado no link`}
                   </span>
                 </span>
                 <span

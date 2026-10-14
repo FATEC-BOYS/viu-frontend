@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
  */
 
 export type Pendencia = {
+  ajustes?: { total: number; href: string }
   feedbacks: number
   tarefas: number
   prazoProximo?: { nome: string; dias: number } | null
@@ -32,13 +33,20 @@ export function recadoDoDia(p: Pendencia, nome: string): {
   detalhe: string
   acao: { label: string; href: string }
 } {
+  if (p.ajustes?.total) {
+    return {
+      titulo: p.ajustes.total === 1 ? '1 arte com ajustes pedidos' : `${p.ajustes.total} artes com ajustes pedidos`,
+      detalhe: 'Confira os pedidos e prepare a próxima versão.',
+      acao: { label: 'Ver ajustes', href: p.ajustes.href },
+    }
+  }
   if (p.feedbacks > 0) {
     return {
       titulo:
         p.feedbacks === 1
-          ? '1 feedback esperando você'
-          : `${p.feedbacks} feedbacks esperando você`,
-      detalhe: 'O cliente comentou e ainda não teve resposta.',
+          ? '1 comentário em aberto'
+          : `${p.feedbacks} comentários em aberto`,
+      detalhe: 'Confira os comentários que ainda não foram marcados como resolvidos.',
       acao: { label: 'Ver feedbacks', href: '/feedbacks' },
     }
   }

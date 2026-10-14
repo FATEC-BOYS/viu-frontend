@@ -352,6 +352,14 @@ function ArtesPageInner() {
     setOpenQL(true);
   };
 
+  const arteDoLink = getParam("arte", "");
+  useEffect(() => {
+    if (!arteDoLink) return;
+    setArteQL(arteDoLink);
+    setDefaultTab("resumo");
+    setOpenQL(true);
+  }, [arteDoLink]);
+
   // Filtros URL
   const searchTerm   = getParam("q", "");
   const statusFilter = getParam("status", "todos");
