@@ -216,6 +216,10 @@
   body {
     @apply bg-background text-foreground;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11" 1, "ss01" 1;
+  }
+  button, a, input, textarea, select {
+    transition-duration: 180ms;
   }
   ::selection {
     background: color-mix(in oklch, var(--primary) 22%, transparent);
