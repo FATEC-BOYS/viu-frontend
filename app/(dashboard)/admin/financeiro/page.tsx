@@ -74,7 +74,7 @@ export default function AdminFinanceiroPage() {
   }
 
   return (
-    <FadeIn className="mx-auto w-full max-w-6xl space-y-6 p-6">
+    <FadeIn className="mx-auto w-full max-w-6xl space-y-7 p-4 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Financeiro"
@@ -97,7 +97,7 @@ export default function AdminFinanceiroPage() {
 
       {/* O período é o primeiro controle porque é a primeira decisão de quem
           confere: qual mês estou fechando. */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
+      <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm backdrop-blur-sm">
         <div className="space-y-1.5">
           <Label htmlFor="fin-inicio">De</Label>
           <Input
@@ -228,7 +228,7 @@ function Numero({
   destaque?: boolean
 }) {
   return (
-    <div className={`rounded-xl border p-4 ${destaque ? 'bg-primary/5' : 'bg-card'}`}>
+    <div className={`group relative overflow-hidden rounded-2xl border border-border/70 p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md ${destaque ? 'bg-gradient-to-br from-primary/12 via-card to-card' : 'bg-card/90'}`}>
       <p className="text-xs text-muted-foreground">{titulo}</p>
       <p className={`mt-1 tabular-nums ${destaque ? 'text-2xl font-semibold' : 'text-lg font-medium'}`}>
         {valor}
@@ -248,7 +248,7 @@ function Movimentos({ movimentos }: { movimentos: Movimento[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border">
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
       {/* Tabela de verdade, e não cartões: quem confere lê coluna, compara
           linha e soma com o olho. Rola na horizontal no telefone em vez de
           empilhar, porque a comparação entre colunas é o ponto. */}
