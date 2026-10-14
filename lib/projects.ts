@@ -1,6 +1,7 @@
 // lib/projects.ts — usa a API REST do backend
 import { api, getAll, MAX_PAGE_SIZE } from '@/lib/api'
 import { listVersoes } from '@/lib/artes'
+import { TRANSICOES_DO_PROJETO } from '@/lib/transicoesDoProjeto'
 
 // Os cinco status do backend (PROJETO_TRANSITIONS em src/utils/stateMachine.ts).
 // RASCUNHO e CANCELADO faltavam aqui: um projeto criado com convite nasce em
@@ -150,9 +151,24 @@ function validateProjetoPatch(patch: Partial<ProjetoInput>): string[] {
     patch.descricao.trim().length > 2000
   )
     errs.push('Máx. 2000 caracteres na descrição')
+  /*
+   * Os status conhecidos saem das CHAVES da máquina de estados, não de uma
+   * lista escrita aqui.
+   *
+   * A lista escrita aqui tinha três dos cinco: faltavam RASCUNHO e CANCELADO.
+   * O efeito, medido no app: arrastar um cartão para a coluna "Aguardando
+   * aceite" do Board morria nesta validação, antes de qualquer requisição, e
+   * a pessoa lia "Não consegui mover, desfazendo…" — um erro de gravação para
+   * um status que o backend aceita e grava todo dia (todo projeto de
+   * não-admin nasce em RASCUNHO).
+   *
+   * Esta função responde "este status EXISTE?". Se a transição é permitida é
+   * outra pergunta, do dono dela — `podeIrDe`, e `assertValidTransition` no
+   * servidor.
+   */
   if (
     patch.status !== undefined &&
-    !['EM_ANDAMENTO', 'CONCLUIDO', 'PAUSADO'].includes(patch.status)
+    !Object.keys(TRANSICOES_DO_PROJETO).includes(patch.status)
   )
     errs.push('Status inválido')
   if (
