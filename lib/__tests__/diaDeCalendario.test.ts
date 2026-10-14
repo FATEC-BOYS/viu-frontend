@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { diaDeCalendario, diasAte, formatarDia } from '../diaDeCalendario'
+import { diaDeCalendario, diasAte, formatarDia, formatarInstante } from '../diaDeCalendario'
 
 /**
  * O dia precisa ser o dia, em qualquer fuso.
@@ -34,6 +34,53 @@ describe('O dia é o mesmo em qualquer fuso', () => {
 
   it('aceita Date além de string', () => {
     expect(formatarDia(new Date(VENCE_15_SET), { day: '2-digit', month: '2-digit' })).toBe('15/09')
+  })
+})
+
+/*
+ * O par oposto, e o erro simétrico.
+ *
+ * `decididoEm` e `criadoEm` são INSTANTES — o momento exato em que algo
+ * aconteceu —, e passá-los por `formatarDia` força o dia UTC: uma decisão
+ * tomada às 21h30 de 13/10 em São Paulo é gravada como `2026-10-14T00:30:00Z`
+ * e seria exibida como 14/10. O cliente leria que respondeu num dia em que não
+ * respondeu.
+ *
+ * O teste roda sob `TZ=America/Sao_Paulo`, que é o fuso onde os dois erros
+ * aparecem — num processo em UTC as duas funções concordam e nada seria
+ * provado.
+ */
+describe('Instante e data de calendário não são a mesma coisa', () => {
+  const DECIDIDO_21H30_DE_13 = '2026-10-14T00:30:00.000Z'
+
+  // O processo de teste roda em UTC, e em UTC as duas funções CONCORDAM —
+  // nada seria provado. O fuso de quem usa o produto é onde elas divergem.
+  const fusoOriginal = process.env.TZ
+  beforeEach(() => {
+    process.env.TZ = 'America/Sao_Paulo'
+  })
+  afterEach(() => {
+    process.env.TZ = fusoOriginal
+  })
+
+  it('o instante é lido no fuso de quem olha', () => {
+    expect(formatarInstante(DECIDIDO_21H30_DE_13, { day: '2-digit', month: '2-digit' })).toBe('13/10')
+  })
+
+  it('e `formatarDia` diria o dia seguinte — é por isso que são duas funções', () => {
+    expect(formatarDia(DECIDIDO_21H30_DE_13, { day: '2-digit', month: '2-digit' })).toBe('14/10')
+  })
+
+  it('para data de calendário, continua sendo `formatarDia` quem acerta', () => {
+    expect(formatarDia(VENCE_15_SET, { day: '2-digit', month: '2-digit' })).toBe('15/09')
+    // O mesmo valor pelo formatador de instante cairia no dia anterior.
+    expect(formatarInstante(VENCE_15_SET, { day: '2-digit', month: '2-digit' })).toBe('14/09')
+  })
+
+  it('aceita Date além de string', () => {
+    expect(
+      formatarInstante(new Date(DECIDIDO_21H30_DE_13), { day: '2-digit', month: '2-digit' }),
+    ).toBe('13/10')
   })
 })
 

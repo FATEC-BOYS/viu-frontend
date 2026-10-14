@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { formatarDia } from "@/lib/diaDeCalendario";
+import { formatarDia, formatarInstante } from "@/lib/diaDeCalendario";
 import { rotuloProjeto } from "@/lib/rotulos";
 import { decidirAprovacao } from "@/lib/aprovacoesDaArte";
 import {
@@ -154,7 +154,7 @@ export default function ProjetoDoCliente({
                       <p className="text-xs text-muted-foreground">
                         {d.status === "APROVADO" ? "Aprovada" : "Ajustes pedidos"}
                         {d.versaoNumero != null && ` · v${d.versaoNumero}`}
-                        {d.decididoEm && ` · ${formatarDia(d.decididoEm)}`}
+                        {d.decididoEm && ` · ${formatarInstante(d.decididoEm)}`}
                       </p>
                       {d.comentario && (
                         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
@@ -262,7 +262,7 @@ function CartaoDeDecisao({
             {decisao.versaoNumero != null
               ? `Versão ${decisao.versaoNumero}`
               : `Versão ${decisao.arte.versao}`}
-            {decisao.criadoEm && ` · enviada em ${formatarDia(decisao.criadoEm)}`}
+            {decisao.criadoEm && ` · enviada em ${formatarInstante(decisao.criadoEm)}`}
           </p>
           <Button variant="link" size="sm" asChild className="mt-1 h-auto p-0 text-xs">
             <Link href={`/viewer/arte/${decisao.arte.id}`}>

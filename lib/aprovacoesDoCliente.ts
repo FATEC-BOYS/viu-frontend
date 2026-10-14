@@ -1,5 +1,5 @@
 // lib/aprovacoesDoCliente.ts
-import { api } from '@/lib/api'
+import { getAll } from '@/lib/api'
 
 /**
  * As decisões de UMA pessoa num projeto — a leitura que a tela do cliente faz.
@@ -68,11 +68,24 @@ export async function listarDecisoesDoProjeto(
   projetoId: string,
   aprovadorId: string,
 ): Promise<DecisaoDoCliente[]> {
-  const res = await api.get<{ data?: any[] }>(
+  /*
+   * `getAll`, e não `limit=100`.
+   *
+   * A listagem vem ordenada por `criadoEm desc`, então um teto fixo corta as
+   * MAIS ANTIGAS em silêncio. Isso tira linhas de "você já respondeu" — ruim —
+   * e, pior, pode esconder uma decisão PENDENTE antiga enquanto a tela afirma
+   * "nada esperando por você". A frase viraria mentira justamente para quem
+   * está sendo esperado.
+   *
+   * O ajudante já existe e o comentário dele avisa disto: "usar no lugar de
+   * `limit=200` & cia... um limite fixo trunca silenciosamente quem tem mais
+   * itens que o chute". Eu chutei 100.
+   */
+  const linhas = await getAll<any>(
     `/aprovacoes?projetoId=${encodeURIComponent(projetoId)}` +
-      `&aprovadorId=${encodeURIComponent(aprovadorId)}&limit=100`,
+      `&aprovadorId=${encodeURIComponent(aprovadorId)}`,
   )
-  return ((res as any)?.data ?? []).map(paraDecisao)
+  return linhas.map(paraDecisao)
 }
 
 /** O que espera por esta pessoa — a razão de a tela existir. */

@@ -110,7 +110,7 @@ const ABAS_VALIDAS: ProjetoTabKey[] = [
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: carregandoSessao } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
@@ -516,7 +516,19 @@ export default function ProjetoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, id]);
 
-  if (loading) {
+  /*
+   * Esperar a SESSÃO também, e não só o projeto.
+   *
+   * `user` nasce nulo e só o perfil em cache o preenche de imediato. Sem cache
+   * — janela anônima, armazenamento limpo ou bloqueado — ele fica nulo até
+   * `/auth/me` responder; e se o projeto chegar primeiro, `ehClienteDoProjeto`
+   * é falso e o cliente vê a TELA DE TRABALHO piscar antes de ser trocada:
+   * tarefas, quadro interno e painel de cobrança, por um instante.
+   *
+   * Escolher a tela pelo papel exige saber o papel. Enquanto não se sabe, a
+   * resposta honesta é "carregando" — e não a tela de uma das duas pessoas.
+   */
+  if (loading || carregandoSessao) {
     return (
       <div className="p-6 flex items-center justify-center h-[50vh]">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
