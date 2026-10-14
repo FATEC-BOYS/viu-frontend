@@ -48,3 +48,27 @@ export function formatarDia(
 ): string {
   return diaDeCalendario(iso).toLocaleDateString('pt-BR', opcoes)
 }
+
+/**
+ * O dia em que um INSTANTE aconteceu, no fuso de quem está olhando.
+ *
+ * O par oposto de `formatarDia`, e aqui de propósito: colocar os dois lado a
+ * lado é o que impede confundi-los de novo.
+ *
+ * `prazo`, `dataVencimento` e afins são DATAS DE CALENDÁRIO gravadas à
+ * meia-noite UTC — para elas, respeitar o fuso local é que erraria o dia, e
+ * quem serve é `formatarDia`.
+ *
+ * `criadoEm`, `decididoEm`, `resolvidoEm` são INSTANTES: o momento exato em
+ * que algo aconteceu. Para eles a conversão local é a correta, e forçar o dia
+ * UTC é que erra — uma decisão tomada às 21h30 de 13/10 em São Paulo vira
+ * `2026-10-14T00:30:00Z`, e `formatarDia` imprimiria 14/10. O cliente leria
+ * que respondeu num dia em que não respondeu.
+ */
+export function formatarInstante(
+  iso: string | Date,
+  opcoes: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' },
+): string {
+  const d = iso instanceof Date ? iso : new Date(iso)
+  return d.toLocaleDateString('pt-BR', opcoes)
+}

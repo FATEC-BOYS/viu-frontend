@@ -30,6 +30,7 @@ export default function ProjetoHeader({
   onPausar,
   onRetomar,
   onCancelar,
+  podeEditar = true,
 }: {
   projeto: Projeto;
   statusPill?: { label: string; tone: PillTone };
@@ -48,6 +49,19 @@ export default function ProjetoHeader({
   onPausar: () => void;
   onRetomar: () => void;
   onCancelar: () => void;
+  /**
+   * Quem está olhando pode MUDAR o projeto?
+   *
+   * Editar, duplicar, pausar, retomar e cancelar são do designer do projeto —
+   * o servidor recusa os outros com 403. Estes botões vinham sem condição, e
+   * o cliente via "Editar" e o menu com "Cancelar" no projeto do designer.
+   * Medido antes do conserto do backend: o cliente renomeava (200), cancelava
+   * (200) e apagava (200) de verdade.
+   *
+   * "Pessoas" entra junto: conceder e revogar acesso ao projeto é do dono do
+   * projeto, não de quem foi convidado para ele.
+   */
+  podeEditar?: boolean;
 }) {
   return (
     /*
@@ -95,16 +109,19 @@ export default function ProjetoHeader({
           </Link>
         </Button>
 
-        {onPessoas && (
+        {podeEditar && onPessoas && (
           <Button variant="outline" size="sm" onClick={onPessoas}>
             <Users className="mr-1 h-4 w-4" aria-hidden /> Pessoas
           </Button>
         )}
 
-        <Button variant="outline" size="sm" onClick={onEditar}>
-          Editar
-        </Button>
+        {podeEditar && (
+          <Button variant="outline" size="sm" onClick={onEditar}>
+            Editar
+          </Button>
+        )}
 
+        {podeEditar && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="sm" aria-label="Mais ações">
@@ -129,6 +146,7 @@ export default function ProjetoHeader({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
     </header>
   );

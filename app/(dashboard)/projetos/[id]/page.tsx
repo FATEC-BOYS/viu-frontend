@@ -55,6 +55,8 @@ import type { AtividadeItem as UIAtividadeItem } from "@/components/projetos/act
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
+import ProjetoDoCliente from "@/components/projetos/ProjetoDoCliente";
+import { rotuloProjeto } from "@/lib/rotulos";
 import NovaVersaoDialog from "@/components/artes/NovaVersaoDialog";
 import ArteWizard from "@/components/artes/ArteWizard";
 import {
@@ -108,7 +110,7 @@ const ABAS_VALIDAS: ProjetoTabKey[] = [
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: carregandoSessao } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [projeto, setProjeto] = useState<Projeto | null>(null);
@@ -153,16 +155,17 @@ export default function ProjetoPage() {
     return () => { mounted = false; };
   }, [id]);
 
+  // O texto vem de `rotuloProjeto`, que a tela do cliente também lê; aqui fica
+  // só a COR, que é escolha desta tela.
   const statusPill = useMemo(() => {
     if (!projeto) return null;
-    switch (projeto.status) {
-      case "EM_ANDAMENTO": return { label: "Em andamento", tone: "default" as const };
-      case "PAUSADO": return { label: "Pausado", tone: "warning" as const };
-      case "CONCLUIDO": return { label: "Fechado", tone: "success" as const };
-      case "RASCUNHO": return { label: "Rascunho — aguardando aceite", tone: "warning" as const };
-      case "CANCELADO": return { label: "Cancelado", tone: "warning" as const };
-      default: return { label: projeto.status, tone: "default" as const };
-    }
+    const tone =
+      projeto.status === "PAUSADO" || projeto.status === "RASCUNHO" || projeto.status === "CANCELADO"
+        ? ("warning" as const)
+        : projeto.status === "CONCLUIDO"
+          ? ("success" as const)
+          : ("default" as const);
+    return { label: rotuloProjeto(projeto.status), tone };
   }, [projeto]);
 
   const [ovLoading, setOvLoading] = useState(false);
@@ -258,8 +261,27 @@ export default function ProjetoPage() {
    * O painel de acompanhamento continua visível para todos: ver em que pé
    * está a aprovação é de quem é do projeto; pedir é do designer.
    */
-  const podeSolicitarAprovacao =
+  const ehDesignerDoProjeto =
     !!user && !!projeto?.designer?.id && projeto.designer.id === user.id;
+
+  /** Quem contratou — para quem a tela é outra, e não a mesma com menos. */
+  const ehClienteDoProjeto =
+    !!user && !!projeto?.cliente?.id && projeto.cliente.id === user.id;
+
+  /*
+   * O mesmo predicado para TODA ação de designer, e não só para esta.
+   *
+   * O comentário acima nasceu sobre `podeSolicitarAprovacao`, e a regra
+   * estava certa — mas valia para um botão só. "Editar", "Pessoas",
+   * "Duplicar", "Pausar", "Cancelar", "Subir nova arte" e "Resolver"
+   * continuaram sem condição nenhuma, e o cliente via todos.
+   *
+   * E não era só a tela oferecendo: medido no servidor, logado como cliente,
+   * `PUT /projetos/:id` renomeava (200), cancelava (200) e `DELETE` apagava
+   * (200). O backend passou a recusar; aqui a tela passa a fazer a MESMA
+   * pergunta que ele, para a pessoa não esbarrar num 403 depois de clicar.
+   */
+  const podeSolicitarAprovacao = ehDesignerDoProjeto;
   const ART_PAGE = 12;
 
   function buildArtesQuery(from: number) {
@@ -494,7 +516,19 @@ export default function ProjetoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, id]);
 
-  if (loading) {
+  /*
+   * Esperar a SESSÃO também, e não só o projeto.
+   *
+   * `user` nasce nulo e só o perfil em cache o preenche de imediato. Sem cache
+   * — janela anônima, armazenamento limpo ou bloqueado — ele fica nulo até
+   * `/auth/me` responder; e se o projeto chegar primeiro, `ehClienteDoProjeto`
+   * é falso e o cliente vê a TELA DE TRABALHO piscar antes de ser trocada:
+   * tarefas, quadro interno e painel de cobrança, por um instante.
+   *
+   * Escolher a tela pelo papel exige saber o papel. Enquanto não se sabe, a
+   * resposta honesta é "carregando" — e não a tela de uma das duas pessoas.
+   */
+  if (loading || carregandoSessao) {
     return (
       <div className="p-6 flex items-center justify-center h-[50vh]">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
@@ -512,6 +546,30 @@ export default function ProjetoPage() {
     );
   }
 
+  /*
+   * O cliente tem TELA PRÓPRIA, e não esta com menos botões.
+   *
+   * Trancar as ações do designer (logo acima) era necessário e não era
+   * suficiente: a tela toda é escrita da cadeira do designer. Medido, logado
+   * como cliente, num projeto com uma arte aguardando a decisão dele:
+   * "Próximos passos: Enviar para aprovação", o quadro de tarefas interno com
+   * nome e prazo da designer, "esperando João Santos desde 14/10" — ele, em
+   * terceira pessoa — e um botão "Enviar lembrete" para lembrar a si mesmo.
+   * Nenhum "Aprovar" em lugar nenhum: o cliente logado só conseguia decidir
+   * pelo link compartilhado.
+   *
+   * O desvio é por SER O CLIENTE deste projeto, e não por "não ser o
+   * designer": admin e designer convidado continuam vendo a tela de trabalho,
+   * que é a que serve a eles.
+   */
+  if (ehClienteDoProjeto) {
+    return (
+      <div className="p-6">
+        <ProjetoDoCliente projeto={projeto} usuarioId={user!.id} />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-4">
       <GerenciarAcessosDrawer
@@ -522,6 +580,7 @@ export default function ProjetoPage() {
 
       <ProjetoHeader
         projeto={projeto}
+        podeEditar={ehDesignerDoProjeto}
         statusPill={statusPill ?? undefined}
         onEditar={() => setEditando(true)}
         onPessoas={() => setAcessosAberto(true)}
@@ -551,7 +610,9 @@ export default function ProjetoPage() {
               <EstadoDoProjeto
                 resumo={resumo}
                 estado={resumo.estado ?? "CRIAR_ARTE"}
-                onAction={() => {
+                // Sem ação para quem não é o designer: o cartão continua
+                // dizendo em que pé está o projeto, que é de quem é dele.
+                onAction={!ehDesignerDoProjeto ? undefined : () => {
                   if (resumo.estado === "CONCLUIR") concluirProjeto();
                   else if (resumo.estado === "PEDIR_APROVACAO") setTab("approval");
                   // "Subir nova arte" abre o wizard, em vez de só trocar de aba
@@ -573,7 +634,7 @@ export default function ProjetoPage() {
                 <div className="p-4">
                   <ProximosPassos
                     passos={passos}
-                    onAction={passo => {
+                    onAction={!ehDesignerDoProjeto ? undefined : passo => {
                       switch (passo.kind) {
                         // O prazo se define no mesmo modal do "Editar".
                         case "DEFINIR_PRAZO_PROJETO":
@@ -629,11 +690,15 @@ export default function ProjetoPage() {
                 }}
               />
               {/* O único botão cheio desta aba, e a ação que ela existe para
-                  servir. */}
-              <Button className="shrink-0 gap-1.5" onClick={() => setSubindoArte(true)}>
-                <Upload className="h-4 w-4" />
-                Subir nova arte
-              </Button>
+                  servir — para o designer. O cliente abre a mesma aba para
+                  VER as peças, que é o que ele veio fazer aqui; subir é do
+                  designer, e o servidor recusa com 403. */}
+              {ehDesignerDoProjeto && (
+                <Button className="shrink-0 gap-1.5" onClick={() => setSubindoArte(true)}>
+                  <Upload className="h-4 w-4" />
+                  Subir nova arte
+                </Button>
+              )}
             </div>
             {artLoading && artRows.length === 0 ? (
               <ArtesSkeleton />

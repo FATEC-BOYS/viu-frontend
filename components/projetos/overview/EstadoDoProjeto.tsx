@@ -64,7 +64,16 @@ export default function EstadoDoProjeto({
 }: {
   resumo: EstadoResumo;
   estado: EstadoCTA;
-  onAction: () => void;
+  /**
+   * A ação, quando ela é de quem está olhando.
+   *
+   * Opcional porque o cartão serve a duas pessoas com direitos diferentes: o
+   * designer vê em que pé está E o que fazer; o cliente vê em que pé está. O
+   * botão era incondicional, então a tela do cliente oferecia "Subir nova
+   * arte" — que o servidor recusa, e que nem é dele: a peça é a entrega de
+   * quem foi contratado.
+   */
+  onAction?: () => void;
 }) {
   const { titulo, detalhe } = frasePara(resumo);
 
@@ -74,8 +83,9 @@ export default function EstadoDoProjeto({
         <p className="text-lg font-semibold leading-tight">{titulo}</p>
         <p className="mt-1 text-sm text-muted-foreground">{detalhe}</p>
       </div>
-      {/* A ação sobe para o topo: é o que a pessoa veio fazer. */}
-      <CTAContextual estado={estado} onClick={onAction} className="shrink-0" />
+      {/* A ação sobe para o topo: é o que a pessoa veio fazer — quando é ela
+          quem faz. Sem `onAction`, fica só a informação. */}
+      {onAction && <CTAContextual estado={estado} onClick={onAction} className="shrink-0" />}
     </div>
   );
 }

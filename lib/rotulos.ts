@@ -34,6 +34,21 @@ const FEEDBACK: Record<string, string> = {
 }
 
 /**
+ * PROJETO_TRANSITIONS: RASCUNHO → EM_ANDAMENTO → PAUSADO/CONCLUIDO/CANCELADO.
+ *
+ * Este mapa morava dentro de um `useMemo` na tela do projeto, e por isso a
+ * tela do cliente — que é outra — escrevia `CONCLUIDO` em caixa alta. Um mapa
+ * preso numa tela não é tradução do produto: é tradução daquela tela.
+ */
+const PROJETO: Record<string, string> = {
+  RASCUNHO: 'Rascunho — aguardando aceite',
+  EM_ANDAMENTO: 'Em andamento',
+  PAUSADO: 'Pausado',
+  CONCLUIDO: 'Fechado',
+  CANCELADO: 'Cancelado',
+}
+
+/**
  * Sem rótulo conhecido, devolve o próprio valor em vez de "—": um status novo
  * no backend deve aparecer feio na tela, não sumir dela.
  */
@@ -45,6 +60,7 @@ function traduzir(mapa: Record<string, string>, status: string | null | undefine
 export const rotuloArte = (s?: string | null) => traduzir(ARTE, s, 'Em análise')
 export const rotuloAprovacao = (s?: string | null) => traduzir(APROVACAO, s, 'Aguardando decisão')
 export const rotuloFeedback = (s?: string | null) => traduzir(FEEDBACK, s, 'Em aberto')
+export const rotuloProjeto = (s?: string | null) => traduzir(PROJETO, s, 'Em andamento')
 
 /**
  * O tipo de uma arte chega em dois formatos diferentes, porque a origem é
