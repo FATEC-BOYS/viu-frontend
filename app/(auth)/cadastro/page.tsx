@@ -89,29 +89,44 @@ function RoleSelector({
   value, onChange, disabled,
 }: { value: Tipo | null; onChange: (t: Tipo) => void; disabled?: boolean }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de conta">
       {(["DESIGNER", "CLIENTE"] as const).map((t) => {
         const active = value === t;
+        const isDesigner = t === "DESIGNER";
         return (
           <button
             key={t}
             type="button"
+            role="radio"
+            aria-checked={active}
             className={cn(
-              "group relative rounded-lg border px-4 py-3 text-left transition",
-              "hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-              active ? "border-primary ring-2 ring-primary/30" : "border-border"
+              "group relative min-h-32 rounded-2xl border p-4 text-left transition-all duration-200",
+              "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              active
+                ? "border-primary bg-primary/[0.06] shadow-[0_0_0_3px_hsl(var(--primary)/.12)]"
+                : "border-border/80 bg-background/70"
             )}
             onClick={() => onChange(t)}
             disabled={disabled}
           >
-            <div className="flex items-center gap-2">
-              {t === "DESIGNER" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
-              <span className="font-medium">{t === "DESIGNER" ? "Designer" : "Cliente"}</span>
+            <div className="flex items-start justify-between gap-3">
+              <span className={cn(
+                "flex size-10 items-center justify-center rounded-xl transition-colors",
+                active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:text-foreground"
+              )}>
+                {isDesigner ? <Shield className="h-5 w-5" /> : <User className="h-5 w-5" />}
+              </span>
+              <span className={cn(
+                "mt-1 size-4 rounded-full border-2 transition-colors",
+                active ? "border-primary bg-primary ring-2 ring-primary/20" : "border-muted-foreground/30"
+              )} />
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t === "DESIGNER"
-                ? "Acesso ao dashboard completo."
-                : "Acompanha materiais por links compartilhados."}
+            <p className="mt-4 font-semibold tracking-tight">{isDesigner ? "Sou designer" : "Sou cliente"}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {isDesigner
+                ? "Gerencie projetos, clientes e entregas em um só lugar."
+                : "Acompanhe seus projetos e revise materiais compartilhados."}
             </p>
           </button>
         );
@@ -500,16 +515,38 @@ export default function CadastroPage() {
     <div className="w-full max-w-xl">
       <form onSubmit={handleSubmit} className="w-full">
         <Card className="rounded-xl border bg-card">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">Criar conta</CardTitle>
-            <CardDescription>Preencha os campos abaixo para começar.</CardDescription>
+          <CardHeader className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Passo {step + 1} de 3</p>
+                <CardTitle className="mt-2 text-2xl tracking-tight">{step === STEPS.ROLE ? "Vamos começar" : step === STEPS.EMAIL_NOME ? "Seus dados" : "Proteja sua conta"}</CardTitle>
+              </div>
+              {tipo && (
+                <div className="inline-flex items-center gap-2 rounded-full border bg-muted/60 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                  {tipo === "DESIGNER" ? <Shield className="h-3.5 w-3.5 text-primary" /> : <User className="h-3.5 w-3.5 text-primary" />}
+                  {tipo === "DESIGNER" ? "Conta de designer" : "Conta de cliente"}
+                </div>
+              )}
+            </div>
+            <CardDescription>
+              {step === STEPS.ROLE
+                ? "Escolha como você vai usar a plataforma. Você poderá ajustar seus dados depois."
+                : step === STEPS.EMAIL_NOME
+                  ? "Como podemos chamar você e para onde enviaremos as confirmações."
+                  : "Crie uma senha forte para manter seus projetos protegidos."}
+            </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-5">
             {step === STEPS.ROLE && (
               <div className="space-y-3">
-                <Label>Você é?</Label>
+                <Label className="text-sm font-semibold">Qual perfil combina com você?</Label>
                 <RoleSelector value={tipo} onChange={setTipo} />
+                {tipo && (
+                  <p className="rounded-xl bg-primary/[0.06] px-3 py-2.5 text-xs leading-relaxed text-muted-foreground" aria-live="polite">
+                    Você selecionou <strong className="font-semibold text-foreground">{tipo === "DESIGNER" ? "Designer" : "Cliente"}</strong>. Vamos personalizar sua experiência a partir disso.
+                  </p>
+                )}
               </div>
             )}
 
