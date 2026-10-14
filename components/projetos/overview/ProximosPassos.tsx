@@ -8,7 +8,15 @@ export default function ProximosPassos({
   onAction,
 }: {
   passos: ProximoPasso[];
-  onAction: (p: ProximoPasso) => void;
+  /**
+   * Resolver o passo — de quem pode resolvê-lo.
+   *
+   * Opcional pelo mesmo motivo do `EstadoDoProjeto`: saber o que falta é de
+   * quem é do projeto; fazer é do designer. O botão "Resolver" aparecia para
+   * o cliente ao lado de "Enviar para aprovação", que é a ação mais do
+   * designer que existe.
+   */
+  onAction?: (p: ProximoPasso) => void;
 }) {
   /* "Nada a fazer" não merece uma caixa: o cartão existia para emoldurar uma
      frase, e ficava do mesmo tamanho do quadro de tarefas ao lado. */
@@ -44,9 +52,11 @@ export default function ProximosPassos({
                 <div className="truncate text-xs text-muted-foreground">{p.detalhe}</div>
               )}
             </div>
-            <Button size="sm" variant="outline" className="shrink-0" onClick={() => onAction(p)}>
-              Resolver
-            </Button>
+            {onAction && (
+              <Button size="sm" variant="outline" className="shrink-0" onClick={() => onAction(p)}>
+                Resolver
+              </Button>
+            )}
           </li>
         ))}
       </ul>
