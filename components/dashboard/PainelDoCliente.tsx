@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { diasAte } from '@/lib/diaDeCalendario'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
+import { getAll } from '@/lib/api'
 import { pagamentosApi, type Fatura, formatReais } from '@/lib/pagamentos'
 import AguardandoVoce from '@/components/dashboard/AguardandoVoce'
 import { ChevronRight } from 'lucide-react'
@@ -160,7 +160,7 @@ export default function PainelDoCliente({
        * mentira: diz que a tela mostra a peça quando ela não mostra.
        */
       const [resProjetos, resFaturas] = await Promise.allSettled([
-        api.get<{ data: any[] }>('/projetos?limit=20'),
+        getAll<any>('/projetos'),
         // `tipo=cliente`: as faturas que ELE deve, não as que alguém tem a receber.
         pagamentosApi.getFaturas('cliente'),
       ])
@@ -168,7 +168,7 @@ export default function PainelDoCliente({
 
       if (resProjetos.status === 'fulfilled') {
         setProjetos(
-          (resProjetos.value.data ?? []).map((p: any) => ({
+          resProjetos.value.map((p: any) => ({
             id: p.id,
             nome: p.nome,
             status: p.status,
