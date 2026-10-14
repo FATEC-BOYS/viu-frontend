@@ -122,7 +122,7 @@ export default function ArtesToolbar({
               const label =
                 s === "EM_ANALISE" ? "Em análise" :
                 s === "APROVADO" ? "Aprovado" :
-                s === "REJEITADO" ? "Rejeitado" :
+                s === "REJEITADO" ? "Ajustes pedidos" :
                 "Em revisão";
               return (
                 <Badge

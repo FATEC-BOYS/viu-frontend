@@ -215,7 +215,7 @@ export default function PlanosPage() {
               <CreditCard className="h-5 w-5 text-muted-foreground" />
             </div>
             <div className="space-y-1">
-              <h1 className="font-medium">Planos são do designer</h1>
+              <h1 className="font-medium">Planos para designers</h1>
               <p className="text-sm text-muted-foreground">
                 Quem assina o VIU é quem contrata o trabalho de revisão. Sua
                 conta de cliente não precisa de plano.
@@ -240,7 +240,7 @@ export default function PlanosPage() {
         className="text-center space-y-2"
       >
         <h1 className="text-2xl font-semibold tracking-tight">Escolha seu plano</h1>
-        <p className="text-sm text-muted-foreground">Comece grátis. Escale quando precisar.</p>
+        <p className="text-sm text-muted-foreground">Compare os limites e as taxas para escolher o plano do seu trabalho.</p>
       </motion.div>
 
       {/* Cards */}

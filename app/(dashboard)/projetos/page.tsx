@@ -38,7 +38,7 @@ import {
   type Mode, type StatusFiltro, type PrazoPreset, type OrdemProjeto,
 } from "@/components/projetos/types";
 
-const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"];
+const LOADER_LINES = ["Carregando projetos…", "Buscando seus projetos…", "Aguarde enquanto os projetos carregam…", "Ainda carregando projetos…"];
 
 type ProjetoInitial = {
   id: string; nome: string; descricao?: string | null;
@@ -323,8 +323,8 @@ function ProjetosPageContent() {
     return (
       <div className="flex items-center justify-center h-[50vh] text-center">
         <div>
-          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
-          <p className="text-muted-foreground mb-6">Que tal recarregar? (e se persistir, me chama).</p>
+          <p className="text-lg font-medium mb-2">Não foi possível carregar seus projetos.</p>
+          <p className="text-muted-foreground mb-6">Tente carregar os projetos novamente.</p>
           <Button onClick={reload}>Recarregar</Button>
         </div>
       </div>
@@ -363,8 +363,8 @@ function ProjetosPageContent() {
         <div className="flex items-center gap-2">
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
             <TabsList>
-              <TabsTrigger value="cards">Cards</TabsTrigger>
-              <TabsTrigger value="board">Board</TabsTrigger>
+              <TabsTrigger value="cards">Cartões</TabsTrigger>
+              <TabsTrigger value="board">Quadro</TabsTrigger>
               <TabsTrigger value="calendar">Calendário</TabsTrigger>
             </TabsList>
           </Tabs>
@@ -375,12 +375,14 @@ function ProjetosPageContent() {
             começa projeto nenhum.
           */}
           {podeCriar && (
-            <Button onClick={abrirCriacao} title="Criar projeto — vamos dar um nome bonito?">
+            <Button onClick={abrirCriacao} title="Criar projeto">
               <Plus className="h-4 w-4 mr-2" /> Novo
             </Button>
           )}
         </div>
       </div>
+
+      <p className="text-sm text-muted-foreground">Acompanhe o andamento, as entregas e os prazos de cada projeto.</p>
 
       {/* Filtros */}
       <FilterChips
@@ -410,7 +412,7 @@ function ProjetosPageContent() {
                 icon={FolderOpen}
                 tom="lavanda"
                 title="Nenhum projeto ainda"
-                description="O projeto é onde o trabalho entra no VIU: guarda as artes de um cliente e o histórico de cada versão."
+                description="Crie um projeto para reunir as artes, os comentários e as aprovações de um cliente."
                 actionLabel={podeCriar ? "Criar projeto" : undefined}
                 onAction={podeCriar ? abrirCriacao : undefined}
               />

@@ -12,7 +12,7 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="text-center">
-      <p className="text-sm text-muted-foreground">Redirecionando…</p>
+      <p className="text-sm text-muted-foreground">Concluindo seu acesso…</p>
     </div>
   )
 }

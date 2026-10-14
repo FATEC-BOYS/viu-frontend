@@ -118,9 +118,9 @@ export default function StatusPage() {
         <div className="flex items-center gap-3">
           <Server className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Status do Sistema</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Status do sistema</h1>
             <p className="text-sm text-muted-foreground">
-              Saúde da aplicação (Vercel + viu-backend) e métricas rápidas
+              Consulte a disponibilidade dos serviços e os dados desta verificação.
             </p>
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function StatusPage() {
           <CardTitle className="flex items-center gap-2">
             {overallStatus === 'ok' && <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
             {(overallStatus === 'warn' || overallStatus === 'error') && <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
-            Status Geral
+            Situação geral
             <StatusPill status={overallStatus} />
           </CardTitle>
         </CardHeader>

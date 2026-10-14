@@ -40,7 +40,7 @@ export default function GlobalError({
             O VIU não conseguiu carregar
           </h1>
           <p style={{ fontSize: '0.875rem', color: '#57534e', margin: '0 0 1.25rem' }}>
-            Alguma coisa quebrou antes da aplicação subir. Recarregar costuma resolver.
+            Tente carregar o VIU novamente. Se o problema continuar, tente mais tarde.
           </p>
           {error.digest && (
             <p

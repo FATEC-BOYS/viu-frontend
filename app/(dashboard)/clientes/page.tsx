@@ -37,7 +37,7 @@ import ClienteWizard from "@/components/clientes/ClienteWizard";
  */
 
 /* ============================== Helpers ============================== */
-const LOADER_LINES = ["Afiando os lápis…","Abrindo pastas…","Buscando inspirações…","Alinhando pixels…"] as const;
+const LOADER_LINES = ["Carregando clientes…", "Buscando seus clientes…", "Aguarde enquanto os clientes carregam…", "Ainda carregando clientes…"] as const;
 /*
  * A aba "Calendário" saiu.
  *
@@ -391,23 +391,18 @@ export default function ClientesPage() {
       <div className="flex h-[50vh] items-center justify-center px-6 text-center">
         <div className="max-w-md space-y-2">
           <p className="text-lg font-medium">
-            {semServidor ? "Não consegui falar com o servidor" : "Não consegui carregar seus clientes"}
+            {semServidor ? "Não foi possível conectar ao VIU" : "Não foi possível carregar seus clientes"}
           </p>
           <p className="text-sm text-muted-foreground">{error.mensagem}</p>
           {semServidor && (
             <p className="text-sm text-muted-foreground">
-              Pode ser a sua conexão — ou a nossa API fora do ar. Se outras telas também
-              estiverem assim, o problema é nosso.
+              Verifique sua conexão e tente novamente. Se o problema continuar, tente mais tarde.
             </p>
           )}
           <div className="pt-3">
             <Button onClick={reload}>Tentar de novo</Button>
           </div>
-          {/* A lista sai dos projetos do designer: GET /usuarios é só para
-              ADMIN. Dizer de onde veio a falha poupa a próxima investigação. */}
-          <p className="pt-1 font-mono text-[11px] text-muted-foreground">
-            GET /projetos{error.status > 0 ? ` — ${error.status}` : ""}
-          </p>
+
         </div>
       </div>
     );
@@ -433,8 +428,8 @@ export default function ClientesPage() {
         <div className="flex items-center gap-2">
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
             <TabsList>
-              <TabsTrigger value="cards">Cards</TabsTrigger>
-              <TabsTrigger value="board">Board</TabsTrigger>
+              <TabsTrigger value="cards">Cartões</TabsTrigger>
+              <TabsTrigger value="board">Quadro</TabsTrigger>
             </TabsList>
           </Tabs>
           <Button onClick={() => setOpenClienteWizard(true)}>
@@ -443,11 +438,13 @@ export default function ClientesPage() {
         </div>
       </div>
 
+      <p className="text-sm text-muted-foreground">Encontre os contatos e os projetos de cada cliente.</p>
+
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[260px]">
           <Input
-            placeholder="Buscar por nome, email, telefone ou projeto…"
+            placeholder="Buscar por nome, e-mail, telefone ou projeto…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -507,7 +504,7 @@ export default function ClientesPage() {
                 icon={UserRound}
                 tom="pessego"
                 title="Nenhum cliente ainda"
-                description="É o cliente que recebe o link, comenta a arte e assina o aceite. Todo projeto pertence a um."
+                description="Cadastre um cliente para organizar seus projetos, compartilhar artes e acompanhar as aprovações."
                 actionLabel="Cadastrar cliente"
                 onAction={() => setOpenClienteWizard(true)}
               />

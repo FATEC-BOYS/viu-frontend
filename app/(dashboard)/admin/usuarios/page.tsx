@@ -106,7 +106,7 @@ export default function AdminUsuariosPage() {
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <PageHeader
         title="Usuários"
-        description="Quem está cadastrado no VIU."
+        description="Consulte as contas cadastradas, seus perfis e a situação de acesso."
         actions={
           <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
             <RefreshCw className={`h-4 w-4 mr-2 ${carregando ? 'animate-spin' : ''}`} />
@@ -137,7 +137,7 @@ export default function AdminUsuariosPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Buscar por nome ou email…"
+            placeholder="Buscar por nome ou e-mail…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />

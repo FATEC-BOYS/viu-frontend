@@ -86,7 +86,7 @@ type FilterStatus = 'todos' | FeedbackStatus;
 /* =========================
    UI helpers
    ========================= */
-const LOADER_LINES = ['Afiando os lápis…','Abrindo pastas…','Buscando inspirações…','Alinhando pixels…'] as const;
+const LOADER_LINES = ['Carregando feedbacks…', 'Buscando seus feedbacks…', 'Aguarde enquanto os feedbacks carregam…', 'Ainda carregando feedbacks…'] as const;
 
 /**
  * Um feedback é de áudio quando tem áudio — e não quando o rótulo diz AUDIO.
@@ -526,7 +526,7 @@ function FeedbackTimelineView({ items, onOpen }: { items: FeedbackRow[]; onOpen:
           </div>
         </div>
       ))}
-      {groups.length === 0 && (<Card className="p-12 text-center text-sm text-muted-foreground">Nada por aqui…</Card>)}
+      {groups.length === 0 && (<Card className="p-12 text-center text-sm text-muted-foreground">Nenhum comentário para exibir.</Card>)}
     </div>
   );
 }
@@ -775,8 +775,8 @@ function TelaFeedbacks() {
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center text-center">
-        <p className="mb-2 text-lg font-medium">Deu ruim por aqui.</p>
-        <p className="mb-2 text-muted-foreground">Tenta recarregar? (se persistir, me chama).</p>
+        <p className="mb-2 text-lg font-medium">Não foi possível carregar os feedbacks.</p>
+        <p className="mb-2 text-muted-foreground">Tente carregar os comentários novamente.</p>
         {errorDetails && <p className="max-w-xl text-xs text-muted-foreground">Detalhes: {errorDetails}</p>}
         <div className="mt-4"><Button onClick={() => location.reload()}>Recarregar</Button></div>
       </div>
@@ -821,6 +821,8 @@ function TelaFeedbacks() {
           </TabsList>
         </Tabs>
       </div>
+
+      <p className="text-sm text-muted-foreground">Encontre os comentários nas artes e acompanhe os pedidos de ajuste.</p>
 
       {/*
         Sem esta tarja a lista recortada se lê como "este cliente comentou
@@ -932,7 +934,7 @@ function TelaFeedbacks() {
                 icon={MessageSquare}
                 tom="pessego"
                 title="Nenhum feedback ainda"
-                description="O feedback chega quando o cliente abre o link de uma arte e comenta. Nada para responder por enquanto."
+                description="Os comentários nas artes aparecem aqui. Compartilhe um link de revisão para receber os primeiros pedidos de ajuste."
                 acaoSecundaria={{ label: 'Ver artes', href: '/artes' }}
               />
             )

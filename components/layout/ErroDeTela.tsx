@@ -35,9 +35,9 @@ export default function ErroDeTela({
           <AlertTriangle className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Deu ruim por aqui</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Não foi possível abrir esta página</h1>
           <p className="text-sm text-muted-foreground">
-            Essa tela não carregou. Não é você — tente de novo e, se insistir, avise a gente.
+            Tente carregar a página novamente. Se o problema continuar, volte ao painel ou tente mais tarde.
           </p>
         </div>
         {/* O digest é o que liga o relato do usuário à linha no log do servidor. */}
@@ -49,7 +49,7 @@ export default function ErroDeTela({
             Tentar de novo
           </Button>
           <Button size="sm" variant="outline" asChild>
-            <Link href="/dashboard">Voltar ao dashboard</Link>
+            <Link href="/dashboard">Voltar ao painel</Link>
           </Button>
         </div>
       </div>

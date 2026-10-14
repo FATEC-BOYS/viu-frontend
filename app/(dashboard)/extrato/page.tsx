@@ -62,7 +62,7 @@ export default function ExtratoPage() {
     <FadeIn className="mx-auto w-full max-w-6xl space-y-7 p-4 sm:p-6">
       <PageHeader
         title="Extrato"
-        description="Cada entrada e saída que compõe o seu saldo disponível."
+        description="Consulte as entradas e saídas registradas na sua conta."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -85,7 +85,7 @@ export default function ExtratoPage() {
       ) : filtradas.length === 0 ? (
         <EmptyState
           icon={Receipt}
-          title={entries.length === 0 ? 'Nenhum lançamento ainda' : 'Nada com esse filtro'}
+          title={entries.length === 0 ? 'Nenhum lançamento ainda' : 'Nenhum lançamento com este filtro'}
           description={
             entries.length === 0
               ? 'Faturas pagas entram como crédito e saques concluídos como débito. O primeiro pagamento abre seu extrato.'

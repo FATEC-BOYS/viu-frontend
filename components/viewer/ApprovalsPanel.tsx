@@ -37,7 +37,7 @@ type Aprovacao = AprovacaoDaArte
 const ROTULO: Record<Aprovacao['status'], string> = {
   PENDENTE: 'Aguardando decisão',
   APROVADO: 'Aprovado',
-  REJEITADO: 'Recusado',
+  REJEITADO: 'Ajustes pedidos',
 }
 
 const ICONE = { PENDENTE: Clock, APROVADO: Check, REJEITADO: X }

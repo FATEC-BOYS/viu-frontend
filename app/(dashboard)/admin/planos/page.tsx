@@ -217,7 +217,7 @@ export default function AdminPlanosPage() {
           icon={Layers}
           tom="lavanda"
           title="Nenhum plano cadastrado"
-          description="O mecanismo de assinatura está pronto — falta o que assinar. Um plano gratuito já habilita o fluxo sem depender do Mercado Pago."
+          description="Crie o primeiro plano e defina o preço, os limites e a taxa da plataforma."
           actionLabel="Criar o primeiro plano"
           onAction={abrirNovo}
         />
@@ -409,7 +409,7 @@ export default function AdminPlanosPage() {
                 rows={2}
                 value={rascunho.descricao}
                 onChange={(e) => setRascunho({ ...rascunho, descricao: e.target.value })}
-                placeholder="A frase que aparece na tela de Planos."
+                placeholder="Descreva para quem este plano é indicado."
               />
             </div>
 

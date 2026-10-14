@@ -122,7 +122,7 @@ export default function ConvitesPage() {
     <FadeIn className="space-y-6 p-6">
       <PageHeader
         title="Convites"
-        description="Convites de projeto e de equipe aguardando sua resposta."
+        description="Confira quem convidou você para um projeto ou equipe e escolha se quer participar."
       />
 
       {/*

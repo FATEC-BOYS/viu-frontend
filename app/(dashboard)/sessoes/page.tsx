@@ -90,7 +90,7 @@ export default function SessoesPage() {
     <FadeIn className="mx-auto w-full max-w-3xl p-6 space-y-6">
       <PageHeader
         title="Sessões ativas"
-        description="Gerencie os dispositivos com acesso à sua conta."
+        description="Confira onde sua conta está conectada e encerre os acessos que não reconhecer."
         actions={
           outrasAtivas.length > 0 && (
           <Button
@@ -185,7 +185,7 @@ export default function SessoesPage() {
           {inativas.length > 0 && (
             <Card className="opacity-70">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base text-muted-foreground">Inativas / Expiradas</CardTitle>
+                <CardTitle className="text-base text-muted-foreground">Encerradas ou expiradas</CardTitle>
               </CardHeader>
               <CardContent className="space-y-0">
                 {inativas.map((s, i) => (

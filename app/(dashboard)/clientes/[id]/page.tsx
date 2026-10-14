@@ -188,7 +188,7 @@ export default function ClienteDetailPage() {
     return (
       <div className="p-6 flex items-center justify-center h-[60vh]">
         <div className="text-center">
-          <p className="text-lg font-medium mb-2">Deu ruim por aqui.</p>
+          <p className="text-lg font-medium mb-2">Não foi possível carregar este cliente.</p>
           <p className="text-muted-foreground mb-6">{error}</p>
           <Button onClick={load}>Recarregar</Button>
         </div>
@@ -258,7 +258,7 @@ export default function ClienteDetailPage() {
               icon={Users}
               tom="menta"
               title="Nenhum projeto com este cliente"
-              description="Criar o projeto é o primeiro passo — depois vem a arte, e o link que leva a arte até ele."
+              description="Crie um projeto para este cliente. Depois, envie as artes e compartilhe os links de revisão."
               actionLabel="Criar projeto"
               onAction={criarProjetoRápido}
               className="border-0"
@@ -266,7 +266,7 @@ export default function ClienteDetailPage() {
           ) : (
             <EmptyState
               variante="filtro"
-              title="Nada com esse termo"
+              title="Nenhum projeto encontrado"
               actionLabel="Limpar busca"
               onAction={() => setBusca('')}
             />

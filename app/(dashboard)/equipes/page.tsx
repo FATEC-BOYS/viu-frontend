@@ -273,7 +273,7 @@ export default function EquipesPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Equipes</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Organize designers, revisores e clientes em equipes para compartilhar projetos.
+            Reúna as pessoas que trabalham com você e organize os projetos da equipe.
           </p>
         </div>
         <Button onClick={() => setModalOpen(true)} className="w-full sm:w-auto sm:shrink-0">
@@ -328,7 +328,7 @@ export default function EquipesPage() {
         <EmptyState
           icon={Users2}
           title="Nenhuma equipe ainda"
-          description="Crie uma equipe para começar a colaborar."
+          description="Crie uma equipe, convide participantes e vincule os projetos em que vão trabalhar."
           actionLabel="Criar primeira equipe"
           onAction={() => setModalOpen(true)}
         />

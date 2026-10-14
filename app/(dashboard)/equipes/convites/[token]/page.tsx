@@ -127,7 +127,7 @@ export default function ConviteEquipePorTokenPage() {
       <FadeIn className="space-y-4 p-6">
         <PageHeader
           title="Convite inválido"
-          description="Este convite não existe, já foi respondido há muito tempo ou o link está incompleto."
+          description="Não foi possível localizar este convite. Confira o endereço ou peça um novo link a quem convidou você."
         />
         <Button asChild variant="outline">
           <Link href="/convites">Ver meus convites</Link>

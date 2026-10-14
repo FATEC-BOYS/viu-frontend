@@ -439,7 +439,7 @@ export default function DisputasPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Disputas</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Canal seguro para registrar e acompanhar divergências entre clientes e designers.
+            Registre uma divergência sobre um projeto e acompanhe a resposta e a análise.
           </p>
         </div>
         <Button onClick={() => setModalOpen(true)} className="w-full sm:w-auto sm:shrink-0">

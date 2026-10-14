@@ -36,7 +36,7 @@ export default function VersoesList({ arteId }: { arteId: string }) {
   if (!versoes.length) {
     return (
       <div className="text-sm text-muted-foreground">
-        Sem histórico de versões ainda. Ao criar uma nova versão, ela aparece aqui.
+        Nenhuma versão no histórico. Envie uma nova versão para registrar a próxima entrega.
       </div>
     );
   }

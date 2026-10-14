@@ -235,8 +235,8 @@ export default function PerfilPage() {
     <FadeIn className="mx-auto w-full max-w-7xl p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Meu Perfil</h1>
-          <p className="text-sm text-muted-foreground">Gerencie suas informações pessoais e configurações</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Meu perfil</h1>
+          <p className="text-sm text-muted-foreground">Atualize sua foto, seu nome e seus dados de contato.</p>
         </div>
         {/*
           Dizia `DESIGNER` — a palavra do banco, em caixa alta, atrás de um
@@ -376,7 +376,7 @@ export default function PerfilPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">Notificações Push</p>
+                        <p className="font-medium">Notificações no navegador</p>
                         <p className="text-sm text-muted-foreground">Receba notificações no navegador</p>
                       </div>
                       <Switch checked={configuracoes.notificacoesPush}
@@ -384,8 +384,8 @@ export default function PerfilPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">Notificações por Email</p>
-                        <p className="text-sm text-muted-foreground">Receba resumos por email</p>
+                        <p className="font-medium">Notificações por e-mail</p>
+                        <p className="text-sm text-muted-foreground">Receba notificações por e-mail</p>
                       </div>
                       <Switch checked={configuracoes.notificacoesEmail}
                         onCheckedChange={checked => setConfiguracoes(p => ({ ...p, notificacoesEmail: checked }))} />
@@ -552,11 +552,11 @@ export default function PerfilPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/recuperar"><Lock className="h-4 w-4 mr-2" />Alterar Senha</a>
+                <a href="/recuperar"><Lock className="h-4 w-4 mr-2" />Alterar senha</a>
               </Button>
               <Button variant="outline" className="w-full justify-start" disabled>
                 <Download className="h-4 w-4 mr-2" />
-                Exportar Dados
+                Exportar dados
                 <span className="ml-auto text-xs text-muted-foreground">em breve</span>
               </Button>
               <Separator />

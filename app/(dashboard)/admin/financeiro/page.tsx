@@ -78,7 +78,7 @@ export default function AdminFinanceiroPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="Financeiro"
-          description="O que passou pela plataforma no período, com a quebra entre o que é do VIU e o que é do designer."
+          description="Consulte os movimentos do período e a divisão dos valores entre o VIU e os designers."
         />
         <Button
           variant="outline"

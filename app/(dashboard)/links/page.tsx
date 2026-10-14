@@ -373,7 +373,7 @@ export default function LinksPage() {
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por arte, projeto, cliente ou token…"
+            placeholder="Buscar por arte, projeto, cliente ou código do link…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-10"
@@ -386,14 +386,14 @@ export default function LinksPage() {
           icon={Link2}
           tom="pessego"
           title="Nenhum link ainda"
-          description="O link de revisão nasce no envio da arte. Assim que você mandar o primeiro, ele aparece aqui — e esta tela passa a dizer quem abriu."
+          description="Compartilhe uma arte para criar seu primeiro link de revisão. Depois, acompanhe os acessos e gerencie os links por aqui."
           acaoSecundaria={{ label: 'Ir para Artes', href: '/artes' }}
         />
       ) : grupos.length === 0 ? (
         <EmptyState
           variante="filtro"
-          title="Nada com esse termo"
-          description="A busca olha o nome da arte, do projeto, do cliente e o token."
+          title="Nenhum link encontrado"
+          description="Busque pelo nome da arte, do projeto, do cliente ou pelo código do link."
           actionLabel="Limpar busca"
           onAction={() => setBusca('')}
         />

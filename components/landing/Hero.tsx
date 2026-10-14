@@ -61,7 +61,7 @@ export default function Hero({ ctaHref }: { ctaHref: string }) {
           </div>
 
           <p className="mt-5 text-sm text-muted-foreground">
-            Seu cliente acessa por um link. Sem instalação, sem criar conta.
+            Seu cliente abre a arte pelo link, sem instalar nada. Para comentar e aprovar, entra na conta.
           </p>
         </Reveal>
 

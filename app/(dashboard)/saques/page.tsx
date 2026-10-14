@@ -219,7 +219,7 @@ export default function SaquesPage() {
       >
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Saques</h1>
-          <p className="text-sm text-muted-foreground">Receba seus ganhos via PIX.</p>
+          <p className="text-sm text-muted-foreground">Consulte seu saldo e solicite a transferência para uma chave PIX.</p>
         </div>
         {saldo && saldo.saldo > 0 && (
           <div className="flex flex-col items-end gap-1">
@@ -288,8 +288,8 @@ export default function SaquesPage() {
           {saques.length === 0 ? (
             <EmptyState
               icon={ArrowDownToLine}
-              title="Nenhum saque realizado ainda"
-              description="Seus saques aparecem aqui assim que o primeiro for solicitado."
+              title="Nenhum saque solicitado"
+              description="Quando você solicitar um saque, poderá acompanhar a situação por aqui."
             />
           ) : (
             saques.map((s, i) => (
