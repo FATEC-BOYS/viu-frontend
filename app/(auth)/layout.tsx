@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CookieConsent } from '@/components/layout/CookieConsent';
 
 export const dynamic = 'force-dynamic'; // força render dinâmico
 export const revalidate = 0;            // não revalida (sem SSG)
@@ -49,6 +50,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <main className="flex flex-1 items-center justify-center px-4 py-10">
         {children}
       </main>
+
+      <CookieConsent />
 
       <footer className="border-t border-border/60">
         <div className="mx-auto flex h-14 max-w-6xl flex-wrap items-center justify-between gap-x-4 px-6 text-xs text-muted-foreground">

@@ -10,7 +10,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
-import { ShieldCheck } from 'lucide-react';
+import { ArrowRight, Check, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 import { loginSchema, validarCampos } from '@/lib/schemas';
 
 function LoginContent() {
@@ -28,6 +28,7 @@ function LoginContent() {
   const [msg, setMsg] = useState<string | null>(null);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +129,17 @@ function LoginContent() {
 
   return (
     <div className="w-full max-w-md">
-      <Card className="w-full max-w-md">
+      <div className="mb-6 flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex size-9 items-center justify-center rounded-xl bg-pastel-pessego text-primary">
+          <Sparkles data-icon="inline-start" />
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Seu espaço criativo</p>
+          <p>Projetos, clientes e ideias em um só lugar.</p>
+        </div>
+      </div>
+      <Card className="w-full max-w-md overflow-hidden border-border/70 shadow-xl shadow-primary/5">
+        <div className="h-1.5 bg-gradient-to-r from-primary via-pastel-pessego to-pastel-lavanda" />
         {/*
           Aqui havia um "← Voltar" com `router.back()`, e um `<div>` invisível
           ao lado só para equilibrar o flex.
@@ -142,8 +153,11 @@ function LoginContent() {
           não depende de histórico, e diz de que site é esta página.
         */}
         <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl">Bem-vindo de volta!</CardTitle>
-          <CardDescription>Entre para acessar sua conta.</CardDescription>
+          <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <LockKeyhole data-icon="inline-start" />
+          </div>
+          <CardTitle className="font-display text-3xl tracking-tight">Bem-vindo de volta</CardTitle>
+          <CardDescription className="text-[15px]">Entre para continuar de onde parou.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -171,16 +185,25 @@ function LoginContent() {
               <Label htmlFor="password">Senha</Label>
               <Input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder="Digite sua senha"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={sending}
                 aria-invalid={erros.senha ? true : undefined}
                 aria-describedby={erros.senha ? 'senha-erro' : undefined}
+                className="pr-11"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="relative -mt-10 mb-3 ml-auto mr-3 flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff data-icon="inline-start" /> : <Eye data-icon="inline-start" />}
+              </button>
               {erros.senha && (
                 <p id="senha-erro" className="text-sm text-destructive">
                   {erros.senha}
@@ -190,12 +213,12 @@ function LoginContent() {
             {msg && (
               <p className="text-sm text-center text-destructive" aria-live="polite">{msg}</p>
             )}
-            <Button type="submit" className="w-full" disabled={sending}>
-              {sending ? 'Entrando...' : 'Entrar'}
+            <Button type="submit" className="group w-full" disabled={sending}>
+              {sending ? 'Entrando...' : <>Entrar <ArrowRight data-icon="inline-end" className="transition-transform group-hover:translate-x-0.5" /></>}
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-between text-sm">
+        <CardFooter className="flex flex-col gap-4 text-sm sm:flex-row sm:items-center sm:justify-between">
           <Link href="/recuperar" className="text-muted-foreground hover:underline">
             Esqueci minha senha
           </Link>
