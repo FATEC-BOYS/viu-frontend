@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarIcon, DollarSign, Users2 } from "lucide-react";
 import type { Projeto } from "@/lib/projects";
 import PeopleStack from "./PeopleStack";
@@ -30,17 +29,11 @@ function useProjetoProgress(p: Projeto) {
 
 export default function ProjectCard({
   p,
-  selectMode,
-  selected,
-  onToggle,
   onEdit,
   onDelete,
   formatBRLFromCents,
 }: {
   p: Projeto;
-  selectMode: boolean;
-  selected: boolean;
-  onToggle: () => void;
   /**
    * Editar e excluir — de quem pode.
    *
@@ -82,7 +75,6 @@ export default function ProjectCard({
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={p.status} />
-            {selectMode && <Checkbox checked={selected} onCheckedChange={onToggle} aria-label="Selecionar projeto" />}
           </div>
         </div>
       </CardHeader>

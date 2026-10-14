@@ -7,10 +7,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { podeMexerNoProjeto, podeCriarProjeto } from "@/lib/permissoesDoProjeto";
+import { motivoDaRecusa } from "@/lib/transicoesDoProjeto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Loader2, Settings2, FolderOpen } from "lucide-react";
+import { Plus, Loader2, FolderOpen } from "lucide-react";
 import EmptyState from "@/components/layout/EmptyState";
 import ProjetoModal from "@/components/projetos/ProjetoModal";
 import { toast } from "sonner";
@@ -27,8 +28,7 @@ import {
 
 import SkeletonCard from "@/components/projetos/SkeletonCard";
 import ProjectCard from "@/components/projetos/ProjectCard";
-import BulkBar from "@/components/projetos/BulkBar";
-import BoardView from "@/components/projetos/BoardView";
+import BoardView, { rotuloDaColuna } from "@/components/projetos/BoardView";
 import CalendarView from "@/components/projetos/CalendarView";
 import FilterChips from "@/components/projetos/FilterChips";
 import {
@@ -65,12 +65,6 @@ function ProjetosPageContent() {
   const [rows, setRows] = useState<Projeto[]>([]);
   const [filtered, setFiltered] = useState<Projeto[]>([]);
 
-  /*
-   * A seleção em massa só existe para quem tem ao menos um projeto seu na
-   * lista. Ela muda status e prazo — escrita —, e para o cliente era mais um
-   * caminho aberto para o que o servidor recusa.
-   */
-  const temAlgoParaMexer = filtered.some(podeMexer);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loaderLine, setLoaderLine] = useState(LOADER_LINES[0]);
@@ -132,11 +126,6 @@ function ProjetosPageContent() {
   );
   const [orderBy, setOrderBy] = useState<OrdemProjeto>(parseOrdem(searchParams.get("ordem")));
   const [ascending, setAscending] = useState(parseAscendente(searchParams.get("asc")));
-
-  // seleção em massa
-  const [selectMode, setSelectMode] = useState(false);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const selectedIds = useMemo(() => Object.entries(selected).filter(([,v])=>v).map(([k])=>k), [selected]);
 
   // Espelha filtros e visualização na URL. `replace` em vez de `push`: o
   // histórico do navegador é para navegação, não para cada tecla digitada.
@@ -311,21 +300,6 @@ function ProjetosPageContent() {
     };
   }
 
-  // seleção em massa
-  const toggleSelectMode = () => { setSelectMode((s) => !s); setSelected({}); };
-  const toggleSelect = (id: string) => setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
-  const bulkChangeStatus = (status: Projeto["status"]) => {
-    setRows((prev) => prev.map((p) => (selectedIds.includes(p.id) ? { ...p, status } : p)));
-    toast.message("Status atualizado", { description: `${selectedIds.length} projeto(s) alterado(s).` });
-    setSelected({}); setSelectMode(false);
-  };
-  const bulkSetPrazo = (days: number) => {
-    const newDate = new Date(Date.now() + days*24*60*60*1000).toISOString();
-    setRows((prev) => prev.map((p) => (selectedIds.includes(p.id) ? { ...p, prazo: newDate } : p)));
-    toast.message("Prazo definido", { description: `${selectedIds.length} projeto(s) com novo prazo.` });
-    setSelected({}); setSelectMode(false);
-  };
-
   // clientes únicos (chip)
   const clientes = useMemo(() => {
     const map = new Map<string, { id: string; nome: string }>();
@@ -416,14 +390,6 @@ function ProjetosPageContent() {
         clientes={clientes}
         orderBy={orderBy} setOrderBy={setOrderBy}
         ascending={ascending} setAscending={setAscending}
-        rightSlot={
-          temAlgoParaMexer ? (
-            <Button variant={selectMode ? "secondary" : "outline"} size="sm" onClick={() => { setSelectMode((s) => !s); setSelected({}); }}>
-              <Settings2 className="h-4 w-4 mr-2" />
-              {selectMode ? "Cancelar seleção" : "Selecionar"}
-            </Button>
-          ) : undefined
-        }
       />
 
       {/* Conteúdo por modo */}
@@ -449,30 +415,17 @@ function ProjetosPageContent() {
               />
             )
           ) : (
-            <>
-              {selectMode && (
-                <BulkBar
-                  count={selectedIds.length}
-                  onClose={() => { setSelectMode(false); setSelected({}); }}
-                  onStatus={(s) => bulkChangeStatus(s)}
-                  onPrazo={(d) => bulkSetPrazo(d)}
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  p={p}
+                  onEdit={podeMexer(p) ? () => { setEditing(p); setOpenModal(true); } : undefined}
+                  onDelete={podeMexer(p) ? () => onDelete(p.id) : undefined}
+                  formatBRLFromCents={formatBRLFromCents}
                 />
-              )}
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((p) => (
-                  <ProjectCard
-                    key={p.id}
-                    p={p}
-                    selectMode={selectMode}
-                    selected={!!selected[p.id]}
-                    onToggle={() => setSelected((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
-                    onEdit={podeMexer(p) ? () => { setEditing(p); setOpenModal(true); } : undefined}
-                    onDelete={podeMexer(p) ? () => onDelete(p.id) : undefined}
-                    formatBRLFromCents={formatBRLFromCents}
-                  />
-                ))}
-              </div>
-            </>
+              ))}
+            </div>
           )}
         </TabsContent>
 
@@ -493,13 +446,33 @@ function ProjetosPageContent() {
                 toast.error("Mover este projeto é do designer dele.");
                 return;
               }
+
+              /*
+               * Segunda linha de defesa. O quadro já não deixa soltar o cartão
+               * numa coluna impossível, então isto só é alcançado por outro
+               * caminho — e aí a recusa precisa dizer o motivo, não "não
+               * consegui".
+               */
+              const recusa = motivoDaRecusa(from, to, rotuloDaColuna);
+              if (recusa) {
+                toast.error(recusa);
+                return;
+              }
+
               // otimista no estado local
               setRows(prev => prev.map(p => p.id === projectId ? { ...p, status: to } : p));
 
               try {
-                await updateProjeto(projectId, { status: to }); // ajuste a assinatura em lib se precisar Partial
+                await updateProjeto(projectId, { status: to });
               } catch (e) {
-                toast.error("Não consegui mover, desfazendo…");
+                /*
+                 * A mensagem do servidor chega em `e.message` (`erroDeApi`), e
+                 * este `catch` a jogava no lixo — o `e` estava ali, sem uso, e
+                 * o lint apontava. "Não consegui mover, desfazendo…" é o que
+                 * sobra quando ninguém lê o motivo.
+                 */
+                const motivo = e instanceof Error ? e.message : null;
+                toast.error(motivo || "Não consegui mover o projeto.");
                 // rollback
                 setRows(prev => prev.map(p => p.id === projectId ? { ...p, status: from } : p));
               }
