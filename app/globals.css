@@ -215,9 +215,17 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image: radial-gradient(circle at 100% 0%, color-mix(in oklch, var(--primary) 4%, transparent), transparent 32rem);
+    background-image: radial-gradient(circle at 100% 0%, color-mix(in oklch, var(--primary) 5%, transparent), transparent 32rem), radial-gradient(circle at 0% 100%, color-mix(in oklch, var(--pastel-lavanda) 12%, transparent), transparent 28rem);
     text-rendering: optimizeLegibility;
     font-feature-settings: "cv11" 1, "ss01" 1;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  ::placeholder {
+    color: color-mix(in oklch, var(--muted-foreground) 72%, transparent);
   }
   button, a, input, textarea, select {
     transition-duration: 220ms;
@@ -228,6 +236,13 @@
   }
   [data-slot="card"] {
     isolation: isolate;
+    box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 4%, transparent), 0 12px 32px color-mix(in oklch, var(--foreground) 3%, transparent);
+    transition: border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="card"]:has(button:hover, a:hover) {
+    border-color: color-mix(in oklch, var(--primary) 22%, var(--border));
+    box-shadow: 0 2px 4px color-mix(in oklch, var(--foreground) 5%, transparent), 0 18px 40px color-mix(in oklch, var(--primary) 8%, transparent);
   }
 
   button:not(:disabled), a, [role="button"] {
