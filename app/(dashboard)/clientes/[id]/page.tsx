@@ -1,4 +1,5 @@
 'use client';
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { iniciais } from "@/lib/iniciais";
@@ -288,7 +289,7 @@ export default function ClienteDetailPage() {
                       <span className="block truncate text-sm font-medium">{p.nome}</span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {ROTULO[p.status]}
-                        {p.orcamento ? ` · ${formatBRLFromCents(p.orcamento)}` : ''}
+                        <AdminOnly>{p.orcamento ? ` · ${formatBRLFromCents(p.orcamento)}` : ''}</AdminOnly>
                       </span>
                     </span>
                     <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">

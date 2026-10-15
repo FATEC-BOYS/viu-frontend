@@ -1,4 +1,5 @@
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { iniciais } from "@/lib/iniciais";
@@ -206,10 +207,10 @@ function ClienteCard({
             {prazo?.dia ?? "—"}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-2">
+<AdminOnly>        <div className="flex items-center justify-between gap-2">
           <span className="truncate text-muted-foreground">Orçamento</span>
           <span className="shrink-0 font-semibold">{formatBRLFromCents(orcamentoTotal)}</span>
-        </div>
+        </div></AdminOnly>
       </div>
 
       <div className="mt-3 flex justify-end">

@@ -1,3 +1,4 @@
+import FinancialRouteGate from '@/components/layout/FinancialRouteGate'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import SignOutButton from '@/components/layout/SignOutButton'
@@ -28,7 +29,7 @@ export default function DashboardLayout({
           </div>
         </header>
         <EmailVerificationBanner />
-        <div className="relative flex-1">{children}</div>
+        <div className="relative flex-1"><FinancialRouteGate>{children}</FinancialRouteGate></div>
       </main>
     </div>
   )

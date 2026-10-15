@@ -1,5 +1,6 @@
 // components/projetos/overview/ResumoCards.tsx
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { Card, CardContent } from "@/components/ui/card";
 import { formatarDia } from '@/lib/diaDeCalendario';
@@ -76,7 +77,7 @@ export default function ResumoCards({ resumo }: { resumo: ProjetoResumoUI }) {
       </Card>
 
       {/* Orçamento */}
-      <Card>
+<AdminOnly>      <Card>
         <CardContent className="p-4 space-y-1">
           <div className="text-xs text-muted-foreground flex items-center gap-1">
             <DollarSign className="h-3.5 w-3.5" /> Orçamento
@@ -88,7 +89,7 @@ export default function ResumoCards({ resumo }: { resumo: ProjetoResumoUI }) {
             Acompanhe o ritmo nas aprovações
           </div>
         </CardContent>
-      </Card>
+      </Card></AdminOnly>
 
       {/* Pessoas */}
       <Card>

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import EstaSemana from '../EstaSemana'
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { tipo: 'DESIGNER' } }) }))
 
 /**
  * Esta é a única faixa do painel que devolve alguma coisa — as outras são
@@ -38,4 +39,10 @@ describe('EstaSemana', () => {
     // E o recado nomeia a queda, em vez de só marcar zero.
     expect(screen.getByText(/semana passada teve/i)).toBeInTheDocument()
   })
+})
+
+it('mantém aprovações sem mostrar cobrança ao designer', () => {
+  renderSemana(2, [0, 0, 1, 2])
+  expect(screen.getByText('2')).toBeInTheDocument()
+  expect(screen.queryByText(/fatura|a receber|R\$/i)).not.toBeInTheDocument()
 })

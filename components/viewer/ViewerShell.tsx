@@ -1,5 +1,6 @@
-// components/viewer/ViewerShell.tsx
 "use client";
+// components/viewer/ViewerShell.tsx
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -196,7 +197,7 @@ export default function ViewerShell({
             link é encaminhado. A frase aqui responde "dá para usar?" e para
             aí — sem data de quitação e sem dizer que houve estorno, que é
             conversa entre designer e cliente. */}
-        <SeloLicencaCompacto licenca={licenca} contexto="publico" />
+        <AdminOnly><SeloLicencaCompacto licenca={licenca} contexto="publico" /></AdminOnly>
 
         {/*
           Quem chega pelo link e não tem sessão via "Entre na sua conta para

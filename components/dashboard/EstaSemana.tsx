@@ -1,4 +1,5 @@
 'use client'
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import Link from 'next/link'
 
@@ -115,7 +116,7 @@ export default function EstaSemana({ resumo }: { resumo: SemanaResumo }) {
       </div>
 
       {/* O dinheiro desce de peso: é contexto, não a ação do dia. */}
-      <p className="border-t pt-3 text-sm text-muted-foreground">
+<AdminOnly>      <p className="border-t pt-3 text-sm text-muted-foreground">
         {aReceberCentavos > 0 ? (
           <>
             <b className="font-semibold tabular-nums text-foreground">
@@ -134,7 +135,7 @@ export default function EstaSemana({ resumo }: { resumo: SemanaResumo }) {
         ) : (
           'Nenhuma fatura em aberto.'
         )}
-      </p>
+      </p></AdminOnly>
     </section>
   )
 }

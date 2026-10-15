@@ -81,7 +81,7 @@ describe('CLIENTE', () => {
     expect(link(/dashboard/i)).toBeInTheDocument()
     expect(link(/notificações/i)).toBeInTheDocument()
     // Escopada por clienteId no backend; a página abre em `tipo: 'cliente'`.
-    expect(link(/faturas/i)).toBeInTheDocument()
+    expect(link(/faturas/i)).not.toBeInTheDocument()
     expect(link(/perfil/i)).toBeInTheDocument()
   })
 
@@ -219,7 +219,7 @@ describe('itens que dependem de conteúdo', () => {
     renderComo('DESIGNER')
 
     await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
-    for (const item of [/^prazos$/i, /^equipes$/i, /^faturas$/i, /^extrato$/i]) {
+    for (const item of [/^prazos$/i, /^equipes$/i]) {
       expect(bloqueado(item)).toBe(true)
     }
   })
@@ -236,13 +236,13 @@ describe('itens que dependem de conteúdo', () => {
   })
 
   /** Assinatura é onde o designer paga o VIU: trancar é trancar a receita. */
-  it('nunca tranca Assinatura nem Planos', async () => {
+  it('oculta Assinatura e Planos no piloto', async () => {
     contaCom({ projetos: 0, artes: 0 })
     renderComo('DESIGNER')
 
     await waitFor(() => expect(bloqueado(/^artes$/i)).toBe(true))
-    expect(link(/^assinatura$/i)).toBeInTheDocument()
-    expect(link(/^planos$/i)).toBeInTheDocument()
+    expect(link(/^assinatura$/i)).not.toBeInTheDocument()
+    expect(link(/^planos$/i)).not.toBeInTheDocument()
   })
 
   it('com projeto e sem arte, libera Artes e segura Feedbacks e Links', async () => {
@@ -259,7 +259,7 @@ describe('itens que dependem de conteúdo', () => {
     renderComo('DESIGNER')
 
     await waitFor(() => expect(link(/^artes$/i)).toBeInTheDocument())
-    for (const item of [/^feedbacks$/i, /links compartilhados/i, /^faturas$/i]) {
+    for (const item of [/^feedbacks$/i, /links compartilhados/i]) {
       expect(link(item)).toBeInTheDocument()
     }
   })
@@ -324,5 +324,15 @@ describe('itens que dependem de conteúdo', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalled())
 
     expect(vi.mocked(api.get).mock.calls.length).toBe(chamadasIniciais)
+  })
+})
+
+describe('financeiro reservado ao ADM no piloto', () => {
+  it.each(['DESIGNER', 'CLIENTE'] as const)('oculta todos os módulos comerciais para %s', tipo => {
+    renderComo(tipo)
+    for (const nome of [/^faturas$/i, /^saques$/i, /^extrato$/i, /^disputas$/i, /^assinatura$/i, /^planos$/i]) {
+      expect(link(nome)).not.toBeInTheDocument()
+      expect(screen.queryByText(nome)).not.toBeInTheDocument()
+    }
   })
 })

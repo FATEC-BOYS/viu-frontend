@@ -1,5 +1,6 @@
 // components/clientes/ClienteWizard.tsx
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { useEffect, useState } from "react";
 import {
@@ -246,11 +247,11 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
                     <Label htmlFor="proj-prazo">Prazo (opcional)</Label>
                     <Input id="proj-prazo" type="date" value={proj.prazo} onChange={(e)=>setProj((p)=>({...p, prazo: e.target.value}))} disabled={submitting} />
                   </div>
-                  <div className="grid gap-2">
+<AdminOnly>                  <div className="grid gap-2">
                     <Label htmlFor="proj-orc">Orçamento (BRL, opcional)</Label>
                     <Input id="proj-orc" value={proj.orcamento} onChange={(e)=>setProj((p)=>({...p, orcamento: e.target.value}))} placeholder="R$ 10.000,00" disabled={submitting} />
                     <p className="text-[11px] text-muted-foreground">Convertido para centavos ao salvar.</p>
-                  </div>
+                  </div></AdminOnly>
                 </div>
               )}
             </div>
@@ -277,7 +278,7 @@ export default function ClienteWizard({ open, onOpenChange, onCreated }: Props) 
                   <dl className="grid grid-cols-2 gap-y-1 text-sm">
                     <dt className="text-muted-foreground">Nome</dt><dd>{proj.nome || "—"}</dd>
                     <dt className="text-muted-foreground">Prazo</dt><dd>{proj.prazo || "—"}</dd>
-                    <dt className="text-muted-foreground">Orçamento</dt><dd>{proj.orcamento || "—"}</dd>
+<AdminOnly>                    <dt className="text-muted-foreground">Orçamento</dt><dd>{proj.orcamento || "—"}</dd></AdminOnly>
                   </dl>
                 </div>
               )}
