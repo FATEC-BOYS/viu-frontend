@@ -38,11 +38,12 @@ export default function StepBasic({
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="nome">Nome do Projeto</Label>
+        <Label htmlFor="nome">Nome do projeto</Label>
         <Input
           id="nome"
+          placeholder="Ex.: Identidade visual · Café Aurora"
           value={values.nome}
           onChange={(e) => setValues({ ...values, nome: e.target.value })}
           required
@@ -55,7 +56,8 @@ export default function StepBasic({
         <Label htmlFor="descricao">Descrição</Label>
         <Textarea
           id="descricao"
-          rows={3}
+          rows={4}
+          placeholder="O que vamos criar? Conte o objetivo, as entregas e o que não pode faltar."
           value={values.descricao || ""}
           onChange={(e) => setValues({ ...values, descricao: e.target.value })}
           {...acessibilidade("descricao")}
@@ -63,11 +65,13 @@ export default function StepBasic({
         {mensagem("descricao")}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+        <h3 className="mb-4 text-sm font-semibold">Combinados do projeto</h3>
+        <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Status</Label>
+          <Label htmlFor="projeto-status">Status do projeto</Label>
           <Select value={values.status} onValueChange={(v) => setValues({ ...values, status: v as StatusProjeto })}>
-            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectTrigger id="projeto-status" className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
               <SelectItem value="CONCLUIDO">Concluído</SelectItem>
@@ -87,7 +91,7 @@ export default function StepBasic({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="prazo">Data de Entrega</Label>
+          <Label htmlFor="prazo">Data de entrega</Label>
           <Input id="prazo" type="date" value={values.prazo || ""}
             onChange={(e) => setValues({ ...values, prazo: e.target.value })}
             {...acessibilidade("prazo")} />
@@ -118,6 +122,7 @@ export default function StepBasic({
             {mensagem("clienteId")}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

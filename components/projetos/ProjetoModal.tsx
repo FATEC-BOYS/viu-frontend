@@ -5,13 +5,13 @@ import { formatarDia } from '@/lib/diaDeCalendario';
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { listClientes, listDesigners } from "@/lib/projects";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
 import type { ProjetoInput } from "@/lib/projects";
-import { Stepper } from "@/components/ui/stepper";
+
 
 import type { ClienteOption, UsuarioOption, ProjetoFormValues } from "./ProjetoForm";
 import StepBasic from "./forms/StepBasic";
@@ -136,10 +136,10 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const [aceiteTermos, setAceiteTermos] = useState(false);
 
   const steps = [
-    { key: "basic", label: "Básico" },
-    { key: "participants", label: "Participantes" },
-    { key: "approval", label: "Aprovação" },
-    { key: "review", label: "Revisão" },
+    { key: "basic", label: "Projeto", title: "Dê forma ao seu projeto", description: "Conte o que será criado e combine os primeiros detalhes." },
+    { key: "participants", label: "Pessoas", title: "Quem vem com você?", description: "Adicione quem vai colaborar neste projeto. Você pode seguir sem adicionar outras pessoas." },
+    { key: "approval", label: "Aprovação", title: "Combine como aprovar", description: "Defina quem dá o aceite e como o projeto segue até a aprovação." },
+    { key: "review", label: "Revisão", title: "Tudo pronto para seguir?", description: "Confira os detalhes. Se precisar mudar algo, volte às etapas anteriores." },
   ] as const;
 
   const [formData, setFormData] = useState<ProjetoFormValues>({
@@ -322,30 +322,24 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/*
-        `max-h` + rolagem só no miolo: sem isto, num passo alto o modal cresce
-        além da tela do celular e leva "Voltar/Próximo" junto — a pessoa vê o
-        formulário e não alcança o botão que o conclui.
-      */}
-      <DialogContent className="flex max-h-[92dvh] flex-col overflow-hidden rounded-2xl border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur sm:max-w-[680px]">
-        <DialogHeader className="border-b bg-muted/20 px-6 py-5">
-          <DialogTitle className="text-xl tracking-tight">{initial ? "Editar projeto" : "Novo projeto"}</DialogTitle>
-          <p className="text-sm text-muted-foreground">Organize as informações em etapas simples e revise tudo antes de salvar.</p>
+      <DialogContent className="flex max-h-[94dvh] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-3xl border-border/60 bg-background p-0 shadow-2xl sm:max-w-[720px]">
+        <DialogHeader className="shrink-0 border-b border-border/60 bg-primary/[0.04] px-5 pb-5 pt-6 text-left sm:px-8 sm:pt-8">
+          <p className="pr-8 text-xs font-semibold uppercase tracking-[0.16em] text-primary">{initial ? "Editar projeto" : "Novo projeto"} · {evalResult ? "Briefing" : `Passo ${step + 1} de ${steps.length}`}</p>
+          <DialogTitle className="pr-6 text-2xl leading-tight tracking-tight sm:text-3xl">{evalResult ? "Um olhar para o briefing" : steps[step].title}</DialogTitle>
+          <DialogDescription className="max-w-lg leading-relaxed">{evalResult ? "Confira a avaliação antes de continuar." : steps[step].description}</DialogDescription>
+          {!evalResult && (
+            <ol aria-label="Etapas do projeto" className="mt-4 grid grid-cols-4 gap-2">
+              {steps.map((item, index) => (
+                <li key={item.key} aria-current={index === step ? "step" : undefined} className={index <= step ? "text-primary" : "text-muted-foreground"}>
+                  <div className={`mb-2 h-1 rounded-full ${index <= step ? "bg-primary" : "bg-border"}`} />
+                  <span className="text-[11px] font-medium sm:text-xs">{item.label}</span>
+                </li>
+              ))}
+            </ol>
+          )}
         </DialogHeader>
 
-        <div className="min-w-0 shrink-0 overflow-x-auto pb-1">
-          <Stepper
-            steps={[
-              { key: "basic", label: "Básico" },
-              { key: "participants", label: "Participantes" },
-              { key: "approval", label: "Aprovação" },
-              { key: "review", label: "Revisão" },
-            ]}
-            current={step}
-          />
-        </div>
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div key={evalResult ? "briefing" : step} className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8 sm:py-7">
           {evalResult ? (
             <BriefingEvalPanel
               evalResult={evalResult}
@@ -370,11 +364,10 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
               {step === 3 && <StepReview resumo={resumo} />}
             </>
           )}
-        </div>
 
         {/* Aceite de termos – apenas na etapa de revisão ao criar um novo projeto */}
         {!evalResult && isLastStep && !initial && (
-          <div className="flex shrink-0 items-start gap-3 rounded-lg border bg-muted/40 p-3">
+          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4">
             <Checkbox
               id="aceite-termos"
               checked={aceiteTermos}
@@ -395,8 +388,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
           </div>
         )}
 
+        </div>
         {!evalResult && (
-          <div className="flex shrink-0 justify-between gap-2 border-t pt-4">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-background px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8">
             <Button variant="outline" onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
               {step > 0 ? "Voltar" : "Cancelar"}
             </Button>
@@ -417,7 +411,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
                 }}
                 disabled={loading}
               >
-                Próximo
+                Continuar
               </Button>
             ) : (
               <Button
@@ -426,7 +420,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
                 title={!initial && !aceiteTermos ? "Aceite os termos para continuar" : undefined}
               >
                 {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {initial ? "Salvar" : "Criar"}
+                {salvando ? "Salvando…" : initial ? "Salvar alterações" : "Criar projeto"}
               </Button>
             )}
           </div>
