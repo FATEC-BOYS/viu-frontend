@@ -53,6 +53,8 @@ import AtividadeFeed from "@/components/projetos/activity/AtividadeFeed";
 import type { AtividadeItem as UIAtividadeItem } from "@/components/projetos/activity/AtividadeItemRow";
 import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton";
 
+import { podeVerFinanceiro } from '@/lib/financeiro';
+import AdminOnly from '@/components/layout/AdminOnly';
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
 import ProjetoDoCliente from "@/components/projetos/ProjetoDoCliente";
 import { rotuloProjeto } from "@/lib/rotulos";
@@ -118,10 +120,11 @@ export default function ProjetoPage() {
   // apontam para ?tab=approval, e sem ler isto eles caíam na Visão Geral —
   // mandavam para a página certa, na aba errada.
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<ProjetoTabKey>(() => {
+  const [tabEscolhida, setTab] = useState<ProjetoTabKey>(() => {
     const pedida = searchParams.get("tab") as ProjetoTabKey | null;
     return pedida && ABAS_VALIDAS.includes(pedida) ? pedida : "overview";
   });
+  const tab = tabEscolhida === "billing" && !podeVerFinanceiro(user?.tipo) ? "overview" : tabEscolhida;
   const [acessosAberto, setAcessosAberto] = useState(false);
   /**
    * "Editar" no cabeçalho empurrava `?edit=1` e ninguém lia o parâmetro — o
@@ -782,7 +785,7 @@ export default function ProjetoPage() {
           )
         )}
 
-        {tab === "billing" && <FaturaTab projetoId={id} designerId={projeto?.designer?.id ?? null} />}
+        {tab === "billing" && <AdminOnly><FaturaTab projetoId={id} designerId={projeto?.designer?.id ?? null} /></AdminOnly>}
       </div>
 
       {/*

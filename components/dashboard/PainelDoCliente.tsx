@@ -1,4 +1,7 @@
 'use client'
+import AdminOnly from '@/components/layout/AdminOnly';
+import { useAuth } from '@/contexts/AuthContext';
+import { podeVerFinanceiro } from '@/lib/financeiro';
 
 import { useEffect, useState } from 'react'
 import { diasAte } from '@/lib/diaDeCalendario'
@@ -146,6 +149,8 @@ export default function PainelDoCliente({
   nome: string
   usuarioId: string | null
 }) {
+  const { user } = useAuth()
+  const financeiro = podeVerFinanceiro(user?.tipo)
   const [projetos, setProjetos] = useState<ProjetoDoCliente[]>([])
   const [faturas, setFaturas] = useState<Fatura[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -162,7 +167,7 @@ export default function PainelDoCliente({
       const [resProjetos, resFaturas] = await Promise.allSettled([
         getAll<any>('/projetos'),
         // `tipo=cliente`: as faturas que ELE deve, não as que alguém tem a receber.
-        pagamentosApi.getFaturas('cliente'),
+        financeiro ? pagamentosApi.getFaturas('cliente') : Promise.resolve({ data: [] }),
       ])
       if (!vivo) return
 
@@ -185,7 +190,7 @@ export default function PainelDoCliente({
     return () => {
       vivo = false
     }
-  }, [])
+  }, [usuarioId, financeiro])
 
   const aPagar = faturas.reduce((soma, f) => soma + (f.valor ?? 0), 0)
 
@@ -224,7 +229,7 @@ export default function PainelDoCliente({
 
           O valor é o herói, com legenda embaixo: quem abre quer saber QUANTO,
           e a frase em volta só atrapalhava a leitura do número. */}
-      {faturas.length > 0 && (
+<AdminOnly>      {faturas.length > 0 && (
         <section className="rounded-xl border bg-card px-4 py-4 sm:px-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -241,7 +246,7 @@ export default function PainelDoCliente({
             </Button>
           </div>
         </section>
-      )}
+      )}</AdminOnly>
     </div>
   )
 }

@@ -1,4 +1,6 @@
 "use client";
+import { useAuth } from '@/contexts/AuthContext';
+import { podeVerFinanceiro } from '@/lib/financeiro';
 
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -36,6 +38,7 @@ export default function ProjetoTabs({
    * deixa de dizer onde você está. Trazê-la para o campo de visão a cada troca
    * resolve, inclusive quando a troca vem do `?tab=` da URL.
    */
+  const { user } = useAuth();
   const trilhaRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const ativa = trilhaRef.current?.querySelector<HTMLElement>('[data-ativa="true"]');
@@ -55,7 +58,7 @@ export default function ProjetoTabs({
         rótulos se espremam em três linhas antes disso.
       */}
       <nav ref={trilhaRef} className="flex items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map((t) => (
+        {TABS.filter(t => t.key !== "billing" || podeVerFinanceiro(user?.tipo)).map((t) => (
           <button
             key={t.key}
             data-ativa={current === t.key}

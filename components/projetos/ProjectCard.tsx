@@ -108,10 +108,10 @@ export default function ProjectCard({
             <CalendarIcon className="h-3 w-3" />
             {p.prazo ? format(parseISO(p.prazo), "P", { locale: ptBR }) : "Sem prazo"}
           </Badge>
-          <Badge variant="outline" className="gap-1">
+<AdminOnly>          <Badge variant="outline" className="gap-1">
             <DollarSign className="h-3 w-3" />
             {formatBRLFromCents(p.orcamento ?? 0)}
-          </Badge>
+          </Badge></AdminOnly>
           {p.equipe && (
             <Badge variant="outline" className="gap-1">
               <Users2 className="h-3 w-3" />
@@ -162,3 +162,4 @@ export default function ProjectCard({
     </Card>
   );
 }
+import AdminOnly from '@/components/layout/AdminOnly';

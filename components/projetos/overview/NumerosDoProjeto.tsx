@@ -1,4 +1,5 @@
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { Calendar, Users, DollarSign, BarChart3 } from "lucide-react";
 import { formatarDia } from '@/lib/diaDeCalendario';
@@ -75,7 +76,7 @@ export default function NumerosDoProjeto({
         )}
       </Bloco>
 
-      <Bloco icone={DollarSign} rotulo="Orçamento">
+<AdminOnly>      <Bloco icone={DollarSign} rotulo="Orçamento">
         {semOrcamento ? (
           // Sem isto a fatura não pode ser gerada, e a pessoa só descobria
           // quando tentava e levava um erro.
@@ -85,7 +86,7 @@ export default function NumerosDoProjeto({
         ) : (
           <span className="font-medium">{formatBRLFromCents(resumo.orcamentoCentavos!)}</span>
         )}
-      </Bloco>
+      </Bloco></AdminOnly>
 
       <Bloco icone={Users} rotulo="Pessoas">
         <span className="font-medium">{pessoas.designers ?? 0}</span> no time ·{" "}

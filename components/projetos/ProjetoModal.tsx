@@ -383,7 +383,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
               <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline text-foreground hover:text-primary">
                 Política de Privacidade
               </a>
-              . Confirmo que o briefing é verídico e concordo com as condições de entrega e pagamento. (Lei 14.063/20)
+              . Confirmo que as informações do projeto estão corretas.
             </label>
           </div>
         )}

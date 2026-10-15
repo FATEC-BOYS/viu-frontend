@@ -298,7 +298,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
             { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
             // Escopada por clienteId no backend, e a página já abre em
             // `tipo: 'cliente'` — não é a tela do designer reaproveitada.
-            { title: 'Faturas', href: '/faturas', icon: Receipt },
+
           ],
         },
         {
@@ -346,21 +346,19 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           { title: 'Equipes', href: '/equipes', icon: Users2, precisa: 'projeto' },
         ],
       },
-      {
+      ...(ehAdmin ? [{
         title: 'Financeiro',
         collapsible: true,
         items: [
-          // Financeiro só existe depois de haver trabalho para faturar.
-          // Assinatura e Planos ficam de fora: é onde o designer paga o VIU,
-          // e trancar isso seria trancar a própria receita.
-          { title: 'Faturas', href: '/faturas', icon: Receipt, precisa: 'projeto' },
-          { title: 'Saques', href: '/saques', icon: ArrowDownToLine, precisa: 'projeto' },
-          { title: 'Extrato', href: '/extrato', icon: Receipt, precisa: 'projeto' },
-          { title: 'Disputas', href: '/disputas', icon: Scale, precisa: 'projeto' },
+          // Reservado ao ADM durante a validação do fluxo de revisão.
+          { title: 'Faturas', href: '/faturas', icon: Receipt, precisa: 'projeto' as const },
+          { title: 'Saques', href: '/saques', icon: ArrowDownToLine, precisa: 'projeto' as const },
+          { title: 'Extrato', href: '/extrato', icon: Receipt, precisa: 'projeto' as const },
+          { title: 'Disputas', href: '/disputas', icon: Scale, precisa: 'projeto' as const },
           { title: 'Assinatura', href: '/assinaturas', icon: Wallet },
           { title: 'Planos', href: '/planos', icon: CreditCard },
         ],
-      },
+      }] : []),
       {
         title: 'Conta',
         collapsible: true,

@@ -1,4 +1,5 @@
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,7 +81,7 @@ export default function StepBasic({
           </Select>
         </div>
 
-        <div className="space-y-2">
+<AdminOnly>        <div className="space-y-2">
           <Label htmlFor="orcamento">Valor (R$)</Label>
           <Input id="orcamento" type="number" step="0.01"
             value={Number.isFinite(values.orcamento) ? values.orcamento : 0}
@@ -88,7 +89,7 @@ export default function StepBasic({
             required inputMode="decimal"
             {...acessibilidade("orcamento")} />
           {mensagem("orcamento")}
-        </div>
+        </div></AdminOnly>
 
         <div className="space-y-2">
           <Label htmlFor="prazo">Data de entrega</Label>

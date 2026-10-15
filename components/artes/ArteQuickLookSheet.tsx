@@ -1,4 +1,5 @@
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -269,7 +270,7 @@ export function ArteQuickLookSheet({
 
                   {/* Cláusula 7.1: a peça carrega o próprio estado de licença.
                       Some sozinho quando o projeto não tem fatura. */}
-                  <SeloLicenca licenca={detail?.licenca} />
+                  <AdminOnly><SeloLicenca licenca={detail?.licenca} /></AdminOnly>
 
                   {/*
                     Cláusula 3.2, na peça. O número existia no banco desde que

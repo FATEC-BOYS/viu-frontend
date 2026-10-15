@@ -1,4 +1,6 @@
 'use client'
+import { podeVerFinanceiro } from '@/lib/financeiro';
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { FadeIn } from "@/components/layout/Motion";
 import { useState, useEffect, useRef } from 'react'
@@ -34,7 +36,7 @@ interface UsuarioPerfil {
   nome: string
   telefone: string | null
   avatar: string | null
-  tipo: 'DESIGNER' | 'CLIENTE'
+  tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN'
   ativo: boolean
   criadoEm: string
 }
@@ -142,8 +144,8 @@ export default function PerfilPage() {
         const [assinaturaRes, saldoRes] = await Promise.allSettled([
           // Só designer assina o VIU — mesma condição do saldo, logo abaixo,
           // que já estava certa.
-          u.tipo === 'DESIGNER' ? pagamentosApi.getMinhaAssinatura() : Promise.resolve(null),
-          u.tipo === 'DESIGNER' ? pagamentosApi.getSaldo() : Promise.resolve(null),
+          podeVerFinanceiro(u.tipo) ? pagamentosApi.getMinhaAssinatura() : Promise.resolve(null),
+          podeVerFinanceiro(u.tipo) ? pagamentosApi.getSaldo() : Promise.resolve(null),
         ])
         if (assinaturaRes.status === 'fulfilled') setAssinatura(assinaturaRes.value?.data ?? null)
         else setAssinatura(null)
@@ -360,7 +362,7 @@ export default function PerfilPage() {
 
           {/* Logo depois de "Informações Pessoais": dado fiscal é identidade,
               só que a identidade que uma cobrança precisa. */}
-          <DadosFiscaisCard />
+          <AdminOnly><DadosFiscaisCard /></AdminOnly>
 
           <Card>
             <CardHeader>
@@ -445,7 +447,7 @@ export default function PerfilPage() {
             tela onde o designer paga o VIU. O menu do cliente exclui Planos e
             Assinatura de propósito; era por aqui que voltavam.
           */}
-          {isDesigner && (
+          {podeVerFinanceiro(usuario.tipo) && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
             <Card>
               <CardHeader className="pb-3">
@@ -498,7 +500,7 @@ export default function PerfilPage() {
           )}
 
           {/* --- saldo designer card --- */}
-          {isDesigner && (
+          {podeVerFinanceiro(usuario.tipo) && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
               <Card className="border-primary/20 bg-primary/5">
                 <CardHeader className="pb-3">

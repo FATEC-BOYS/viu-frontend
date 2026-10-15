@@ -1,4 +1,5 @@
 'use client';
+import { podeVerFinanceiro } from '@/lib/financeiro';
 
 import { FadeIn } from "@/components/layout/Motion";
 import { useEffect, useMemo, useState } from 'react';
@@ -61,10 +62,10 @@ export default function PrazosPage() {
           getAll<any>('/projetos'),
           getAll<any>('/tarefas?status=PENDENTE'),
           getAll<any>('/tarefas?status=EM_ANDAMENTO'),
-          pagamentosApi
+          podeVerFinanceiro(user?.tipo) ? pagamentosApi
             .getFaturas(ehDesigner ? 'designer' : 'cliente')
             .then((r) => r.data ?? [])
-            .catch(() => []),
+            .catch(() => []) : Promise.resolve([]),
         ]);
         if (!vivo) return;
 
@@ -171,7 +172,7 @@ export default function PrazosPage() {
                 <p className="text-xs text-muted-foreground">
                   {diaEscolhido
                     ? 'Escolha outro dia no calendário, ou limpe o filtro.'
-                    : 'Prazo de projeto, tarefa com data e fatura a vencer aparecem aqui.'}
+                    : 'Prazos de projetos e tarefas com data aparecem aqui.'}
                 </p>
               </div>
             </div>

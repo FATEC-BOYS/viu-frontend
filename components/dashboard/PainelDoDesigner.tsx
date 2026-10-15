@@ -1,4 +1,6 @@
 'use client'
+import { podeVerFinanceiro } from '@/lib/financeiro';
+import AdminOnly from '@/components/layout/AdminOnly';
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -311,7 +313,7 @@ export default function PainelDoDesigner() {
 
   // financial data — separate effect, non-blocking
   useEffect(() => {
-    if (authLoading) return
+    if (authLoading || !podeVerFinanceiro(user?.tipo)) return
     const tipo = isDesigner ? 'designer' : 'cliente'
     setErroFinanceiro(false)
     Promise.allSettled([
@@ -327,7 +329,7 @@ export default function PainelDoDesigner() {
       }
       if (saldoRes.status === 'fulfilled' && saldoRes.value) setSaldo(saldoRes.value.data)
     }).catch(console.error)
-  }, [authLoading, isDesigner])
+  }, [authLoading, isDesigner, user?.tipo])
 
   const displayName = user?.nome ?? (user as any)?.email?.split('@')[0] ?? 'você'
 
@@ -684,12 +686,12 @@ export default function PainelDoDesigner() {
               )}
           </div>
 
-          {erroFinanceiro ? <p role="alert" className="rounded-xl border p-4 text-sm">Não foi possível carregar o financeiro. <Link className="underline" href="/faturas">Consultar faturas</Link></p> : <FinanceiroCard
+<AdminOnly>          {erroFinanceiro ? <p role="alert" className="rounded-xl border p-4 text-sm">Não foi possível carregar o financeiro. <Link className="underline" href="/faturas">Consultar faturas</Link></p> : <FinanceiroCard
             isDesigner={isDesigner}
             faturasPendentes={faturasPendentes}
             saldo={saldo}
             assinatura={assinatura}
-          />}
+          />}</AdminOnly>
         </div>
       )}
     </div>

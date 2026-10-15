@@ -1,4 +1,5 @@
 "use client";
+import AdminOnly from '@/components/layout/AdminOnly';
 import { Badge } from "@/components/ui/badge";
 
 export default function StepReview({
@@ -26,7 +27,7 @@ export default function StepReview({
         {resumo.cliente && <div><strong>Cliente:</strong> {resumo.cliente}</div>}
         <div><strong>Status:</strong> {resumo.status}</div>
         <div><strong>Prazo:</strong> {resumo.prazo ?? "Não informado"}</div>
-        <div><strong>Orçamento:</strong> {resumo.orcamento}</div>
+<AdminOnly>        <div><strong>Orçamento:</strong> {resumo.orcamento}</div></AdminOnly>
       </div>
 
       <div className="grid gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 sm:p-5">
