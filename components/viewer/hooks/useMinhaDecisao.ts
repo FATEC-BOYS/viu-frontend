@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { decisoesDaVersao } from '@/lib/revisao'
 import { useAuth } from '@/contexts/AuthContext'
 import { listarAprovacoes, decidirAprovacao } from '@/lib/aprovacoesDaArte'
 
@@ -22,11 +23,13 @@ export type PendenciaDoViewer = {
   id: string
   versaoNumero: number | null
   aprovadorId: string
+  arteId?: string
 }
 
 const INTERVALO_MS = 30000
 
-export function useMinhaDecisao(arteId: string, token: string) {
+export function useMinhaDecisao(arteId: string, token: string, versaoAtual?: number) {
+  const [erro, setErro] = useState(false)
   const [pendencia, setPendencia] = useState<PendenciaDoViewer | null>(null)
   const [decidindo, setDecidindo] = useState(false)
 
@@ -53,7 +56,9 @@ export function useMinhaDecisao(arteId: string, token: string) {
     }
     try {
       const aprovacoes = await listarAprovacoes(arteId)
-      const minha = aprovacoes.find(
+      setErro(false)
+      const elegiveis = versaoAtual === undefined ? aprovacoes : decisoesDaVersao(aprovacoes, versaoAtual)
+      const minha = elegiveis.find(
         (a) => a.status === 'PENDENTE' && a.aprovador?.id === eu,
       )
       setPendencia(
@@ -62,13 +67,15 @@ export function useMinhaDecisao(arteId: string, token: string) {
               id: String(minha.id),
               versaoNumero: minha.versaoNumero ?? null,
               aprovadorId: eu,
+              arteId,
             }
           : null,
       )
     } catch {
+      setErro(true)
       setPendencia(null)
     }
-  }, [arteId, token, eu])
+  }, [arteId, token, eu, versaoAtual])
 
   useEffect(() => {
     carregar()
@@ -81,7 +88,7 @@ export function useMinhaDecisao(arteId: string, token: string) {
       status: 'APROVADO' | 'REJEITADO',
       comentario?: string,
     ): Promise<{ ok: boolean; erro?: string }> => {
-      if (!pendencia) return { ok: false }
+      if (!pendencia || pendencia.arteId !== arteId || (versaoAtual !== undefined && (pendencia.versaoNumero ?? 1) !== versaoAtual)) return { ok: false }
       setDecidindo(true)
       try {
         // Pelo id da pendência que ESTA tela escolheu e mostrou — nunca
@@ -98,8 +105,9 @@ export function useMinhaDecisao(arteId: string, token: string) {
         setDecidindo(false)
       }
     },
-    [arteId, carregar, pendencia],
+    [arteId, carregar, pendencia, versaoAtual],
   )
 
-  return { pendencia, decidir, decidindo, recarregar: carregar }
+  const atual = pendencia?.arteId === arteId && (versaoAtual === undefined || (pendencia.versaoNumero ?? 1) === versaoAtual) ? pendencia : null
+  return { pendencia: atual, decidir, decidindo, erro, recarregar: carregar }
 }

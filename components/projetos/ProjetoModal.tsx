@@ -4,22 +4,19 @@ import type React from "react";
 import { formatarDia } from '@/lib/diaDeCalendario';
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { listClientes, listDesigners } from "@/lib/projects";
+import { listClientes } from "@/lib/projects";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
+import { Loader2, AlertTriangle, RotateCcw } from "lucide-react";
 import type { ProjetoInput } from "@/lib/projects";
 
 
-import type { ClienteOption, UsuarioOption, ProjetoFormValues } from "./ProjetoForm";
+import type { ClienteOption, ProjetoFormValues } from "./ProjetoForm";
 import StepBasic from "./forms/StepBasic";
 import { projetoSchema, validarCampos } from "@/lib/schemas";
-import StepParticipants from "./forms/StepParticipants";
-import StepApproval from "./forms/StepApproval";
 import StepReview from "./forms/StepReview";
-import type { ProjetoExtraPayload } from "./project-extra-types";
 
 import type { StatusProjeto } from "@/components/projetos/ProjetoForm";
 import { statusLabel as statusLabelProjeto } from "@/components/projetos/types";
@@ -44,7 +41,7 @@ interface ProjetoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ProjetoInitial | null;
-  onSubmit?: (values: ProjetoInput & ProjetoExtraPayload & { skipBriefingEval?: boolean; aceiteTermos?: boolean }) => Promise<void>;
+  onSubmit?: (values: ProjetoInput & { skipBriefingEval?: boolean; aceiteTermos?: boolean }) => Promise<void>;
 }
 
 // CUID gerado no banco: 'c' + 24 hex. O check antigo era v.length === 36
@@ -128,8 +125,8 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [clientes, setClientes] = useState<ClienteOption[]>([]);
-  const [designers, setDesigners] = useState<UsuarioOption[]>([]);
   const [souCliente, setSouCliente] = useState(false);
   const [step, setStep] = useState(0);
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
@@ -137,8 +134,6 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
   const steps = [
     { key: "basic", label: "Projeto", title: "Dê forma ao seu projeto", description: "Conte o que será criado e combine os primeiros detalhes." },
-    { key: "participants", label: "Pessoas", title: "Quem vem com você?", description: "Adicione quem vai colaborar neste projeto. Você pode seguir sem adicionar outras pessoas." },
-    { key: "approval", label: "Aprovação", title: "Combine como aprovar", description: "Defina quem dá o aceite e como o projeto segue até a aprovação." },
     { key: "review", label: "Revisão", title: "Tudo pronto para seguir?", description: "Confira os detalhes. Se precisar mudar algo, volte às etapas anteriores." },
   ] as const;
 
@@ -150,23 +145,14 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     prazo: "",
     cliente_id: "",
     equipe_id: null,
-    aprovacao: {
-      exigirAprovacaoDesigner: true,
-      aprovadoresClienteIds: [],
-      todosAprovadoresSaoObrigatorios: true,
-      permitirOverrideOwner: true,
-      prazoAprovacaoDias: null,
-    },
-    participantes: {
-      designersAdicionaisIds: [],
-      clientesAdicionaisIds: [],
-    },
+
   });
 
   useEffect(() => {
     const boot = async () => {
       if (!open) return;
       setLoading(true);
+      setErro(null);
       setEvalResult(null);
       setAceiteTermos(false);
       setMostrarErros(false);
@@ -177,9 +163,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
           setFormData((prev) => ({ ...prev, cliente_id: user.id }));
         }
 
-        const [cliList, desList] = await Promise.all([listClientes(), listDesigners()]);
+        const cliList = await listClientes();
         setClientes(cliList);
-        setDesigners(desList);
+
 
         /*
          * O cliente não vem escolhido. Havia aqui um `cliList[0].id`, que
@@ -191,7 +177,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
         setStep(0);
       } catch (e) {
-        console.error("Erro ao carregar modal:", e);
+        setErro("Não foi possível carregar os clientes. Feche e abra o formulário para tentar novamente.");
       } finally {
         setLoading(false);
       }
@@ -258,6 +244,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
   const handleSubmitFinal = async (skipBriefingEval = false) => {
     setSalvando(true);
+    setErro(null);
     try {
       const clienteId = souCliente ? (user?.id ?? null) : (isCuidLike(formData.cliente_id) ? formData.cliente_id : null);
       if (!clienteId) throw new Error("Selecione um cliente.");
@@ -274,13 +261,8 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         orcamento: Number.isFinite(formData.orcamento) ? formData.orcamento : 0,
       };
 
-      const extra: ProjetoExtraPayload = {
-        aprovacao: { ...formData.aprovacao },
-        participantes: { ...formData.participantes },
-      };
-
       if (onSubmit) {
-        await onSubmit({ ...baseValues, ...extra, skipBriefingEval, aceiteTermos: !initial && aceiteTermos });
+        await onSubmit({ ...baseValues, skipBriefingEval, aceiteTermos: !initial && aceiteTermos });
         onOpenChange(false);
       }
     } catch (err: any) {
@@ -288,7 +270,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         setEvalResult(err.body.evalResult as EvalResult);
         return;
       }
-      console.error("Erro ao salvar projeto:", err?.message ?? err);
+      setErro(err?.message ?? "Não foi possível salvar o projeto. Tente novamente.");
     } finally {
       setSalvando(false);
     }
@@ -296,12 +278,6 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
 
   const resumo = useMemo(() => {
     const nomeCliente = clientes.find((c) => c.id === formData.cliente_id)?.nome;
-    const designersAd = formData.participantes.designersAdicionaisIds
-      .map((id) => designers.find((d) => d.id === id)?.nome || id);
-    const clientesAd = formData.participantes.clientesAdicionaisIds
-      .map((id) => clientes.find((c) => c.id === id)?.nome || id);
-    const aprovadores = formData.aprovacao.aprovadoresClienteIds
-      .map((id) => clientes.find((c) => c.id === id)?.nome || id);
     const statusLabel = statusLabelProjeto(formData.status);
     const orcFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(formData.orcamento || 0);
     // O campo de data devolve "2026-09-15", que `new Date` lê como meia-noite
@@ -309,13 +285,9 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     const prazoFmt = formData.prazo ? formatarDia(formData.prazo) : undefined;
     return {
       nome: formData.nome, cliente: nomeCliente, prazo: prazoFmt, orcamento: orcFmt,
-      status: statusLabel, designersAdicionais: designersAd, clientesAdicionais: clientesAd,
-      aprovadores, exigirAprovDesigner: formData.aprovacao.exigirAprovacaoDesigner,
-      todosObrigatorios: formData.aprovacao.todosAprovadoresSaoObrigatorios,
-      overrideOwner: formData.aprovacao.permitirOverrideOwner,
-      prazoAprovDias: formData.aprovacao.prazoAprovacaoDias ?? null,
+      status: statusLabel,
     };
-  }, [formData, clientes, designers]);
+  }, [formData, clientes]);
 
   const isLastStep = step === steps.length - 1;
   const submitDisabled = salvando || loading || (isLastStep && !initial && !aceiteTermos);
@@ -340,6 +312,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         </DialogHeader>
 
         <div key={evalResult ? "briefing" : step} className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8 sm:py-7">
+          {erro && <p role="alert" className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{erro}</p>}
           {evalResult ? (
             <BriefingEvalPanel
               evalResult={evalResult}
@@ -359,9 +332,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
                   clientes={clientes}
                 />
               )}
-              {step === 1 && <StepParticipants values={formData} setValues={setFormData} souCliente={souCliente} />}
-              {step === 2 && <StepApproval values={formData} setValues={setFormData} />}
-              {step === 3 && <StepReview resumo={resumo} />}
+              {step === 1 && <StepReview resumo={resumo} />}
             </>
           )}
 

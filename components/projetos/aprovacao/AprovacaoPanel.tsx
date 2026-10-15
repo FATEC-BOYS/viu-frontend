@@ -65,9 +65,7 @@ export default function AprovacaoPanel({
           {items.map((it) => {
             const pendentes = it.aprovadores.filter((a) => a.status === "PENDENTE");
             const rejeitados = it.aprovadores.filter((a) => a.status === "REJEITADO").length;
-            const aprovado =
-              it.status === "APROVADO" ||
-              (rejeitados === 0 && pendentes.length === 0 && it.aprovadores.length > 0);
+            const aprovado = it.status === "APROVADO";
             const desde = new Date(it.criadoEm).toLocaleDateString("pt-BR");
             const recado =
               rejeitados > 0

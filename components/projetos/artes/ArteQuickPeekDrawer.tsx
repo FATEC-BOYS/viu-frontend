@@ -1,5 +1,6 @@
 "use client";
 
+import ErroDeConsulta from '@/components/layout/ErroDeConsulta';
 import { useEffect, useMemo, useState } from "react";
 import Thumb from "@/components/layout/Thumb";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter } from "@/components/ui/drawer";
@@ -38,6 +39,8 @@ export default function ArteQuickPeekDrawer({
   onSolicitarAprovacao?: (arteId: string) => void;
   onVerFeedbacks?: (arteId: string) => void;
 }) {
+  const [erro, setErro] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   const [loading, setLoading] = useState(false);
   const [peek, setPeek] = useState<PeekData | null>(null);
 
@@ -46,19 +49,20 @@ export default function ArteQuickPeekDrawer({
     (async () => {
       if (!open || !arteId) return;
       setLoading(true);
+      setErro(false);
       try {
         const data = await getArteQuickPeek(arteId);
         if (!mounted) return;
         setPeek(data);
       } catch (e) {
         console.error("Erro ao carregar quick peek:", e);
-        if (mounted) setPeek(null);
+        if (mounted) { setPeek(null); setErro(true); }
       } finally {
         if (mounted) setLoading(false);
       }
     })();
     return () => { mounted = false; };
-  }, [open, arteId]);
+  }, [open, arteId, tentativa]);
 
   const last = useMemo(() => peek?.versoes?.[0] ?? null, [peek]); // assumindo primeira é a mais recente
 
@@ -79,7 +83,8 @@ export default function ArteQuickPeekDrawer({
           )}
         </DrawerHeader>
 
-        <div className="px-6 pb-6 grid gap-6 md:grid-cols-2">
+        {erro && <ErroDeConsulta mensagem="Não foi possível carregar a arte e seu histórico." tentar={() => setTentativa(v => v + 1)} />}
+        {!erro && <div className="px-6 pb-6 grid gap-6 md:grid-cols-2">
           {/* Preview grande */}
           <div className="relative rounded-xl border overflow-hidden min-h-[280px] bg-muted">
             {loading ? (
@@ -162,20 +167,20 @@ export default function ArteQuickPeekDrawer({
               </ScrollArea>
             </div>
           </div>
-        </div>
+        </div>}
 
         <DrawerFooter className="flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
             Dica: você pode enviar esta versão para aprovação diretamente daqui.
           </div>
           <div className="flex gap-2">
-            {arteId && onVerFeedbacks && (
+            {!erro && peek && arteId && onVerFeedbacks && (
               <Button variant="outline" onClick={() => onVerFeedbacks(arteId)}>Ver feedbacks</Button>
             )}
-            {arteId && onNovaVersao && (
+            {!erro && peek && arteId && onNovaVersao && (
               <Button variant="outline" onClick={() => onNovaVersao(arteId)}>Nova versão</Button>
             )}
-            {arteId && onSolicitarAprovacao && (
+            {!erro && peek && arteId && onSolicitarAprovacao && (
               <Button onClick={() => onSolicitarAprovacao(arteId)}>Solicitar aprovação</Button>
             )}
           </div>

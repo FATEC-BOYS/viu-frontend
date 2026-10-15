@@ -41,7 +41,6 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
   const [arteId, setArteId] = useState<string | null>(null);
 
   // Step 3
-  const [notificarAoEnviar, setNotificarAoEnviar] = useState(true);
   const [gerarLinkPublico, setGerarLinkPublico] = useState(false);
   const [somenteLeitura, setSomenteLeitura] = useState(true);
   const [expiraDias, setExpiraDias] = useState<number>(7);
@@ -197,8 +196,6 @@ export default function ArteWizard({ projetoId, onFinished }: ArteWizardProps) {
         {step === 3 && !linkCriado && (
           <>
             <StepOptions
-              notificarAoEnviar={notificarAoEnviar}
-              setNotificarAoEnviar={setNotificarAoEnviar}
               gerarLinkPublico={gerarLinkPublico}
               setGerarLinkPublico={setGerarLinkPublico}
               somenteLeitura={somenteLeitura}

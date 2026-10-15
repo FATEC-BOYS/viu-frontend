@@ -5,8 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
 
 type Props = {
-  notificarAoEnviar: boolean;
-  setNotificarAoEnviar: (b: boolean) => void;
   gerarLinkPublico: boolean;
   setGerarLinkPublico: (b: boolean) => void;
   somenteLeitura: boolean;
@@ -16,23 +14,12 @@ type Props = {
 };
 
 export default function StepOptions({
-  notificarAoEnviar, setNotificarAoEnviar,
   gerarLinkPublico, setGerarLinkPublico,
   somenteLeitura, setSomenteLeitura,
   expiraDias, setExpiraDias,
 }: Props) {
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label className="inline-flex items-center gap-3">
-          <Switch checked={notificarAoEnviar} onCheckedChange={setNotificarAoEnviar} />
-          Notificar ao enviar
-        </Label>
-        <p className="text-xs text-muted-foreground">
-          Envia uma notificação no sistema após a criação.
-        </p>
-      </div>
-
       <div className="space-y-2">
         <Label className="inline-flex items-center gap-3">
           <Switch checked={gerarLinkPublico} onCheckedChange={setGerarLinkPublico} />

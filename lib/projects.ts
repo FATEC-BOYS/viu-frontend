@@ -1,3 +1,5 @@
+import { listarAprovacoes } from '@/lib/aprovacoesDaArte'
+import { statusDaVersao } from '@/lib/revisao'
 // lib/projects.ts — usa a API REST do backend
 import { api, getAll, MAX_PAGE_SIZE } from '@/lib/api'
 import { listVersoes } from '@/lib/artes'
@@ -335,7 +337,7 @@ export async function getProjetoResumo(id: string): Promise<ProjetoResumo> {
   const [proj, artes] = await Promise.all([
     getProjeto(id),
     // contagem precisa exige todas as artes, não as 200 primeiras
-    getAll<any>(`/artes?projetoId=${id}`).catch(() => [] as any[]),
+    getAll<any>(`/artes?projetoId=${id}`),
   ])
   const artesAprovadas = artes.filter((a: any) => a.status === 'APROVADO').length
   const artesRejeitadas = artes.filter((a: any) => a.status === 'REJEITADO').length
@@ -387,7 +389,7 @@ export interface ProximoPasso {
 
 export async function getProximosPassos(id: string): Promise<ProximoPasso[]> {
   const passos: ProximoPasso[] = []
-  const proj = await getProjeto(id).catch(() => null)
+  const proj = await getProjeto(id)
   if (!proj?.prazo)
     passos.push({ kind: 'DEFINIR_PRAZO_PROJETO', label: 'Definir prazo do projeto' })
   const [artes, aprovacoes] = await Promise.all([
@@ -452,12 +454,12 @@ export async function listArtes(
   const qs = new URLSearchParams()
   qs.set('projetoId', projetoId)
   qs.set('limit', String(limit))
-  qs.set('offset', String(offset))
+  qs.set('page', String(Math.floor(offset / limit) + 1))
   if (tipo) qs.set('tipo', tipo)
   if (status) qs.set('status', status)
   const res = await api
-    .get<{ data: any[]; total?: number; count?: number }>(`/artes?${qs}`)
-    .catch(() => ({ data: [] as any[], total: 0 }))
+    .get<{ data: any[]; total?: number; count?: number; pagination?: { total: number } }>(`/artes?${qs}`)
+
   const rows: ArteListItem[] = (res.data ?? []).map((a: any) => ({
     id: a.id,
     nome: a.nome,
@@ -471,7 +473,7 @@ export async function listArtes(
     versoes_qtd: 1,
     tags: [],
   }))
-  return { rows, count: (res as any).total ?? (res as any).count ?? rows.length }
+  return { rows, count: res.pagination?.total ?? res.total ?? res.count ?? rows.length }
 }
 
 export interface ArteQuickPeek {
@@ -510,14 +512,14 @@ export interface ArteQuickPeek {
  * autor e um histórico que nunca crescia, tudo sobre uma arte que tinha as
  * quatro coisas.
  *
- * As versões vêm de `listVersoes`, que já existe e já lê a rota certa. Se ela
- * falhar, sobra a versão atual da própria arte: é menos do que o ideal, mas
- * não é mentira — e o drawer não fica vazio por causa de uma consulta a mais.
+ * As versões vêm de `listVersoes` e as decisões são associadas pelo número
+ * da entrega. Falhas são propagadas para a tela oferecer uma nova tentativa.
  */
 export async function getArteQuickPeek(arteId: string): Promise<ArteQuickPeek> {
-  const [res, grupos] = await Promise.all([
+  const [res, grupos, decisoes] = await Promise.all([
     api.get<{ data: any }>(`/artes/${arteId}`),
-    listVersoes(arteId).catch(() => []),
+    listVersoes(arteId),
+    listarAprovacoes(arteId),
   ])
   const a = res.data
   const criadoEm = a.criadoEm ?? a.criado_em ?? ''
@@ -528,8 +530,8 @@ export async function getArteQuickPeek(arteId: string): Promise<ArteQuickPeek> {
     ? grupos.map((g) => ({
         id: `${arteId}-v${g.versao}`,
         versao: g.versao,
-        // O status é da arte, não da versão: o backend não versiona status.
-        status: a.status,
+        // O aceite pertence a esta entrega, nunca ao arquivo atual por aproximação.
+        status: statusDaVersao(decisoes, g.versao),
         criado_em: g.criado_em ?? criadoEm,
         preview_url: g.arquivos[0]?.arquivo ?? null,
       }))
@@ -542,6 +544,10 @@ export async function getArteQuickPeek(arteId: string): Promise<ArteQuickPeek> {
           preview_url: previewDaArte,
         },
       ]
+
+  if (!versoes.some(v => v.versao === a.versao)) {
+    versoes.unshift({ id: a.id, versao: a.versao, status: a.status, criado_em: criadoEm, preview_url: previewDaArte })
+  }
 
   return {
     arte: {
@@ -584,7 +590,7 @@ export interface TarefasKanban {
 export async function getTarefasKanban(projetoId: string): Promise<TarefasKanban> {
   const res = await api
     .get<{ data: any[] }>(`/tarefas?projetoId=${projetoId}&limit=50`)
-    .catch(() => ({ data: [] as any[] }))
+
   const all = (res.data ?? []).map(
     (t: any): TarefaCard => ({
       id: t.id,
@@ -616,6 +622,14 @@ export interface AprovadorEstado {
   /** URL assinada da arte, para o painel decidir olhando em vez de no escuro. */
   arte_preview_url: string | null
   versao: number
+  versao_atual: number
+}
+
+interface AprovacaoProjetoApi {
+  id: string; status: 'PENDENTE' | 'APROVADO' | 'REJEITADO'; criadoEm?: string;
+  criado_em?: string; versaoNumero: number | null; arteId: string;
+  aprovador?: { nome: string | null } | null;
+  arte?: { id: string; nome: string; versao: number; previewUrl?: string | null } | null;
 }
 
 export interface AprovacaoPainel {
@@ -625,11 +639,9 @@ export interface AprovacaoPainel {
 export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPainel> {
   // GET /artes não traz as aprovações (só _count), então a fonte é /aprovacoes
   // filtrado pelo projeto.
-  const aprovacoes = await getAll<any>(`/aprovacoes?projetoId=${projetoId}`).catch(
-    () => [] as any[]
-  )
+  const aprovacoes = await getAll<AprovacaoProjetoApi>(`/aprovacoes?projetoId=${projetoId}`)
 
-  const estados: AprovadorEstado[] = aprovacoes.map((ap: any) => ({
+  const estados: AprovadorEstado[] = aprovacoes.map((ap) => ({
     aprovacao_id: ap.id,
     aprovador_nome: ap.aprovador?.nome ?? null,
     status: ap.status,
@@ -637,7 +649,8 @@ export async function getAprovacaoPainel(projetoId: string): Promise<AprovacaoPa
     arte_id: ap.arte?.id ?? ap.arteId,
     arte_nome: ap.arte?.nome ?? null,
     arte_preview_url: ap.arte?.previewUrl ?? null,
-    versao: ap.versaoNumero ?? ap.arte?.versao ?? 1,
+    versao: ap.versaoNumero ?? 1,
+    versao_atual: ap.arte?.versao ?? 1,
   }))
 
   return { estados }
@@ -698,7 +711,7 @@ export async function listAtividade(
     .get<{ data: any[]; pagination?: { total: number } }>(
       `/artes?projetoId=${projetoId}&page=${page}&limit=${limit}`
     )
-    .catch(() => ({ data: [] as any[], pagination: { total: 0 } }))
+
   const rows: AtividadeItem[] = (res.data ?? []).map((a: any) => ({
     tipo: 'ARTE_CRIADA' as AtividadeTipo,
     ref_id: a.id,
@@ -728,7 +741,7 @@ export interface ConviteRow {
 }
 
 export async function listParticipantes(projetoId: string): Promise<Participante[]> {
-  const proj = await getProjeto(projetoId).catch(() => null)
+  const proj = await getProjeto(projetoId)
   if (!proj) return []
   const parts: Participante[] = []
   if (proj.designer?.id)
@@ -741,7 +754,7 @@ export async function listParticipantes(projetoId: string): Promise<Participante
 export async function listConvites(projetoId: string): Promise<ConviteRow[]> {
   const res = await api
     .get<{ data: any[] }>(`/projetos/${projetoId}/convites`)
-    .catch(() => ({ data: [] as any[] }))
+
   return (res.data ?? []).map((c: any) => ({
     email: c.convidado?.email ?? '',
     papel: c.papel ?? 'CLIENTE',
@@ -753,7 +766,7 @@ export async function listConvites(projetoId: string): Promise<ConviteRow[]> {
 export async function getNarrativaContagens(projetoId: string) {
   const artesRes = await api
     .get<{ data: any[] }>(`/artes?projetoId=${projetoId}&limit=200`)
-    .catch(() => ({ data: [] as any[] }))
+
   const artes = artesRes.data ?? []
   return {
     artesTotal: artes.length,

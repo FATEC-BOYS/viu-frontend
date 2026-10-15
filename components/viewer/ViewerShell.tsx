@@ -3,6 +3,7 @@
 import AdminOnly from '@/components/layout/AdminOnly';
 
 import { useEffect, useMemo, useState } from "react";
+import ErroDeConsulta from '@/components/layout/ErroDeConsulta';
 import Link from "next/link";
 import { getProjeto } from "@/lib/projects";
 import { useAuth } from "@/contexts/AuthContext";
@@ -105,7 +106,9 @@ export default function ViewerShell({
     [user],
   );
 
-  const statusLabel = useMemo(() => rotuloArte(arte.status), [arte.status]);
+  const [statusAtual, setStatusAtual] = useState(arte.status);
+  useEffect(() => { setStatusAtual(arte.status); }, [arte.id, arte.versao, arte.status]);
+  const statusLabel = useMemo(() => rotuloArte(statusAtual), [statusAtual]);
 
   /*
    * Para onde mandar quem precisa entrar — e de volta para ESTA arte.
@@ -135,7 +138,7 @@ export default function ViewerShell({
    * gaveta continuar dizendo "aguardando decisão" depois de decidida na barra
    * — por isso `chaveDoPainel` remonta o painel quando a barra decide.
    */
-  const { pendencia, decidir, decidindo } = useMinhaDecisao(arte.id, token);
+  const { pendencia, decidir, decidindo, erro: erroDecisao, recarregar } = useMinhaDecisao(arte.id, token, arte.versao);
   const [chaveDoPainel, setChaveDoPainel] = useState(0);
 
   const decidirEAtualizarPainel = async (
@@ -143,7 +146,7 @@ export default function ViewerShell({
     comentario?: string,
   ) => {
     const r = await decidir(status, comentario);
-    if (r.ok) setChaveDoPainel((n) => n + 1);
+    if (r.ok) { setChaveDoPainel((n) => n + 1); setStatusAtual(status); }
     return r;
   };
 
@@ -197,6 +200,7 @@ export default function ViewerShell({
             link é encaminhado. A frase aqui responde "dá para usar?" e para
             aí — sem data de quitação e sem dizer que houve estorno, que é
             conversa entre designer e cliente. */}
+        {erroDecisao && <ErroDeConsulta mensagem="Não foi possível consultar sua aprovação." tentar={recarregar} />}
         <AdminOnly><SeloLicencaCompacto licenca={licenca} contexto="publico" /></AdminOnly>
 
         {/*
@@ -243,7 +247,7 @@ export default function ViewerShell({
              inteira sai, em vez de existir para devolver 401. */
           aprovacoes={
             temConta ? (
-              <ApprovalsPanel key={chaveDoPainel} arteId={arte.id} />
+              <ApprovalsPanel versaoAtual={arte.versao} key={chaveDoPainel} arteId={arte.id} />
             ) : null
           }
           /* Só quando é a vez de quem está olhando — caso contrário a barra
