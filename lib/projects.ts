@@ -390,11 +390,16 @@ export async function getProximosPassos(id: string): Promise<ProximoPasso[]> {
   const proj = await getProjeto(id).catch(() => null)
   if (!proj?.prazo)
     passos.push({ kind: 'DEFINIR_PRAZO_PROJETO', label: 'Definir prazo do projeto' })
-  const artesRes = await api
-    .get<{ data: any[] }>(`/artes?projetoId=${id}&limit=10`)
-    .catch(() => ({ data: [] as any[] }))
-  const pendentes = (artesRes.data ?? []).filter((a: any) =>
-    ['EM_ANALISE', 'PENDENTE'].includes(a.status)
+  const [artes, aprovacoes] = await Promise.all([
+    getAll<any>(`/artes?projetoId=${id}`),
+    getAll<any>(`/aprovacoes?projetoId=${id}`),
+  ])
+  const pendentes = artes.filter((arte: any) =>
+    ['EM_ANALISE', 'PENDENTE'].includes(arte.status) &&
+    !aprovacoes.some((ap: any) =>
+      (ap.arteId ?? ap.arte?.id) === arte.id &&
+      (ap.versaoNumero ?? 1) === arte.versao
+    )
   )
   if (pendentes.length > 0) {
     passos.push({
