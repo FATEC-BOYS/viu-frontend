@@ -107,7 +107,8 @@ export default function AsyncUserSingleSelect({
   function selectItem(opt: Option) {
     onChange(opt.id);
     setDisplayLabel(opt.label);
-    setQuery(opt.label);
+    // O rótulo fica em displayLabel; limpar a busca evita reabrir as sugestões após escolher.
+    setQuery("");
     setOptions([]);
   }
 

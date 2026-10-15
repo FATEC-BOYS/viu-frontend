@@ -55,6 +55,8 @@ import AtividadeSkeleton from "@/components/projetos/activity/AtividadeSkeleton"
 
 import { podeVerFinanceiro } from '@/lib/financeiro';
 import AdminOnly from '@/components/layout/AdminOnly';
+import { statusDaVersao } from '@/lib/revisao';
+import ErroDeConsulta from '@/components/layout/ErroDeConsulta';
 import FaturaTab from "@/components/projetos/billing/FaturaTab";
 import ProjetoDoCliente from "@/components/projetos/ProjetoDoCliente";
 import { rotuloProjeto } from "@/lib/rotulos";
@@ -192,8 +194,13 @@ export default function ProjetoPage() {
   }
 
 
+  const [ovErro, setOvErro] = useState(false);
+  const [artErro, setArtErro] = useState(false);
+  const [apErro, setApErro] = useState(false);
+
   async function loadOverview() {
     setOvLoading(true);
+    setOvErro(false);
     try {
       const [r, p, k] = await Promise.all([
         getProjetoResumo(id),
@@ -223,7 +230,7 @@ export default function ProjetoPage() {
       setPassos(passosLib);
       // getTarefasKanban já devolve as colunas no formato { top, total }
       setKanban(k);
-    } finally { setOvLoading(false); }
+    } catch { setOvErro(true); } finally { setOvLoading(false); }
   }
 
   const [artLoading, setArtLoading] = useState(false);
@@ -325,6 +332,7 @@ export default function ProjetoPage() {
 
   async function loadArtes(append = false) {
     setArtLoading(true);
+    setArtErro(false);
     try {
       const from = append ? artFrom : 0;
       const q = buildArtesQuery(from);
@@ -338,7 +346,7 @@ export default function ProjetoPage() {
       setArtRows(prev => (append ? [...prev, ...items] : items));
       setArtTotal(count);
       setArtFrom(from + ART_PAGE);
-    } finally { setArtLoading(false); }
+    } catch { setArtErro(true); } finally { setArtLoading(false); }
   }
 
   const [apLoading, setApLoading] = useState(false);
@@ -352,6 +360,7 @@ export default function ProjetoPage() {
     const porArte = new Map<string, AprovacaoArteRow>();
 
     for (const e of raw.estados ?? []) {
+      if (e.versao !== e.versao_atual) continue;
       if (!porArte.has(e.arte_id)) {
         porArte.set(e.arte_id, {
           aprovacaoId: e.aprovacao_id,
@@ -372,13 +381,10 @@ export default function ProjetoPage() {
     }
 
     const items = [...porArte.values()].map((it) => {
-      const rejeitou = it.aprovadores.some((a) => a.status === "REJEITADO");
-      const todosAprovaram =
-        it.aprovadores.length > 0 && it.aprovadores.every((a) => a.status === "APROVADO");
-      return {
-        ...it,
-        status: rejeitou ? "REJEITADO" : todosAprovaram ? "APROVADO" : "EM_ANALISE",
-      } as AprovacaoArteRow;
+      const status = statusDaVersao(it.aprovadores.map(a => ({
+        versaoNumero: it.versaoAtual, status: a.status,
+      })), it.versaoAtual);
+      return { ...it, status: status === 'SEM_DECISAO' ? 'EM_ANALISE' : status } as AprovacaoArteRow;
     });
 
     return { items };
@@ -386,9 +392,10 @@ export default function ProjetoPage() {
 
   async function loadApproval() {
     setApLoading(true);
+    setApErro(false);
     try {
       setPainel(adaptPainel(await getAprovacaoPainel(id)));
-    } finally { setApLoading(false); }
+    } catch { setApErro(true); } finally { setApLoading(false); }
   }
 
   /**
@@ -476,6 +483,7 @@ export default function ProjetoPage() {
     await lembrarAprovadoresApi(aprovacaoId);
   }
 
+  const [actErro, setActErro] = useState(false);
   const [actLoading, setActLoading] = useState(false);
   const [actRows, setActRows] = useState<UIAtividadeItem[]>([]);
   const [actTotal, setActTotal] = useState(0);
@@ -484,6 +492,7 @@ export default function ProjetoPage() {
 
   async function loadActivity(append = false) {
     setActLoading(true);
+    setActErro(false);
     try {
       const from = append ? actFrom : 0;
       const { rows, count } = await listAtividade(id, { limit: ACT_PAGE, offset: from });
@@ -502,7 +511,7 @@ export default function ProjetoPage() {
       setActRows(prev => (append ? [...prev, ...items] : items));
       setActTotal(count);
       setActFrom(from + ACT_PAGE);
-    } finally { setActLoading(false); }
+    } catch { setActErro(true); } finally { setActLoading(false); }
   }
 
   useEffect(() => {
@@ -600,7 +609,7 @@ export default function ProjetoPage() {
 
       <div className="pt-2 space-y-6">
         {tab === "overview" && (
-          ovLoading || !resumo || !kanban ? (
+          ovErro ? <ErroDeConsulta mensagem="Não foi possível carregar o resumo do projeto." tentar={loadOverview} /> : ovLoading || !resumo || !kanban ? (
             <OverviewSkeleton />
           ) : (
             <>
@@ -695,7 +704,7 @@ export default function ProjetoPage() {
                 </Button>
               )}
             </div>
-            {artLoading && artRows.length === 0 ? (
+            {artErro ? <ErroDeConsulta mensagem="Não foi possível carregar as artes." tentar={() => loadArtes(false)} /> : artLoading && artRows.length === 0 ? (
               <ArtesSkeleton />
             ) : (
               <>
@@ -738,7 +747,7 @@ export default function ProjetoPage() {
         )}
 
         {tab === "approval" && (
-          apLoading || !painel ? (
+          apErro ? <ErroDeConsulta mensagem="Não foi possível carregar as aprovações." tentar={loadApproval} /> : apLoading || !painel ? (
             <AprovacaoSkeleton />
           ) : (
             <AprovacaoPanel
@@ -761,7 +770,7 @@ export default function ProjetoPage() {
         )}
 
         {tab === "activity" && (
-          actLoading && actRows.length === 0 ? (
+          actErro ? <ErroDeConsulta mensagem="Não foi possível carregar a linha do tempo." tentar={() => loadActivity(false)} /> : actLoading && actRows.length === 0 ? (
             <AtividadeSkeleton />
           ) : (
             <AtividadeFeed

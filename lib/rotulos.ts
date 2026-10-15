@@ -11,6 +11,7 @@
 /** ARTE_TRANSITIONS: EM_ANALISE → APROVADO | REJEITADO */
 const ARTE: Record<string, string> = {
   EM_ANALISE: 'Em análise',
+  SEM_DECISAO: 'Sem decisão',
   // `REVISAO` foi removido do produto: não tinha entrada nem saída na máquina
   // de estados, então arte que caísse lá travava para sempre. O rótulo fica
   // como rede — linha antiga que a migração de dados ainda não tocou, ou

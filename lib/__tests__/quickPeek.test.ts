@@ -7,11 +7,11 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('@/lib/artes', () => ({ listVersoes: vi.fn() }))
 
-import { api } from '@/lib/api'
+import { api, getAll } from '@/lib/api'
 import { listVersoes } from '@/lib/artes'
 import { getArteQuickPeek } from '../projects'
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(getAll).mockResolvedValue([]) })
 
 /**
  * O drawer de espiada rápida dizia "Sem preview disponível", "Sem feedbacks" e
@@ -80,14 +80,10 @@ describe('getArteQuickPeek', () => {
     expect(peek.versoes[0].preview_url).toBe('url-v2')
   })
 
-  it('cai na versão atual quando o histórico falha, sem esvaziar a tela', async () => {
+  it('propaga falha do histórico para a tela oferecer tentar novamente', async () => {
     vi.mocked(api.get).mockResolvedValue(RESPOSTA as any)
     vi.mocked(listVersoes).mockRejectedValue(new Error('rede'))
-
-    const peek = await getArteQuickPeek('a1')
-
-    expect(peek.versoes).toHaveLength(1)
-    expect(peek.versoes[0].preview_url).toBe('https://r2.example.com/a1?assinado')
+    await expect(getArteQuickPeek('a1')).rejects.toThrow('rede')
   })
 
   it('não quebra quando a arte não tem feedback nem autor', async () => {
@@ -99,4 +95,14 @@ describe('getArteQuickPeek', () => {
     expect(peek.feedbacks).toEqual([])
     expect(peek.arte.autor).toBeNull()
   })
+})
+
+it('o aceite da v1 não é aplicado à v2 na prévia', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: { ...RESPOSTA.data, versao: 2 } } as any)
+  vi.mocked(listVersoes).mockResolvedValue([
+    { versao: 2, arquivos: [{ arquivo: 'v2' }] }, { versao: 1, arquivos: [{ arquivo: 'v1' }] },
+  ] as any)
+  vi.mocked(getAll).mockResolvedValue([{ id: 'ap1', versaoNumero: 1, status: 'APROVADO' }])
+  const peek = await getArteQuickPeek('a1')
+  expect(peek.versoes.map(v => v.status)).toEqual(['SEM_DECISAO', 'APROVADO'])
 })

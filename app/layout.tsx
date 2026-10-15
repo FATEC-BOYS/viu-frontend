@@ -1,13 +1,17 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Providers from "../components/ui/providers";
 
 // `variable` alimenta o --font-sans do @theme: sem isso a fonte só existia na
 // classe do body, e qualquer elemento com `font-sans` caía fora da Inter.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Fontes versionadas no lockfile: o build não depende de acesso ao Google.
+const inter = localFont({
+  src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
+  variable: '--font-inter', weight: '100 900', display: 'swap',
+});
 
 /**
  * Face de display, usada só nos títulos da landing page.
@@ -17,10 +21,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
  * própria: quem chega no site está sendo convencido, quem está no app está
  * trabalhando.
  */
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
+const bricolage = localFont({
+  src: '../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2',
+  variable: '--font-display', weight: '200 800', display: 'swap',
 });
 
 export const metadata: Metadata = {

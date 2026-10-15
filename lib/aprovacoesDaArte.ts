@@ -1,5 +1,5 @@
 // lib/aprovacoesDaArte.ts
-import { api } from '@/lib/api'
+import { api, getAll } from '@/lib/api'
 
 /**
  * As aprovações de uma arte, faladas DIRETO com o backend.
@@ -28,10 +28,8 @@ export type AprovacaoDaArte = {
 }
 
 export async function listarAprovacoes(arteId: string): Promise<AprovacaoDaArte[]> {
-  const res = await api.get<{ data?: any[] }>(
-    `/aprovacoes?arteId=${encodeURIComponent(arteId)}&limit=50`,
-  )
-  return ((res as any)?.data ?? []).map((a: any) => ({
+  const lista = await getAll<AprovacaoDaArte>(`/aprovacoes?arteId=${encodeURIComponent(arteId)}`)
+  return lista.map((a) => ({
     id: a.id,
     status: a.status as StatusDaAprovacao,
     comentario: a.comentario ?? null,

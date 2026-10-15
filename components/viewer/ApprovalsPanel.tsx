@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
+import { decisoesDaVersao } from '@/lib/revisao'
+import ErroDeConsulta from '@/components/layout/ErroDeConsulta'
 import { useAuth } from '@/contexts/AuthContext'
 import { listarAprovacoes, decidirAprovacao, type AprovacaoDaArte } from '@/lib/aprovacoesDaArte'
 
@@ -61,7 +63,8 @@ function iniciais(nome?: string | null) {
  * decidir exige conta e ser o aprovador. O parâmetro dava a impressão de que
  * o link concedia algo aqui, e não concedia.
  */
-export default function ApprovalsPanel({ arteId }: { arteId: string }) {
+export default function ApprovalsPanel({ arteId, versaoAtual }: { arteId: string; versaoAtual?: number }) {
+  const [erro, setErro] = useState(false)
   const [aprovacoes, setAprovacoes] = useState<Aprovacao[]>([])
   const [carregando, setCarregando] = useState(true)
   const [decidindo, setDecidindo] = useState<string | null>(null)
@@ -84,8 +87,9 @@ export default function ApprovalsPanel({ arteId }: { arteId: string }) {
   const carregar = useCallback(async () => {
     try {
       setAprovacoes(await listarAprovacoes(arteId))
+      setErro(false)
     } catch {
-      setAprovacoes([])
+      setErro(true)
     } finally {
       setCarregando(false)
     }
@@ -123,14 +127,15 @@ export default function ApprovalsPanel({ arteId }: { arteId: string }) {
     }
   }
 
-  const pendentes = aprovacoes.filter((a) => a.status === 'PENDENTE').length
+  const atuais = versaoAtual === undefined ? aprovacoes : decisoesDaVersao(aprovacoes, versaoAtual)
+  const pendentes = atuais.filter((a) => a.status === 'PENDENTE').length
 
   return (
     <div className="flex h-full flex-col">
       <div className="border-b px-4 py-3">
         <h2 className="text-base font-semibold tracking-[-0.01em]">Aprovações</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {carregando
+          {erro ? 'Não foi possível consultar as decisões.' : carregando
             ? 'Carregando…'
             : aprovacoes.length === 0
               ? 'Nada foi enviado para aprovação ainda.'
@@ -140,9 +145,10 @@ export default function ApprovalsPanel({ arteId }: { arteId: string }) {
         </p>
       </div>
 
+      {erro && <ErroDeConsulta mensagem="Não foi possível carregar as aprovações." tentar={carregar} />}
       <ScrollArea className="flex-1">
         <div className="space-y-2 p-4">
-          {!carregando && aprovacoes.length === 0 && (
+          {!erro && !carregando && aprovacoes.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Quando o designer solicitar a aprovação desta arte, ela aparece aqui.
             </p>
@@ -152,7 +158,7 @@ export default function ApprovalsPanel({ arteId }: { arteId: string }) {
             const Icone = ICONE[ap.status]
             // A decisão é de quem foi escolhido para decidir, e só enquanto
             // estiver pendente — APROVADO e REJEITADO são terminais no backend.
-            const minhaVez = ap.status === 'PENDENTE' && !!usuarioId && ap.aprovador?.id === usuarioId
+            const minhaVez = !erro && (versaoAtual === undefined || (ap.versaoNumero ?? 1) === versaoAtual) && ap.status === 'PENDENTE' && !!usuarioId && ap.aprovador?.id === usuarioId
 
             return (
               <div key={ap.id} className="rounded-lg border p-3">

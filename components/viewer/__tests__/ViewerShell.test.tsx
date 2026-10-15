@@ -232,7 +232,7 @@ describe('link somente leitura', () => {
   it('mostra a decisão pendente mesmo com o link só-leitura', async () => {
     comSessao()
     aprovacoesDaArte = [
-      { id: 'ap1', status: 'PENDENTE', versaoNumero: 2, aprovador: { id: 'cliente1' } },
+      { id: 'ap1', status: 'PENDENTE', versaoNumero: 1, aprovador: { id: 'cliente1' } },
     ]
 
     renderViewer({ readOnly: true })

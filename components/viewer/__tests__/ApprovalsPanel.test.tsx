@@ -193,3 +193,19 @@ describe('o que o painel diz', () => {
     )
   })
 })
+
+it('distingue erro de lista vazia e recupera ao tentar novamente', async () => {
+  listarMock.mockRejectedValueOnce(new Error('rede')).mockResolvedValueOnce([])
+  render(<ApprovalsPanel arteId="arte1" />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar as aprovações.')
+  expect(screen.queryByText('Nada foi enviado para aprovação ainda.')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+  expect(await screen.findByText('Nada foi enviado para aprovação ainda.')).toBeInTheDocument()
+})
+it('mantém a decisão antiga no histórico sem permitir decidir sobre outro arquivo', async () => {
+  usuarioLogado = { id: EU, nome: 'Cliente' }
+  listarMock.mockResolvedValue([aprovacao({ versaoNumero: 1 })])
+  render(<ApprovalsPanel arteId="arte1" versaoAtual={2} />)
+  await screen.findByText(/v1/)
+  expect(screen.queryByRole('button', { name: /^aprovar$/i })).not.toBeInTheDocument()
+})
