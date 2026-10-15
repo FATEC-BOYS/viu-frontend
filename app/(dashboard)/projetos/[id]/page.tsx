@@ -503,15 +503,14 @@ export default function ProjetoPage() {
   }
 
   useEffect(() => {
-    // O kanban sai de `loadOverview`, e a aba Tarefas é só ele: quem entrava
-    // direto em `?tab=tasks` via três colunas vazias para sempre, porque nada
-    // tinha buscado as tarefas.
-    if ((tab === "overview" || tab === "tasks") && !resumo) loadOverview();
+    // Reconsulta ao entrar: uma decisão pode ter sido registrada no viewer
+    // enquanto os dados destas abas ainda estavam em memória.
+    if (tab === "overview" || tab === "tasks") loadOverview();
     // A aba de aprovação também depende das artes: é delas que sai a lista do
     // dialog de solicitar. Sem isso o botão nasce desabilitado para quem entra
     // direto nela.
-    if ((tab === "artes" || tab === "approval") && artRows.length === 0) loadArtes(false);
-    if (tab === "approval" && !painel) loadApproval();
+    if (tab === "artes" || tab === "approval") loadArtes(false);
+    if (tab === "approval") loadApproval();
     if (tab === "activity" && actRows.length === 0) loadActivity(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, id]);
@@ -750,7 +749,7 @@ export default function ProjetoPage() {
                       nome: a.nome,
                       versaoAtual: a.versao,
                     }))}
-                    onSolicitado={loadApproval}
+                    onSolicitado={() => { loadApproval(); loadOverview(); }}
                   />
                 ) : null
               }
@@ -828,7 +827,7 @@ export default function ProjetoPage() {
           arteInicial={arteAprovacao ?? undefined}
           aberto={!!arteAprovacao}
           onAbertoChange={v => !v && setArteAprovacao(null)}
-          onSolicitado={() => { setArteAprovacao(null); loadApproval(); loadArtes(); }}
+          onSolicitado={() => { setArteAprovacao(null); loadApproval(); loadArtes(); loadOverview(); }}
         />
       )}
 

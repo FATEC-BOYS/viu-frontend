@@ -40,8 +40,8 @@ export function frasePara(r: EstadoResumo): { titulo: string; detalhe: string } 
     return {
       titulo:
         r.artesPendentes === 1
-          ? "1 arte esperando aprovação"
-          : `${r.artesPendentes} artes esperando aprovação`,
+          ? "1 arte ainda não aprovada"
+          : `${r.artesPendentes} artes ainda não aprovadas`,
       detalhe: `${r.artesAprovadas} de ${r.artesTotal} já aprovadas.`,
     };
   }

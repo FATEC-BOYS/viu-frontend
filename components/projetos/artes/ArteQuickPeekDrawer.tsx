@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
+import { rotuloArte } from "@/lib/rotulos";
 import { cn } from "@/lib/utils";
 import { getArteQuickPeek, type ArteQuickPeek } from "@/lib/projects";
 
@@ -69,7 +70,7 @@ export default function ArteQuickPeekDrawer({
             {peek?.arte?.nome ?? "Arte"}
             {peek?.arte?.status && (
               <Badge variant="outline" className="rounded-full">
-                {peek.arte.status}
+                {rotuloArte(peek.arte.status)}
               </Badge>
             )}
           </DrawerTitle>
@@ -121,7 +122,7 @@ export default function ArteQuickPeekDrawer({
                     <li key={v.id} className={cn("rounded-md p-2 border flex items-center gap-3")}>
                       <div className="text-xs w-8 shrink-0 text-center font-medium">v{v.versao}</div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs">{v.status}</div>
+                        <div className="text-xs">{rotuloArte(v.status)}</div>
                         <div className="text-[10px] text-muted-foreground">
                           {new Date(v.criado_em).toLocaleDateString("pt-BR")}
                         </div>
