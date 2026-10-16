@@ -1,10 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import ProjetoModal from '../ProjetoModal'
+const post = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/api', () => ({ api: { post } }))
 const cliente = 'c000000000000000000000002'
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'c000000000000000000000001', tipo: 'DESIGNER' } }) }))
 vi.mock('@/lib/projects', () => ({ listClientes: vi.fn(async () => [{ id: cliente, nome: 'Cliente' }]) }))
-vi.mock('../AsyncUserSingleSelect', () => ({ default: ({ onChange }: { onChange: (id: string) => void }) => <button onClick={() => onChange(cliente)}>Selecionar cliente</button> }))
+vi.mock('../AsyncUserSingleSelect', () => ({ default: ({ onChange }: { onChange: (id: string) => void }) => <><button onClick={() => onChange(cliente)}>Selecionar cliente</button><button onClick={() => onChange("nova@teste.com")}>Novo por email</button></> }))
 vi.mock('../EquipeSelect', () => ({ default: () => null }))
 beforeEach(() => vi.clearAllMocks())
 async function revisar() {
@@ -33,4 +35,26 @@ it('mantém o formulário aberto e mostra a falha ao salvar', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Criar projeto' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Serviço temporariamente indisponível')
   expect(fechar).not.toHaveBeenCalled()
+})
+
+it('cria o contato por email no mesmo fluxo e reutiliza o id ao tentar novamente', async () => {
+  post.mockResolvedValue({ data: { id: cliente, nome: 'Marina' } })
+  const salvar = vi.fn().mockRejectedValueOnce(new Error('Falha no projeto')).mockResolvedValueOnce(undefined)
+  render(<ProjetoModal open onOpenChange={vi.fn()} onSubmit={salvar} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continuar' })).toBeEnabled())
+  fireEvent.change(screen.getByLabelText('Nome do projeto'), { target: { value: 'Campanha' } })
+  fireEvent.click(screen.getByText('Novo por email'))
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+  expect(screen.getByText('Informe o nome do cliente com pelo menos 2 caracteres.')).toBeVisible()
+  fireEvent.change(screen.getByLabelText('Nome do novo cliente'), { target: { value: 'Marina' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+  await screen.findByText('Tudo pronto para seguir?')
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Criar projeto' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Falha no projeto')
+  expect(post).toHaveBeenCalledExactlyOnceWith('/clientes', { nome: 'Marina', email: 'nova@teste.com' })
+  expect(salvar.mock.calls[0][0].cliente_id).toBe(cliente)
+  fireEvent.click(screen.getByRole('button', { name: 'Criar projeto' }))
+  await waitFor(() => expect(salvar).toHaveBeenCalledTimes(2))
+  expect(post).toHaveBeenCalledTimes(1)
 })

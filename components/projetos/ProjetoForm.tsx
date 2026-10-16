@@ -9,6 +9,7 @@ export interface ClienteOption { id: string; nome: string }
 export interface UsuarioOption { id: string; nome: string }
 
 export interface ProjetoFormValues {
+  cliente_nome?: string;
   nome: string;
   descricao?: string;
   status: StatusProjeto;

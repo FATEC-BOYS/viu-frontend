@@ -1,8 +1,10 @@
 "use client";
 
+import { z } from "zod";
+import { api } from "@/lib/api";
 import type React from "react";
 import { formatarDia } from '@/lib/diaDeCalendario';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { listClientes } from "@/lib/projects";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -123,6 +125,7 @@ function BriefingEvalPanel({
 
 export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: ProjetoModalProps) {
   const { user } = useAuth();
+  const enviando = useRef(false);
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -201,7 +204,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     } else {
       setFormData((prev) => ({
         ...prev,
-        nome: "", descricao: "", status: "EM_ANDAMENTO", orcamento: 0, prazo: "", cliente_id: prev.cliente_id || "",
+        nome: "", descricao: "", status: "EM_ANDAMENTO", orcamento: 0, prazo: "", cliente_id: "", cliente_nome: "",
         equipe_id: null,
       }));
     }
@@ -219,7 +222,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
    * o campo nem aparece; por isso ele sai da validação nesse caso.
    */
   const errosBasic = useMemo(() => {
-    const resultado = validarCampos(projetoSchema, {
+    const resultado = validarCampos(initial ? projetoSchema : projetoSchema.extend({ clienteId: z.union([projetoSchema.shape.clienteId, z.string().email()]) }), {
       nome: formData.nome,
       descricao: formData.descricao || undefined,
       orcamento: formData.orcamento,
@@ -227,8 +230,12 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       equipeId: formData.equipe_id || null,
       prazo: formData.prazo || undefined,
     });
-    return resultado.ok ? {} : resultado.erros;
-  }, [formData, souCliente, user?.id]);
+    const erros: Record<string, string> = resultado.ok ? {} : resultado.erros;
+    if (!souCliente && formData.cliente_id?.includes("@") && (formData.cliente_nome?.trim().length ?? 0) < 2) {
+      erros.cliente_nome = "Informe o nome do cliente com pelo menos 2 caracteres.";
+    }
+    return erros;
+  }, [formData, souCliente, user?.id, initial]);
 
   const invalidBasic = Object.keys(errosBasic).length > 0;
 
@@ -243,10 +250,22 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const errosVisiveis = mostrarErros ? errosBasic : {};
 
   const handleSubmitFinal = async (skipBriefingEval = false) => {
+    if (enviando.current) return;
+    enviando.current = true;
     setSalvando(true);
     setErro(null);
     try {
-      const clienteId = souCliente ? (user?.id ?? null) : (isCuidLike(formData.cliente_id) ? formData.cliente_id : null);
+      let referencia = formData.cliente_id;
+      if (!souCliente && !initial && referencia?.includes("@")) {
+        const resposta = await api.post<{ data: { id: string; nome: string } }>("/clientes", {
+          nome: formData.cliente_nome?.trim(), email: referencia.trim().toLowerCase(),
+        });
+        if (!isCuidLike(resposta.data?.id)) throw new Error("Não foi possível confirmar o cliente.");
+        referencia = resposta.data.id;
+        setFormData(prev => ({ ...prev, cliente_id: resposta.data.id }));
+        setClientes(prev => [...prev.filter(c => c.id !== resposta.data.id), { id: resposta.data.id, nome: resposta.data.nome || formData.cliente_nome || "Cliente" }]);
+      }
+      const clienteId = souCliente ? (user?.id ?? null) : (isCuidLike(referencia) ? referencia : null);
       if (!clienteId) throw new Error("Selecione um cliente.");
 
       const prazoISO: string | null = formData.prazo ? new Date(formData.prazo).toISOString() : null;
@@ -272,12 +291,13 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
       }
       setErro(err?.message ?? "Não foi possível salvar o projeto. Tente novamente.");
     } finally {
+      enviando.current = false;
       setSalvando(false);
     }
   };
 
   const resumo = useMemo(() => {
-    const nomeCliente = clientes.find((c) => c.id === formData.cliente_id)?.nome;
+    const nomeCliente = clientes.find((c) => c.id === formData.cliente_id)?.nome || formData.cliente_nome || formData.cliente_id || undefined;
     const statusLabel = statusLabelProjeto(formData.status);
     const orcFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(formData.orcamento || 0);
     // O campo de data devolve "2026-09-15", que `new Date` lê como meia-noite
@@ -293,14 +313,14 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
   const submitDisabled = salvando || loading || (isLastStep && !initial && !aceiteTermos);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value => { if (!enviando.current) onOpenChange(value); }}>
       <DialogContent className="flex max-h-[94dvh] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-3xl border-border/60 bg-background p-0 shadow-2xl sm:max-w-[720px]">
         <DialogHeader className="shrink-0 border-b border-border/60 bg-primary/[0.04] px-5 pb-5 pt-6 text-left sm:px-8 sm:pt-8">
           <p className="pr-8 text-xs font-semibold uppercase tracking-[0.16em] text-primary">{initial ? "Editar projeto" : "Novo projeto"} · {evalResult ? "Briefing" : `Passo ${step + 1} de ${steps.length}`}</p>
           <DialogTitle className="pr-6 text-2xl leading-tight tracking-tight sm:text-3xl">{evalResult ? "Um olhar para o briefing" : steps[step].title}</DialogTitle>
           <DialogDescription className="max-w-lg leading-relaxed">{evalResult ? "Confira a avaliação antes de continuar." : steps[step].description}</DialogDescription>
           {!evalResult && (
-            <ol aria-label="Etapas do projeto" className="mt-4 grid grid-cols-4 gap-2">
+            <ol aria-label="Etapas do projeto" className="mt-4 grid grid-cols-2 gap-2">
               {steps.map((item, index) => (
                 <li key={item.key} aria-current={index === step ? "step" : undefined} className={index <= step ? "text-primary" : "text-muted-foreground"}>
                   <div className={`mb-2 h-1 rounded-full ${index <= step ? "bg-primary" : "bg-border"}`} />
@@ -362,7 +382,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
         </div>
         {!evalResult && (
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/60 bg-background px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-8">
-            <Button variant="outline" onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
+            <Button variant="outline" disabled={salvando} onClick={() => (step > 0 ? setStep(step - 1) : onOpenChange(false))}>
               {step > 0 ? "Voltar" : "Cancelar"}
             </Button>
 

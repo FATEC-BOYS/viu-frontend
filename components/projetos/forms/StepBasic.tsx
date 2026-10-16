@@ -117,10 +117,18 @@ export default function StepBasic({
               // O modal já listou os clientes com nome; passar o rótulo evita
               // devolver o id à rede só para recebê-lo de volta.
               label={clientes.find((c) => c.id === values.cliente_id)?.nome ?? null}
-              onChange={(id) => setValues({ ...values, cliente_id: id })}
+              onChange={(id) => setValues({ ...values, cliente_id: id, cliente_nome: "" })}
               placeholder="Buscar ou adicionar por e-mail…"
             />
             {mensagem("clienteId")}
+            {values.cliente_id?.includes("@") && <div className="space-y-2">
+              <Label htmlFor="novo-cliente-nome">Nome do novo cliente</Label>
+              <Input id="novo-cliente-nome" value={values.cliente_nome || ""}
+                onChange={e => setValues({ ...values, cliente_nome: e.target.value })}
+                {...acessibilidade("cliente_nome")} />
+              {mensagem("cliente_nome")}
+              <p className="text-xs text-muted-foreground">O contato será salvo junto com o projeto.</p>
+            </div>}
           </div>
         )}
         </div>
