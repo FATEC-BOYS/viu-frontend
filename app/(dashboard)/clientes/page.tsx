@@ -259,6 +259,9 @@ export default function ClientesPage() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('novo') === '1') {
       setOpenClienteWizard(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('novo');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
     }
   }, []);
 
@@ -427,22 +430,22 @@ export default function ClientesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+          {rows.length > 0 && <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
             <TabsList>
               <TabsTrigger value="cards">Cartões</TabsTrigger>
               <TabsTrigger value="board">Quadro</TabsTrigger>
             </TabsList>
-          </Tabs>
+          </Tabs>}
           <Button onClick={() => setOpenClienteWizard(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Novo
+            <Plus className="h-4 w-4 mr-2" /> Novo cliente
           </Button>
         </div>
       </div>
 
       <p className="text-sm text-muted-foreground">Encontre os contatos e os projetos de cada cliente.</p>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Filtros só ajudam quando há clientes para encontrar. */}
+      {rows.length > 0 && <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[260px]">
           <Input
             placeholder="Buscar por nome, e-mail, telefone ou projeto…"
@@ -488,6 +491,7 @@ export default function ClientesPage() {
         </Button>
       </div>
 
+      }
       {/* Conteúdo por modo */}
       <Tabs value={mode}>
         <TabsContent value="cards" className="mt-0">
@@ -505,8 +509,8 @@ export default function ClientesPage() {
                 icon={UserRound}
                 tom="pessego"
                 title="Nenhum cliente ainda"
-                description="Cadastre um cliente para organizar seus projetos, compartilhar artes e acompanhar as aprovações."
-                actionLabel="Cadastrar cliente"
+                description="Os clientes adicionados ao criar projetos aparecem aqui automaticamente. Você também pode salvar um contato antes de criar o projeto."
+                actionLabel="Adicionar cliente"
                 onAction={() => setOpenClienteWizard(true)}
               />
             )
@@ -591,6 +595,7 @@ export default function ClientesPage() {
         open={openClienteWizard}
         onOpenChange={setOpenClienteWizard}
         onCreated={() => {
+          toast.success("Cliente salvo na sua carteira.");
           reload();
         }}
       />
