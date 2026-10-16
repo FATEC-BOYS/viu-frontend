@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/lib/api'
@@ -43,10 +44,14 @@ export function EmailVerificationBanner() {
   const conferir = async () => {
     setConferindo(true)
     setAindaNaoConfirmado(false)
-    const perfil = await recarregar()
-    // Confirmado: o próprio `user` muda e o componente some sozinho.
-    if (perfil && perfil.emailVerificado === false) setAindaNaoConfirmado(true)
-    setConferindo(false)
+    try {
+      const perfil = await recarregar()
+      if (perfil && perfil.emailVerificado === false) setAindaNaoConfirmado(true)
+    } catch {
+      toast.error('Não foi possível consultar sua conta. Tente novamente.')
+    } finally {
+      setConferindo(false)
+    }
   }
 
   const mensagem = enviado

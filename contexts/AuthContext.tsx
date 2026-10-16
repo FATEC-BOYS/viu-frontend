@@ -153,10 +153,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(res.data)
       guardarPerfil(res.data)
       return res.data
-    } catch {
-      setUser(null)
-      guardarPerfil(null)
-      return null
+    } catch (erro) {
+      if ((erro as ApiError | undefined)?.status === 401) {
+        setUser(null)
+        guardarPerfil(null)
+        return null
+      }
+      // Falha de rede/cota não prova que a sessão acabou.
+      throw erro
     }
   }, [])
 

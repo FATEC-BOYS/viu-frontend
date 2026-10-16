@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { AuthProvider, useAuth } from '../AuthContext'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -8,9 +8,9 @@ const get = vi.fn()
 vi.mock('@/lib/api', () => ({ api: { get: (...a: unknown[]) => get(...a), post: vi.fn() } }))
 
 function Sonda() {
-  const { user, loading } = useAuth()
+  const { user, loading, recarregar } = useAuth()
   if (loading) return <span>carregando</span>
-  return <span>{user ? `logada: ${user.nome}` : 'anônima'}</span>
+  return <><span>{user ? `logada: ${user.nome}` : 'anônima'}</span><button onClick={() => recarregar().catch(() => {})}>Atualizar</button></>
 }
 
 function erroDe(status: number) {
@@ -65,4 +65,16 @@ describe('AuthProvider: falha ao sondar a sessão', () => {
     await waitFor(() => expect(screen.getByText('logada: Ana Silva')).toBeInTheDocument())
     expect(localStorage.getItem('viu_user')).not.toBeNull()
   })
+})
+
+it.each([0, 429, 503])('recarregar preserva o perfil quando a API falha (%s)', async status => {
+  get.mockReset()
+  localStorage.setItem('viu_user', JSON.stringify(PERFIL))
+  get.mockResolvedValueOnce({ data: PERFIL }).mockRejectedValueOnce(erroDe(status))
+  render(<AuthProvider><Sonda /></AuthProvider>)
+  await screen.findByText('logada: Ana Silva')
+  fireEvent.click(screen.getByText('Atualizar'))
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+  expect(screen.getByText('logada: Ana Silva')).toBeInTheDocument()
+  expect(localStorage.getItem('viu_user')).not.toBeNull()
 })

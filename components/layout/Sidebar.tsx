@@ -16,6 +16,7 @@ import {
   CreditCard, Wallet, Receipt, ArrowDownToLine, Scale, ShieldCheck, MailOpen, Gauge, Lock, Layers,
   Palette, UserRound
 } from 'lucide-react';
+import { consultarSidebar } from '@/lib/sidebarRequestCache';
 import { api } from '@/lib/api';
 import { convitesApi, convitesEquipeApi } from '@/lib/convites';
 import { useAuth } from '@/contexts/AuthContext';
@@ -196,13 +197,14 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
       if (emVoo) return;
       emVoo = true;
       try {
+        const consultar = <T,>(recurso: string, buscar: () => Promise<T>) => consultarSidebar(`${usuarioId}:${ehCliente}:${ehAdmin}`, recurso, buscar);
         const zero = Promise.resolve({ pagination: { total: 0 } });
         const vazio = Promise.resolve([] as unknown[]);
 
         const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe, resTemProjeto, resTemArte] =
           await Promise.allSettled([
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
+            (ehCliente || ehAdmin) ? zero : consultar("/tarefas?status=PENDENTE&limit=1", () => api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1')),
+            (ehCliente || ehAdmin) ? zero : consultar("/tarefas?status=EM_ANDAMENTO&limit=1", () => api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1')),
             /*
              * `status=ABERTO`, como todos os vizinhos aqui filtram.
              *
@@ -212,17 +214,17 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
              * Quadro da própria tela de Feedbacks já calculava "Aberto 2 /
              * Resolvido 1" enquanto a barra lateral dizia 3.
              */
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?status=ABERTO&limit=1'),
+            (ehCliente || ehAdmin) ? zero : consultar("/feedbacks?status=ABERTO&limit=1", () => api.get<{ pagination: { total: number } }>('/feedbacks?status=ABERTO&limit=1')),
             // O único que todo papel exibe.
-            api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
+            consultar("/notificacoes?lida=false&limit=1", () => api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1')),
+            (ehCliente || ehAdmin) ? zero : consultar("/projetos?status=EM_ANDAMENTO&limit=1", () => api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1')),
             // Convites não são paginados: o backend devolve só os pendentes.
-            (ehCliente || ehAdmin) ? vazio : convitesApi.listarPendentes(),
-            (ehCliente || ehAdmin) ? vazio : convitesEquipeApi.listarPendentes(),
+            (ehCliente || ehAdmin) ? vazio : consultar("convites", () => convitesApi.listarPendentes()),
+            (ehCliente || ehAdmin) ? vazio : consultar("convites-equipe", () => convitesEquipeApi.listarPendentes()),
             // Qualquer status, não só EM_ANDAMENTO: quem tem só projeto
             // concluído já conhece o produto e não precisa de cadeado.
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/projetos?limit=1'),
-            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/artes?limit=1'),
+            (ehCliente || ehAdmin) ? zero : consultar("/projetos?limit=1", () => api.get<{ pagination: { total: number } }>('/projetos?limit=1')),
+            (ehCliente || ehAdmin) ? zero : consultar("/artes?limit=1", () => api.get<{ pagination: { total: number } }>('/artes?limit=1')),
           ]);
 
         if (!alive) return;
@@ -241,7 +243,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           convitesPendentes: quantidade(resConvites) + quantidade(resConvitesEquipe),
         });
 
-        if (!ehCliente && !ehAdmin) {
+        if (!ehCliente && !ehAdmin && resTemProjeto.status === 'fulfilled' && resTemArte.status === 'fulfilled') {
           setConteudo({ temProjeto: total(resTemProjeto) > 0, temArte: total(resTemArte) > 0 });
         }
       } catch (err) {
