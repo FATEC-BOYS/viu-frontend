@@ -111,6 +111,7 @@ function LinhaLink({
           <div className="min-w-0 flex-1 basis-52">
             <p className="truncate text-sm font-medium">{titulo}</p>
             {apoio && <p className="truncate text-xs text-muted-foreground">{apoio}</p>}
+            <p className="text-xs text-muted-foreground">{link.somenteLeitura ? 'Apenas visualizar' : 'Revisar e comentar'}</p>
           </div>
           <p className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {rotulo}
@@ -153,7 +154,7 @@ function LinhaLink({
                     checked={!link.somenteLeitura}
                     onCheckedChange={(v) => aoAlternarComentario(link.id, v)}
                   >
-                    Cliente pode comentar
+                    Revisar e comentar
                   </DropdownMenuCheckboxItem>
 
                   <DropdownMenuSeparator />
