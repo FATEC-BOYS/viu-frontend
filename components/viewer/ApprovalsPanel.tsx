@@ -63,7 +63,7 @@ function iniciais(nome?: string | null) {
  * decidir exige conta e ser o aprovador. O parâmetro dava a impressão de que
  * o link concedia algo aqui, e não concedia.
  */
-export default function ApprovalsPanel({ arteId, versaoAtual }: { arteId: string; versaoAtual?: number }) {
+export default function ApprovalsPanel({ arteId, versaoAtual, somenteConsulta = false }: { arteId: string; versaoAtual?: number; somenteConsulta?: boolean }) {
   const [erro, setErro] = useState(false)
   const [aprovacoes, setAprovacoes] = useState<Aprovacao[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -154,11 +154,11 @@ export default function ApprovalsPanel({ arteId, versaoAtual }: { arteId: string
             </p>
           )}
 
-          {aprovacoes.map((ap) => {
+          {(somenteConsulta ? atuais : aprovacoes).map((ap) => {
             const Icone = ICONE[ap.status]
             // A decisão é de quem foi escolhido para decidir, e só enquanto
             // estiver pendente — APROVADO e REJEITADO são terminais no backend.
-            const minhaVez = !erro && (versaoAtual === undefined || (ap.versaoNumero ?? 1) === versaoAtual) && ap.status === 'PENDENTE' && !!usuarioId && ap.aprovador?.id === usuarioId
+            const minhaVez = !somenteConsulta && !erro && (versaoAtual === undefined || (ap.versaoNumero ?? 1) === versaoAtual) && ap.status === 'PENDENTE' && !!usuarioId && ap.aprovador?.id === usuarioId
 
             return (
               <div key={ap.id} className="rounded-lg border p-3">

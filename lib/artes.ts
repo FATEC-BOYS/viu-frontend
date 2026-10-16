@@ -124,6 +124,7 @@ export function passouDoCombinado(r: Rodadas): boolean {
 
 export type VersaoGroup = {
   versao: number
+  descricao?: string | null
   arquivos: Array<{
     id: string
     kind: 'PREVIEW' | 'FONTE' | 'ANEXO'
@@ -223,7 +224,7 @@ export async function listArtesOverview({
     .get<{ data: any[]; pagination?: { total?: number }; porStatus?: Record<string, number> }>(
       `/artes?${qs}`,
     )
-    .catch(() => ({ data: [] as any[], pagination: { total: 0 }, porStatus: {} }))
+
   const data = (res.data ?? []).map(mapArte)
   return { data, count: res.pagination?.total ?? data.length, porStatus: res.porStatus ?? {} }
 }
@@ -342,12 +343,14 @@ export async function createNovaVersao(params: {
   mime?: string
   largura_px?: number | null
   altura_px?: number | null
+  descricao?: string
   novoNomeOpcional?: string
   /** Recebe 0–100 conforme o arquivo sobe. Sem isto o upload usa fetch(). */
   onProgress?: (porcentagem: number) => void
 }) {
   const form = new FormData()
   form.set('file', params.file, params.file.name)
+  if (params.descricao) form.set('descricao', params.descricao)
   if (params.novoNomeOpcional) form.set('nome', params.novoNomeOpcional)
   if (params.largura_px != null) form.set('largura_px', String(params.largura_px))
   if (params.altura_px != null) form.set('altura_px', String(params.altura_px))
@@ -375,11 +378,11 @@ export async function createNovaVersao(params: {
  * abre nada sozinha. É a assinada que vai para a UI.
  */
 export async function listVersoes(arteId: string): Promise<VersaoGroup[]> {
-  const res = await api.get<{ data: any[] }>(`/artes/${arteId}/versoes`).catch(() => null)
-  if (!res) return []
+  const res = await api.get<{ data: any[] }>(`/artes/${arteId}/versoes`)
 
   return (res.data ?? []).map((v: any) => ({
     versao: v.numero ?? 1,
+    descricao: v.descricao ?? null,
     arquivos: [
       {
         id: v.id,

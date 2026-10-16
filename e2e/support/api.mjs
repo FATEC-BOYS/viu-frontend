@@ -45,9 +45,9 @@ const server = http.createServer(async (req, res) => {
   const arte = artes.find(a => a.id === path.split('/')[2])
   if (/^\/artes\/[^/]+\/versoes\/upload$/.test(path)) {
     if (!versoes.some(v => v.numero === arte.versao)) versoes.push({ id: id(30), ...arte, numero: arte.versao, arquivo: imagem })
-    arte.versao++; arte.status = 'EM_ANALISE'; versoes.push({ ...arte, id: id(31), numero: arte.versao, arquivo: imagem }); return data(versoes.at(-1))
+    arte.versao++; arte.status = 'EM_ANALISE'; versoes.push({ ...arte, id: id(31), numero: arte.versao, arquivo: imagem, arquivoUrl: imagem, descricao: field('descricao') }); return data(versoes.at(-1))
   }
-  if (/^\/artes\/[^/]+\/versoes$/.test(path)) return data(versoes)
+  if (/^\/artes\/[^/]+\/versoes$/.test(path) || /^\/preview\/[^/]+\/versoes$/.test(path)) return data(versoes.map(v => ({ ...v, arquivoUrl: imagem })))
   if (/^\/artes\/[^/]+\/solicitar-aprovacao$/.test(path)) {
     const ap = { id: id(40 + aprovacoes.length), arteId: arte.id, arte: arteCompleta(arte), aprovador: cliente, versaoNumero: body.versaoNumero ?? arte.versao, status: 'PENDENTE', criadoEm: new Date().toISOString() }; aprovacoes.push(ap); return data(ap)
   }

@@ -156,16 +156,16 @@ describe('Tarefas escondida', () => {
 
 describe('ADMIN', () => {
   /** Mesmo shell do designer — sem área separada, sem redirect. */
-  it('mantém o menu de operação do designer', () => {
+  it('não oferece criação de trabalho do designer ao administrador', () => {
     renderComo('ADMIN')
     for (const item of [/projetos/i, /artes/i, /clientes/i]) {
-      expect(link(item)).toBeInTheDocument()
+      expect(link(item)).not.toBeInTheDocument()
     }
   })
 
-  it('ganha a seção Administração no fim', () => {
+  it('tem navegação própria de plataforma', () => {
     renderComo('ADMIN')
-    expect(screen.getByText('Administração')).toBeInTheDocument()
+    expect(screen.getByText('Plataforma')).toBeInTheDocument()
     expect(link(/usuários/i)).toBeInTheDocument()
     expect(link(/status do sistema/i)).toBeInTheDocument()
   })
@@ -179,8 +179,8 @@ describe('ADMIN', () => {
   /** Sem o rótulo explícito, "Saques" apareceria duas vezes sem distinção. */
   it('distingue a moderação do financeiro do próprio designer', () => {
     renderComo('ADMIN')
-    expect(link(/saques \(moderação\)/i)).toBeInTheDocument()
-    expect(link(/^saques$/i)).toBeInTheDocument()
+    expect(link(/saques a moderar/i)).toBeInTheDocument()
+    expect(link(/^saques$/i)).not.toBeInTheDocument()
   })
 })
 
@@ -335,4 +335,11 @@ describe('financeiro reservado ao ADM no piloto', () => {
       expect(screen.queryByText(nome)).not.toBeInTheDocument()
     }
   })
+})
+
+
+it('admin não busca contadores de tarefas, feedbacks ou convites do designer', async () => {
+  renderComo('ADMIN')
+  await waitFor(() => expect(api.get).toHaveBeenCalled())
+  expect(vi.mocked(api.get).mock.calls.map(([path]) => path)).toEqual(['/notificacoes?lida=false&limit=1'])
 })

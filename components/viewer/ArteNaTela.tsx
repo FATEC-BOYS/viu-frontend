@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import ErroDeConsulta from "@/components/layout/ErroDeConsulta";
 import ViewerShell from "@/components/viewer/ViewerShell";
 import { paraFeedbackItem } from "@/components/viewer/types";
 
@@ -17,16 +20,37 @@ import { paraFeedbackItem } from "@/components/viewer/types";
  * exatamente isto: o formato que o `ViewerShell` consome.
  */
 export default function ArteNaTela({ token, d }: { token: string; d: any }) {
-  const arte = d.arte;
+  const [todosFeedbacks, setTodosFeedbacks] = useState(() => (d.feedbacks ?? []).map(paraFeedbackItem));
+  const [numero, setNumero] = useState<number | null>(null);
+  const [versoesReais, setVersoesReais] = useState<Array<{id: string; numero: number; arquivoUrl: string | null; tipo: string; descricao?: string | null; criadoEm: string}>>([]);
+  const [erroHistorico, setErroHistorico] = useState(false);
+  const carregar = useCallback(async () => {
+    try {
+      const path = token ? `/preview/${encodeURIComponent(token)}/versoes` : `/artes/${encodeURIComponent(d.arte.id)}/versoes`;
+      const res = await api.get<{ data: typeof versoesReais }>(path);
+      setVersoesReais(res.data);
+      setErroHistorico(false);
+    } catch { setErroHistorico(true); }
+  }, [token, d.arte.id]);
+  useEffect(() => { void carregar(); }, [carregar]);
+  const historica = numero !== null && numero !== d.arte.versao;
+  const selecionada = versoesReais.find(v => v.numero === numero);
+  const arte = historica && selecionada ? { ...d.arte, arquivo: '', previewUrl: selecionada.arquivoUrl, tipo: selecionada.tipo, versao: selecionada.numero, status: null } : d.arte;
 
-  const feedbacks = (d.feedbacks ?? []).map(paraFeedbackItem);
+  const guardarFeedbacks = useCallback((novos: ReturnType<typeof paraFeedbackItem>[]) => {
+    setTodosFeedbacks((anteriores: ReturnType<typeof paraFeedbackItem>[]) => {
+      const ids = new Set(novos.map(f => f.id));
+      return [...anteriores.filter(f => !ids.has(f.id) && f.versao_numero !== arte.versao && !(f.versao_numero === null && arte.versao === 1)), ...novos];
+    });
+  }, [arte.versao]);
+  const feedbacks = todosFeedbacks.filter((fb: ReturnType<typeof paraFeedbackItem>) => fb.versao_numero === arte.versao || (fb.versao_numero === null && arte.versao === 1));
 
   // `canComment` nunca existiu: GET /preview/:token devolve
   // { somenteLeitura, acessos, arte, feedbacks }. Como `!undefined` é sempre
   // true, TODO link ficava em modo leitura — o cliente nunca conseguiu
   // comentar por link, que é a promessa central do produto. Quem decide é o
   // somenteLeitura do link, e o backend ja recusa feedback nele (403).
-  const readOnly = Boolean(d.somenteLeitura);
+  const readOnly = historica || Boolean(d.somenteLeitura);
 
   const arteForClient = {
     id: arte.id,
@@ -40,7 +64,7 @@ export default function ArteNaTela({ token, d }: { token: string; d: any }) {
     projeto_id: arte.projetoId ?? arte.projeto_id ?? null,
   };
 
-  if (!arteForClient.arquivo) {
+  if (!arteForClient.arquivo && !historica) {
     /*
      * Sem URL de exibição não há o que olhar, e este é o único caminho honesto
      * entre mostrar a tela inteira vazia e não mostrar nada. Acontece quando a
@@ -76,9 +100,27 @@ export default function ArteNaTela({ token, d }: { token: string; d: any }) {
   ];
 
   return (
-    <ViewerShell
+    <div className="flex h-[100dvh] flex-col">
+      <div className="shrink-0 border-b bg-background px-4 py-2 space-y-2">
+        <label className="flex flex-wrap items-center gap-2 text-sm">
+          Histórico de versões
+          <select aria-label="Versão exibida" className="rounded border bg-background px-2 py-1" value={numero ?? d.arte.versao} onChange={e => setNumero(Number(e.target.value))}>
+            <option value={d.arte.versao}>v{d.arte.versao} · Atual</option>
+            {versoesReais.filter(v => v.numero !== d.arte.versao).map(v => <option key={v.id} value={v.numero}>v{v.numero} · {new Date(v.criadoEm).toLocaleDateString('pt-BR')}</option>)}
+          </select>
+        </label>
+        {historica && <p className="text-sm font-medium">Versão anterior · somente consulta. Volte à versão atual para comentar ou decidir.</p>}
+        {(selecionada ?? versoesReais.find(v => v.numero === d.arte.versao))?.descricao && <p className="text-sm text-muted-foreground">O que mudou: {(selecionada ?? versoesReais.find(v => v.numero === d.arte.versao))?.descricao}</p>}
+        {erroHistorico && <ErroDeConsulta mensagem="Não foi possível carregar o histórico de versões." tentar={carregar} />}
+        {d.erroFeedbacks && <ErroDeConsulta mensagem="Não foi possível carregar os comentários." tentar={() => window.location.reload()} />}
+      </div>
+      <div className="min-h-0 flex-1">
+    {!arteForClient.arquivo ? <ErroDeConsulta mensagem="Não foi possível abrir o arquivo desta versão." tentar={carregar} /> : <ViewerShell
+      key={`${arte.id}-${arte.versao}`}
+      historica={historica}
       arte={arteForClient}
       initialFeedbacks={feedbacks}
+      onFeedbacksChange={guardarFeedbacks}
       versoes={versoes}
       aprovacoesByVersao={{}}
       readOnly={readOnly}
@@ -87,6 +129,8 @@ export default function ArteNaTela({ token, d }: { token: string; d: any }) {
          uso só é licenciado depois da quitação. Vem calculado do backend a
          partir das faturas do projeto. */
       licenca={d.licenca ?? null}
-    />
+    />}
+      </div>
+    </div>
   );
 }

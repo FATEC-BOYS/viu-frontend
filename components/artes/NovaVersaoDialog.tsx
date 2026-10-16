@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Loader2 } from "lucide-react";
 import { validarTamanho } from "@/lib/uploadLimits";
@@ -33,6 +34,7 @@ export default function NovaVersaoDialog({
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [novoNome, setNovoNome] = useState("");
+  const [descricao, setDescricao] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -52,6 +54,7 @@ export default function NovaVersaoDialog({
   function resetState() {
     setFile(null);
     setNovoNome("");
+    setDescricao("");
     setSubmitting(false);
     setProgress(0);
     if (inputRef.current) inputRef.current.value = "";
@@ -76,6 +79,7 @@ export default function NovaVersaoDialog({
 
       await createNovaVersao({
         arteId: arte.id,
+        descricao: descricao.trim() || undefined,
         file,
         mime,
         novoNomeOpcional: novoNome?.trim() ? novoNome.trim() : undefined,
@@ -139,6 +143,12 @@ export default function NovaVersaoDialog({
             <p className="text-xs text-muted-foreground">
               Se você não preencher, o nome atual será mantido ({arte.nome}).
             </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="resumo-versao">O que mudou nesta versão?</Label>
+            <Textarea id="resumo-versao" value={descricao} onChange={e => setDescricao(e.target.value)} disabled={submitting} maxLength={2000} placeholder="Ex.: Aumentei o logo e ajustei o contraste do fundo." />
+            <p className="text-xs text-muted-foreground">Opcional. O cliente verá este resumo ao abrir a versão.</p>
           </div>
 
           {submitting && (

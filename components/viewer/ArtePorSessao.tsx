@@ -47,15 +47,17 @@ export default function ArtePorSessao({ id }: { id: string }) {
          * existe para token. Se esta chamada falhar, a arte ainda abre: ver a
          * peça sem a trilha é melhor que não ver nada.
          */
+        let erroFeedbacks = false;
         const feedbacks = await api
           .get<{ data: any[] }>(`/feedbacks?arteId=${encodeURIComponent(id)}&limit=200`)
           .then((r) => r?.data ?? [])
-          .catch(() => []);
+          .catch(() => { erroFeedbacks = true; return []; });
 
         if (!ativo) return;
         setDados({
           arte,
           feedbacks,
+          erroFeedbacks,
           licenca: arte.licenca ?? null,
           /*
            * `somenteLeitura` é do LINK, e aqui não há link. A permissão de quem
