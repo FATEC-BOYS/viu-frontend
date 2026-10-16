@@ -1,6 +1,7 @@
 // components/viewer/hooks/useAudioRecorder.ts
 "use client";
 
+import fixWebmDuration from "fix-webm-duration";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type RecorderState = "idle" | "recording" | "paused";
@@ -53,7 +54,11 @@ export function useAudioRecorder() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const timerRef = useRef<number | null>(null);
 
-  const tick = () => setElapsedMs((e) => e + 1000);
+  const accumulatedMsRef = useRef(0);
+  const startedAtRef = useRef<number | null>(null);
+  const recordingDuration = () => accumulatedMsRef.current +
+    (startedAtRef.current === null ? 0 : performance.now() - startedAtRef.current);
+  const tick = () => setElapsedMs(recordingDuration());
 
   /*
    * Soltar as tracks em UM lugar, chamado pelos dois caminhos.
@@ -86,6 +91,8 @@ export function useAudioRecorder() {
       chunksRef.current = [];
       rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
       rec.onstop = soltarMicrofone;
+      accumulatedMsRef.current = 0;
+      startedAtRef.current = performance.now();
       rec.start();
       setElapsedMs(0);
       setState("recording");
@@ -98,6 +105,9 @@ export function useAudioRecorder() {
 
   const pause = useCallback(() => {
     if (mediaRef.current && state === "recording") {
+      accumulatedMsRef.current = recordingDuration();
+      startedAtRef.current = null;
+      setElapsedMs(accumulatedMsRef.current);
       mediaRef.current.pause();
       setState("paused");
       if (timerRef.current) window.clearInterval(timerRef.current);
@@ -106,6 +116,7 @@ export function useAudioRecorder() {
 
   const resume = useCallback(() => {
     if (mediaRef.current && state === "paused") {
+      startedAtRef.current = performance.now();
       mediaRef.current.resume();
       setState("recording");
       timerRef.current = window.setInterval(tick, 1000);
@@ -122,9 +133,13 @@ export function useAudioRecorder() {
   const stop = useCallback(async () => {
     return new Promise<{ blob: Blob; extensao: string } | null>((resolve) => {
       const rec = mediaRef.current;
-      if (!rec) return resolve(null);
+      if (!rec || rec.state === "inactive") return resolve(null);
+      const durationMs = recordingDuration();
+      startedAtRef.current = null;
+      accumulatedMsRef.current = durationMs;
+      setElapsedMs(durationMs);
       const formato = formatoRef.current;
-      rec.onstop = () => {
+      rec.onstop = async () => {
         if (timerRef.current) window.clearInterval(timerRef.current);
         // O tipo do blob é o que o navegador de fato gravou, e não `audio/webm`
         // fixo: no Safari os bytes são mp4, e declarar webm faria o backend
@@ -136,7 +151,17 @@ export function useAudioRecorder() {
         mediaRef.current = null;
         chunksRef.current = [];
         setState("idle");
-        resolve({ blob, extensao: formato?.extensao ?? "webm" });
+        // MediaRecorder WebM may omit Duration (Opera/Chromium can display
+        // absurd totals). Repair the actual file used by preview AND upload.
+        let finalizedBlob = blob;
+        if (blob.type.startsWith("audio/webm") && blob.size > 0 && durationMs > 0) {
+          try {
+            finalizedBlob = await fixWebmDuration(blob, durationMs, { logger: false });
+          } catch {
+            // Preserve the recording if metadata cannot be repaired.
+          }
+        }
+        resolve({ blob: finalizedBlob, extensao: formato?.extensao ?? "webm" });
       };
       rec.stop();
     });
