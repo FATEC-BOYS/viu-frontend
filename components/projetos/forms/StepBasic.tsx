@@ -1,4 +1,6 @@
 "use client";
+import { TRANSICOES_DO_PROJETO } from "@/lib/transicoesDoProjeto";
+import { statusLabel } from "../types";
 import AdminOnly from '@/components/layout/AdminOnly';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +16,9 @@ import EquipeSelect from "../EquipeSelect";
  * aria-describedby para leitores de tela.
  */
 export default function StepBasic({
-  values, setValues, souCliente, erros = {}, aoTocar, clientes = [],
+  values, setValues, souCliente, erros = {}, aoTocar, clientes = [], statusInicial,
 }: {
+  statusInicial?: StatusProjeto;
   values: ProjetoFormValues;
   setValues: (v: ProjetoFormValues) => void;
   souCliente: boolean;
@@ -25,6 +28,9 @@ export default function StepBasic({
   /** Clientes já carregados pelo modal, com nome. Evita o id virar rótulo. */
   clientes?: { id: string; nome: string }[];
 }) {
+  const statusDisponiveis: StatusProjeto[] = statusInicial
+    ? [statusInicial, ...TRANSICOES_DO_PROJETO[statusInicial]]
+    : ["EM_ANDAMENTO"];
   const mensagem = (campo: string) =>
     erros[campo] ? (
       <p id={`${campo}-erro`} className="text-sm text-destructive">
@@ -72,13 +78,12 @@ export default function StepBasic({
         <div className="space-y-2">
           <Label htmlFor="projeto-status">Status do projeto</Label>
           <Select value={values.status} onValueChange={(v) => setValues({ ...values, status: v as StatusProjeto })}>
-            <SelectTrigger id="projeto-status" className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectTrigger id="projeto-status" disabled={statusDisponiveis.length === 1} className="w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
-              <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-              <SelectItem value="PAUSADO">Pausado</SelectItem>
+              {statusDisponiveis.map(status => <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>)}
             </SelectContent>
           </Select>
+          {statusInicial === "RASCUNHO" && <p className="text-xs text-muted-foreground">O projeto precisa entrar em andamento antes de ser concluído.</p>}
         </div>
 
 <AdminOnly>        <div className="space-y-2">
