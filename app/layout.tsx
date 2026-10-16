@@ -1,4 +1,5 @@
 // app/layout.tsx
+import Script from "next/script";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -39,6 +40,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <AuthProvider>{children}</AuthProvider>
         </Providers>
+        {process.env.VERCEL_ENV === "production" && (
+          <Script
+            id="cloudflare-web-analytics"
+            type="module"
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={JSON.stringify({ token: "98c336d590eb4057aee5a064800d2efd" })}
+            strategy="afterInteractive"
+          />
+        )}
       </body>
     </html>
   );
