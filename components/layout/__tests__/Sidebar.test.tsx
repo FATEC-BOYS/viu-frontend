@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
+import { limparCacheSidebar } from '@/lib/sidebarRequestCache'
 import { Sidebar } from '../Sidebar'
 
 /**
@@ -48,6 +49,7 @@ function renderComo(tipo: 'DESIGNER' | 'CLIENTE' | 'ADMIN') {
 const link = (nome: RegExp) => screen.queryByRole('link', { name: nome })
 
 beforeEach(() => {
+  limparCacheSidebar()
   vi.clearAllMocks()
   vi.mocked(api.get).mockResolvedValue({ pagination: { total: 0 } } as never)
 })
@@ -342,4 +344,13 @@ it('admin não busca contadores de tarefas, feedbacks ou convites do designer', 
   renderComo('ADMIN')
   await waitFor(() => expect(api.get).toHaveBeenCalled())
   expect(vi.mocked(api.get).mock.calls.map(([path]) => path)).toEqual(['/notificacoes?lida=false&limit=1'])
+})
+
+it.each([0, 429, 503])('não bloqueia o menu quando a consulta falha (%s)', async status => {
+  vi.mocked(api.get).mockRejectedValue(Object.assign(new Error('falha'), { status }))
+  renderComo('DESIGNER')
+  await waitFor(() => expect(api.get).toHaveBeenCalled())
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(link(/^artes$/i)).toBeInTheDocument()
+  expect(link(/^feedbacks$/i)).toBeInTheDocument()
 })

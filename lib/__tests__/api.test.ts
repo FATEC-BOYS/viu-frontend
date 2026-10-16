@@ -612,3 +612,64 @@ describe('falha de rede', () => {
     expect(erro.message).toMatch(/não foi possível falar com o servidor/i)
   })
 })
+
+describe('renovação entre abas e respostas inesperadas', () => {
+  function comLock() {
+    const request = vi.fn(async (_nome: string, executar: () => Promise<unknown>) => executar())
+    vi.stubGlobal('navigator', { locks: { request } })
+    return request
+  }
+
+  it('reutiliza o cookie renovado em outra aba antes de rotacionar novamente', async () => {
+    const lock = comLock()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401))
+      .mockResolvedValueOnce(resposta(200, { data: { id: 'usuario' } }))
+      .mockResolvedValueOnce(resposta(200, { data: [] }))
+    await expect(api.get('/projetos')).resolves.toEqual({ data: [] })
+    expect(lock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/refresh'))).toHaveLength(0)
+  })
+
+  it('renova sob o lock quando o cookie continua expirado', async () => {
+    comLock()
+    fetchMock
+      .mockResolvedValueOnce(resposta(401))
+      .mockResolvedValueOnce(resposta(401))
+      .mockResolvedValueOnce(resposta(200))
+      .mockResolvedValueOnce(resposta(200, { data: [] }))
+    await expect(api.get('/projetos')).resolves.toEqual({ data: [] })
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/refresh'))).toHaveLength(1)
+  })
+
+  it('duas abas com estado independente compartilham somente uma rotação', async () => {
+    let fila: Promise<unknown> = Promise.resolve()
+    vi.stubGlobal('navigator', { locks: {
+      request: (_nome: string, executar: () => Promise<unknown>) => {
+        const resultado = fila.then(executar)
+        fila = resultado.catch(() => undefined)
+        return resultado
+      },
+    } })
+    vi.resetModules()
+    const outraAba = await import('../api')
+    outraAba.esquecerRenovacao()
+    let cookieValido = false
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/auth/refresh')) {
+        cookieValido = true
+        return resposta(200)
+      }
+      return cookieValido ? resposta(200, { data: [] }) : resposta(401)
+    })
+    await Promise.all([api.get('/projetos'), outraAba.api.get('/projetos')])
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/auth/refresh'))).toHaveLength(1)
+  })
+
+  it.each([400, 403, 404, 429, 502, 503])('refresh %s não apaga perfil nem informa sessão expirada', async (status) => {
+    localStorage.setItem('viu_user', JSON.stringify({ id: 'usuario' }))
+    fetchMock.mockResolvedValueOnce(resposta(401)).mockResolvedValueOnce(resposta(status))
+    await expect(api.get('/projetos', { redirecionarNo401: false })).rejects.toMatchObject({ status: 503 })
+    expect(localStorage.getItem('viu_user')).toContain('usuario')
+  })
+})

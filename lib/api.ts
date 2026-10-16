@@ -131,7 +131,8 @@ async function tryRefresh(): Promise<ResultadoRefresh> {
 
   isRefreshing = true
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const renovar = async (): Promise<Response> => {
+      return fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -142,6 +143,18 @@ async function tryRefresh(): Promise<ResultadoRefresh> {
       // deslogava quem estava logado, sem aviso e sem motivo.
       body: '{}',
     })
+    }
+    // O mutex do módulo só protege uma aba. O navegador compartilha os cookies
+    // entre abas: conferir /me dentro do lock evita rotacionar uma sessão que
+    // outra aba acabou de renovar enquanto esta aguardava.
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+    const res = locks
+      ? await locks.request(`viu-session:${BASE_URL}`, async () => {
+          const atual = await fetch(`${BASE_URL}/auth/me`, { credentials: 'include', cache: 'no-store' })
+          if (atual.status !== 401) return atual
+          return renovar()
+        })
+      : await renovar()
 
     let resultado: ResultadoRefresh
     if (res.ok) {
@@ -155,7 +168,7 @@ async function tryRefresh(): Promise<ResultadoRefresh> {
           // a sessão de funcionar.
         }
       }
-    } else if (res.status >= 500 || res.status === 429) {
+    } else if (res.status !== 401) {
       resultado = 'indisponivel'
     } else {
       resultado = 'sem-sessao'
