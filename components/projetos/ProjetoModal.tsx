@@ -1,5 +1,6 @@
 "use client";
 
+import { motivoDaRecusa } from "@/lib/transicoesDoProjeto";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import type React from "react";
@@ -255,6 +256,10 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
     setSalvando(true);
     setErro(null);
     try {
+      if (initial) {
+        const motivo = motivoDaRecusa(initial.status, formData.status, statusLabelProjeto);
+        if (motivo) throw new Error(motivo);
+      }
       let referencia = formData.cliente_id;
       if (!souCliente && !initial && referencia?.includes("@")) {
         const resposta = await api.post<{ data: { id: string; nome: string } }>("/clientes", {
@@ -344,6 +349,7 @@ export default function ProjetoModal({ open, onOpenChange, initial, onSubmit }: 
             <>
               {step === 0 && (
                 <StepBasic
+                  statusInicial={initial?.status}
                   values={formData}
                   setValues={setFormData}
                   souCliente={souCliente}
