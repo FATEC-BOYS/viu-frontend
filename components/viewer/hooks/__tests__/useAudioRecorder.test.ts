@@ -1,6 +1,9 @@
+import fixWebmDuration from "fix-webm-duration";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { formatElapsed, formatoSuportado, useAudioRecorder } from "../useAudioRecorder";
+
+vi.mock("fix-webm-duration", () => ({ default: vi.fn(async (blob: Blob) => blob) }));
 
 describe("formatElapsed", () => {
   it("formats 0ms as 00:00", () => {
@@ -51,6 +54,8 @@ function fingirMediaRecorder(suportados: string[]) {
     start() {
       this.state = "recording";
     }
+    pause() { this.state = "paused"; }
+    resume() { this.state = "recording"; }
     stop() {
       this.state = "inactive";
       this.onstop?.();
@@ -71,7 +76,7 @@ function fingirMicrofone() {
   return track;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 /*
  * O gravador pedia `audio/webm` FIXO, e o Safari não grava webm: o construtor
@@ -108,6 +113,28 @@ describe("formatoSuportado", () => {
 });
 
 describe("useAudioRecorder", () => {
+  it("repairs WebM using real elapsed time, excluding pauses, and returns the repaired file", async () => {
+    fingirMicrofone();
+    const recorders = fingirMediaRecorder(["audio/webm"]);
+    let now = 100;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const repaired = new Blob(["fixed"], { type: "audio/webm" });
+    vi.mocked(fixWebmDuration).mockResolvedValueOnce(repaired);
+    const { result } = renderHook(() => useAudioRecorder());
+    await act(async () => { await result.current.start(); });
+    recorders[0].ondataavailable({ data: new Blob(["recording"]) });
+    now = 850;
+    act(() => result.current.pause());
+    now = 10000;
+    act(() => result.current.resume());
+    now = 11250;
+    let recording: Awaited<ReturnType<typeof result.current.stop>> = null;
+    await act(async () => { recording = await result.current.stop(); });
+    expect(fixWebmDuration).toHaveBeenCalledWith(expect.any(Blob), 2000, { logger: false });
+    expect(recording!.blob).toBe(repaired);
+    expect(result.current.elapsedMs).toBe(2000);
+  });
+
   it("grava no formato do navegador e devolve a extensão junto", async () => {
     fingirMicrofone();
     fingirMediaRecorder(["audio/mp4"]);
