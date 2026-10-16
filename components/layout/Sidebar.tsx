@@ -141,6 +141,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
 
   const isActive = (href: string) => {
     if (!mounted) return false;
+    if (href === '/admin') return pathname === '/admin' || pathname === '/dashboard';
     if (href === '/dashboard') {
       return pathname === '/dashboard' || pathname === '/';
     }
@@ -200,8 +201,8 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
 
         const [resPendentes, resEmAndamento, resFeedbacks, resNotificacoes, resProjetos, resConvites, resConvitesEquipe, resTemProjeto, resTemArte] =
           await Promise.allSettled([
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=PENDENTE&limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/tarefas?status=EM_ANDAMENTO&limit=1'),
             /*
              * `status=ABERTO`, como todos os vizinhos aqui filtram.
              *
@@ -211,17 +212,17 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
              * Quadro da própria tela de Feedbacks já calculava "Aberto 2 /
              * Resolvido 1" enquanto a barra lateral dizia 3.
              */
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?status=ABERTO&limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/feedbacks?status=ABERTO&limit=1'),
             // O único que todo papel exibe.
             api.get<{ pagination: { total: number } }>('/notificacoes?lida=false&limit=1'),
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/projetos?status=EM_ANDAMENTO&limit=1'),
             // Convites não são paginados: o backend devolve só os pendentes.
-            ehCliente ? vazio : convitesApi.listarPendentes(),
-            ehCliente ? vazio : convitesEquipeApi.listarPendentes(),
+            (ehCliente || ehAdmin) ? vazio : convitesApi.listarPendentes(),
+            (ehCliente || ehAdmin) ? vazio : convitesEquipeApi.listarPendentes(),
             // Qualquer status, não só EM_ANDAMENTO: quem tem só projeto
             // concluído já conhece o produto e não precisa de cadeado.
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/projetos?limit=1'),
-            ehCliente ? zero : api.get<{ pagination: { total: number } }>('/artes?limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/projetos?limit=1'),
+            (ehCliente || ehAdmin) ? zero : api.get<{ pagination: { total: number } }>('/artes?limit=1'),
           ]);
 
         if (!alive) return;
@@ -240,7 +241,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
           convitesPendentes: quantidade(resConvites) + quantidade(resConvitesEquipe),
         });
 
-        if (!ehCliente) {
+        if (!ehCliente && !ehAdmin) {
           setConteudo({ temProjeto: total(resTemProjeto) > 0, temArte: total(resTemArte) > 0 });
         }
       } catch (err) {
@@ -257,7 +258,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
       alive = false;
       clearInterval(interval);
     };
-  }, [usuarioId, ehCliente]);
+  }, [usuarioId, ehCliente, ehAdmin]);
 
   /**
    * O menu segue o papel de quem está olhando.
@@ -272,6 +273,25 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
    * (moderação)") para não confundir com o financeiro do próprio designer.
    */
   const navigationSections: NavSection[] = useMemo(() => {
+    if (ehAdmin) return [
+      { title: 'Plataforma', items: [
+        { title: 'Visão geral', href: '/admin', icon: Gauge },
+        { title: 'Usuários e acesso', href: '/admin/usuarios', icon: ShieldCheck },
+        { title: 'Status do sistema', href: '/status', icon: BarChart3 },
+        { title: 'Notificações', href: '/notificacoes', icon: Bell, badge: contadores.notificacoesNaoLidas },
+      ] },
+      { title: 'Operação financeira', items: [
+        { title: 'Financeiro da plataforma', href: '/admin/financeiro', icon: Receipt },
+        { title: 'Saques a moderar', href: '/admin/saques', icon: ArrowDownToLine },
+        { title: 'Disputas', href: '/admin/disputas', icon: Scale },
+        { title: 'Planos e preços', href: '/admin/planos', icon: Layers },
+      ] },
+      { title: 'Conta administrativa', collapsible: true, items: [
+        { title: 'Perfil', href: '/perfil', icon: User },
+        { title: 'Sessões', href: '/sessoes', icon: Monitor },
+        { title: 'Configurações', href: '/configuracoes', icon: Settings },
+      ] },
+    ];
     if (ehCliente) {
       return [
         {
@@ -420,7 +440,7 @@ export function Sidebar({ semColapso = false }: { semColapso?: boolean } = {}) {
             </div>
             <div>
               <h2 className="text-sm font-semibold leading-none">VIU</h2>
-              <p className="text-xs text-muted-foreground">Revisão de design</p>
+              <p className="text-xs text-muted-foreground">{ehAdmin ? 'Administração do VIU' : 'Revisão de design'}</p>
             </div>
           </div>
 

@@ -106,6 +106,7 @@ export type StatsUsuarios = {
  * número que pareceria medido.
  */
 export type ResumoAdmin = {
+  plataforma?: { contasAtivas: number; designers: number; clientes: number; projetos: number; artes: number; emailsPendentes: number; designersSemProjeto: number; aprovacoesAtrasadas: number }
   periodo: { fuso: string; inicioDoDia: string; funilDesde: string; geradoEm: string }
   hoje: {
     contasNovas: number

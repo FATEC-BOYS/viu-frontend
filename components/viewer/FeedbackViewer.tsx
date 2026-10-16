@@ -83,6 +83,7 @@ type PinPosition = { x: number; y: number } | null;
 type Props = {
   arte: ArteMin;
   initialFeedbacks: FeedbackItem[];
+  onFeedbacksChange?: (feedbacks: FeedbackItem[]) => void;
   token: string;
   viewer?: Viewer | null;
   readOnly?: boolean;
@@ -187,6 +188,7 @@ export function avatarColor(str: string): string {
 export default function FeedbackViewer({
   arte,
   initialFeedbacks,
+  onFeedbacksChange,
   token,
   viewer,
   readOnly,
@@ -200,6 +202,7 @@ export default function FeedbackViewer({
 }: Props) {
   /* — State — */
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>(initialFeedbacks);
+  useEffect(() => { onFeedbacksChange?.(feedbacks); }, [feedbacks, onFeedbacksChange]);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState<"none" | "text" | "audio">("none");
   const [pin, setPin] = useState<PinPosition>(null);

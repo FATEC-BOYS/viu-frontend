@@ -47,8 +47,10 @@ type Arte = {
 };
 
 type Props = {
+  historica?: boolean;
   arte: Arte;
   initialFeedbacks: any[];
+  onFeedbacksChange?: (feedbacks: any[]) => void;
   versoes: { id: string | null; numero: number; criado_em: string; status: string | null }[];
   aprovacoesByVersao: Record<string, any[]>;
   readOnly: boolean;
@@ -62,7 +64,9 @@ type Props = {
 
 export default function ViewerShell({
   arte,
+  historica = false,
   initialFeedbacks,
+  onFeedbacksChange,
   readOnly,
   token,
   licenca,
@@ -177,7 +181,7 @@ export default function ViewerShell({
      * entra e sai, e com `vh` a arte ficava cortada por baixo justamente no
      * aparelho em que o cliente abre o link.
      */
-    <main className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+    <main className="flex h-full flex-col overflow-hidden bg-background">
       {/* A faixa de cima: uma linha, não um banner. */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5">
         <h1 className="flex min-w-0 items-baseline gap-2 text-sm font-semibold tracking-tight">
@@ -235,6 +239,7 @@ export default function ViewerShell({
         <FeedbackViewer
           arte={arte}
           initialFeedbacks={initialFeedbacks}
+          onFeedbacksChange={onFeedbacksChange}
           viewer={viewer}
           readOnly={readOnly}
           token={token}
@@ -247,7 +252,7 @@ export default function ViewerShell({
              inteira sai, em vez de existir para devolver 401. */
           aprovacoes={
             temConta ? (
-              <ApprovalsPanel versaoAtual={arte.versao} key={chaveDoPainel} arteId={arte.id} />
+              <ApprovalsPanel somenteConsulta={historica} versaoAtual={arte.versao} key={chaveDoPainel} arteId={arte.id} />
             ) : null
           }
           /* Só quando é a vez de quem está olhando — caso contrário a barra
@@ -260,7 +265,7 @@ export default function ViewerShell({
              botão justamente no link padrão do produto, que é só-leitura.
           */
           decisao={
-            pendencia ? (
+            !historica && pendencia ? (
               <BarraDecisao
                 versaoNumero={pendencia.versaoNumero}
                 decidindo={decidindo}

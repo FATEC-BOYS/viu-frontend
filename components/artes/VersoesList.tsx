@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listVersoes, type VersaoGroup } from "@/lib/artes";
+import ErroDeConsulta from "@/components/layout/ErroDeConsulta";
 import { getArteDownloadUrl } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +14,14 @@ export default function VersoesList({ arteId }: { arteId: string }) {
   const [versoes, setVersoes] = useState<VersaoGroup[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const [erro, setErro] = useState(false);
+  const carregar = useCallback(() => {
     if (!arteId) return;
     setLoading(true);
-    listVersoes(arteId)
-      .then((v) => setVersoes(v ?? []))
-      .finally(() => setLoading(false));
+    listVersoes(arteId).then(v => { setVersoes(v); setErro(false); })
+      .catch(() => setErro(true)).finally(() => setLoading(false));
   }, [arteId]);
+  useEffect(carregar, [carregar]);
 
   async function handleDownload(path: string) {
     const url = await getArteDownloadUrl(path);
@@ -32,6 +34,8 @@ export default function VersoesList({ arteId }: { arteId: string }) {
   if (loading) {
     return <div className="text-sm text-muted-foreground">Carregando versões…</div>;
   }
+
+  if (erro) return <ErroDeConsulta mensagem="Não foi possível carregar as versões." tentar={carregar} />;
 
   if (!versoes.length) {
     return (
@@ -54,6 +58,7 @@ export default function VersoesList({ arteId }: { arteId: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              {v.descricao && <p className="text-sm">{v.descricao}</p>}
               {v.arquivos.map((a) => {
                 const isImg = (a.mime || "").startsWith("image/");
                 return (

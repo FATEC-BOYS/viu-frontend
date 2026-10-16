@@ -100,9 +100,9 @@ describe('listVersoes', () => {
     await expect(listVersoes('arte1')).resolves.toEqual([])
   })
 
-  it('não quebra a tela quando a chamada falha', async () => {
+  it('propaga falha para a tela oferecer nova tentativa', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('rede'))
-    await expect(listVersoes('arte1')).resolves.toEqual([])
+    await expect(listVersoes('arte1')).rejects.toThrow('rede')
   })
 })
 
@@ -193,14 +193,10 @@ describe('listArtesOverview', () => {
     expect(qs.get('tipo')).toBeNull()
   })
 
-  it('não derruba a tela quando a chamada falha', async () => {
+  it('propaga falha sem fingir lista vazia', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('rede'))
 
-    await expect(listArtesOverview({})).resolves.toEqual({
-      data: [],
-      count: 0,
-      porStatus: {},
-    })
+    await expect(listArtesOverview({})).rejects.toThrow('rede')
   })
 })
 

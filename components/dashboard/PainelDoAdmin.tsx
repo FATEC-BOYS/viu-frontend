@@ -32,7 +32,7 @@ import { adminApi, type ResumoAdmin } from '@/lib/admin'
  */
 
 const FORMATO_DATA = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
 })
 
 function quando(iso: string) {
@@ -136,8 +136,8 @@ export default function PainelDoAdmin() {
   return (
     <FadeIn className="mx-auto w-full max-w-7xl space-y-6 p-6">
       <PageHeader
-        title="Administração"
-        description={`Pulso do beta · fuso ${periodo.fuso.replace('_', ' ')}`}
+        title="Gestão da plataforma"
+        description={`Contas, adoção e operação do VIU · atualizado em ${quando(periodo.geradoEm)} · ${periodo.fuso.replace('_', ' ')}`}
         actions={
           <Button size="sm" variant="outline" onClick={() => void carregar()} disabled={carregando}>
             {carregando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -145,6 +145,38 @@ export default function PainelDoAdmin() {
           </Button>
         }
       />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { titulo: 'Usuários e acesso', texto: 'Contas, permissões e suporte', href: '/admin/usuarios' },
+          { titulo: 'Financeiro da plataforma', texto: 'Receitas e movimentações', href: '/admin/financeiro' },
+          { titulo: 'Planos e preços', texto: 'Gerenciar a oferta do VIU', href: '/admin/planos' },
+          { titulo: 'Status do sistema', texto: 'Consultar os serviços', href: '/status' },
+        ].map(item => <Link key={item.href} href={item.href} className="rounded-xl border bg-card p-4 transition-colors hover:border-primary/50">
+          <p className="flex items-center justify-between gap-2 text-sm font-semibold">{item.titulo}<ArrowRight className="h-4 w-4" /></p>
+          <p className="mt-1 text-xs text-muted-foreground">{item.texto}</p>
+        </Link>)}
+      </div>
+
+      {resumo.plataforma && <>
+        <Card><CardHeader><CardTitle className="text-base">Base da plataforma</CardTitle></CardHeader>
+          <CardContent className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-6">
+            <Metrica rotulo="contas ativas" valor={resumo.plataforma.contasAtivas} nota="contas habilitadas" />
+            <Metrica rotulo="designers" valor={resumo.plataforma.designers} />
+            <Metrica rotulo="clientes" valor={resumo.plataforma.clientes} />
+            <Metrica rotulo="projetos na plataforma" valor={resumo.plataforma.projetos} />
+            <Metrica rotulo="artes na plataforma" valor={resumo.plataforma.artes} />
+            <Metrica rotulo="designers sem projeto" valor={resumo.plataforma.designersSemProjeto} />
+          </CardContent>
+        </Card>
+        <Card><CardHeader><CardTitle className="text-base">Pontos de atenção</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-3">
+            <Link href="/admin/usuarios"><Metrica rotulo="contas com e-mail pendente" valor={resumo.plataforma.emailsPendentes} nota="Consultar cadastros e acesso" /></Link>
+            <Metrica rotulo="aprovações pendentes há +48h" valor={resumo.plataforma.aprovacoesAtrasadas} nota="Decisões dos clientes; acompanhar sem decidir por eles" />
+            <Metrica rotulo="links abertos sem resposta há +48h" valor={precisaDeVoce.linksTravados} nota="Indicador de acompanhamento da plataforma" />
+          </CardContent>
+        </Card>
+      </>}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -188,7 +220,7 @@ export default function PainelDoAdmin() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Precisa de você</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Moderação administrativa</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <Atalho
@@ -205,12 +237,7 @@ export default function PainelDoAdmin() {
               href="/admin/disputas"
               icone={ScaleIcon}
             />
-            <Atalho
-              rotulo="Links parados há +48h"
-              valor={precisaDeVoce.linksTravados}
-              href="/links"
-              icone={AlertTriangle}
-            />
+
           </CardContent>
         </Card>
       </div>
@@ -219,7 +246,7 @@ export default function PainelDoAdmin() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Fila rápida{naFila > 0 && <span className="ml-2 text-foreground">{naFila}</span>}
+              Fila de moderação{naFila > 0 && <span className="ml-2 text-foreground">{naFila}</span>}
             </CardTitle>
           </CardHeader>
           <CardContent>

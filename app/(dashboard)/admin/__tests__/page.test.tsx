@@ -124,3 +124,14 @@ describe('estados', () => {
     await waitFor(() => expect(screen.getByText('contas novas')).toBeInTheDocument())
   })
 })
+
+
+it('mostra a base e pendências da plataforma com ações administrativas', async () => {
+  vi.mocked(adminApi.resumo).mockResolvedValue({ data: { ...RESUMO, plataforma: { contasAtivas: 40, designers: 10, clientes: 29, projetos: 20, artes: 70, emailsPendentes: 3, designersSemProjeto: 2, aprovacoesAtrasadas: 6 } }, success: true } as never)
+  render(<AdminHomePage />)
+  expect(await screen.findByText('Base da plataforma')).toBeInTheDocument()
+  expect(screen.getByText('contas ativas').previousElementSibling).toHaveTextContent('40')
+  expect(screen.getByText('aprovações pendentes há +48h').previousElementSibling).toHaveTextContent('6')
+  expect(screen.getByText('Usuários e acesso').closest('a')).toHaveAttribute('href', '/admin/usuarios')
+  expect(screen.queryByText('Links parados há +48h')).not.toBeInTheDocument()
+})
