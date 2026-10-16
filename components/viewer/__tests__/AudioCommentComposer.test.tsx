@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import AudioCommentComposer, { useAudioCommentDraft } from '../AudioCommentComposer'
 function TestComposer(props: Parameters<typeof useAudioCommentDraft>[0]) { const draft = useAudioCommentDraft(props); const [visible, setVisible] = useState(true); return <><button onClick={() => setVisible(v => !v)}>Alternar painel</button>{visible && <AudioCommentComposer draft={draft} />}</> }
-const mocks = vi.hoisted(() => ({ preparar: vi.fn(), enviar: vi.fn(), stop: vi.fn(), start: vi.fn() }))
-vi.mock('@/lib/feedbacksDaArte', () => ({ prepararComentarioDeAudio: mocks.preparar, enviarComentarioDeAudio: mocks.enviar }))
+const mocks = vi.hoisted(() => ({ preparar: vi.fn(), enviar: vi.fn(), stop: vi.fn(), start: vi.fn(), sugerir: vi.fn() }))
+vi.mock('@/lib/feedbacksDaArte', () => ({ prepararComentarioDeAudio: mocks.preparar, enviarComentarioDeAudio: mocks.enviar, sugerirAjustesDoComentario: mocks.sugerir }))
 vi.mock('../hooks/useAudioRecorder', () => ({ useAudioRecorder: () => ({ state: 'recording', elapsedMs: 1000, start: mocks.start, stop: mocks.stop }), formatElapsed: () => '00:01' }))
 const created = vi.fn()
 const props = { token: 'tok', arteId: 'arte', versaoNumero: 2, posicaoX: .3, posicaoY: .4, disabled: false, onCreated: created, onActiveChange: vi.fn() }
@@ -77,4 +77,27 @@ it('mantém o rascunho ao fechar e reabrir o painel de comentários', async () =
   expect(screen.getByLabelText('Texto do comentário de voz')).toHaveValue('Talvez aumentar o título.')
   expect(mocks.preparar).toHaveBeenCalledTimes(1)
   expect(mocks.enviar).not.toHaveBeenCalled()
+})
+
+it('sugere itens sem publicar, permite revisar e inclui a lista só por escolha', async () => {
+  mocks.sugerir.mockResolvedValue([{ descricao: 'Talvez aumentar o título.', trechoOriginal: 'Talvez aumentar o título.' }])
+  await gravar()
+  await waitFor(() => expect(screen.getByLabelText('Texto do comentário de voz')).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Sugerir lista de ajustes' }))
+  const item = await screen.findByLabelText('Ajuste 1')
+  expect(mocks.enviar).not.toHaveBeenCalled()
+  await userEvent.clear(item)
+  await userEvent.type(item, 'Testar título maior, mantendo a fonte.')
+  await userEvent.click(screen.getByRole('button', { name: 'Incluir lista no comentário' }))
+  expect(screen.getByLabelText('Texto do comentário de voz')).toHaveValue('Talvez aumentar o título.\n\nAjustes revisados:\n☐ Testar título maior, mantendo a fonte.')
+  expect(mocks.enviar).not.toHaveBeenCalled()
+})
+it('descarta sugestões quando o texto de origem muda', async () => {
+  mocks.sugerir.mockResolvedValue([{ descricao: 'Aumentar título', trechoOriginal: 'Talvez aumentar o título.' }])
+  await gravar()
+  await waitFor(() => expect(screen.getByLabelText('Texto do comentário de voz')).toBeEnabled())
+  await userEvent.click(screen.getByRole('button', { name: 'Sugerir lista de ajustes' }))
+  await screen.findByLabelText('Ajuste 1')
+  await userEvent.type(screen.getByLabelText('Texto do comentário de voz'), ' Não, manter o título.')
+  expect(screen.queryByLabelText('Ajuste 1')).not.toBeInTheDocument()
 })

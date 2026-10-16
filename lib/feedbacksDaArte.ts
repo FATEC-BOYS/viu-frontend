@@ -202,3 +202,11 @@ export async function prepararComentarioDeAudio({ token, arteId, versaoNumero, a
   const res = await apiUpload<{ data: { transcricao: string; recibo: string } }>(token ? `/links/${encodeURIComponent(token)}/feedbacks/audio/rascunho` : '/feedbacks/audio/rascunho', form)
   return res.data
 }
+
+export type AjusteSugerido = { descricao: string; trechoOriginal: string }
+export async function sugerirAjustesDoComentario({ token, ...dados }: {
+  token: string; arteId: string; versaoNumero: number; texto: string
+}): Promise<AjusteSugerido[]> {
+  const res = await api.post<{ data: { ajustes: AjusteSugerido[] } }>(token ? `/links/${encodeURIComponent(token)}/feedbacks/ajustes/rascunho` : '/feedbacks/ajustes/rascunho', dados)
+  return res.data.ajustes
+}
