@@ -19,8 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
-  Mic,
-  Square,
   Loader2,
   X,
   Volume2,
@@ -40,7 +38,6 @@ import {
 } from "lucide-react";
 import {
   enviarComentario,
-  enviarComentarioDeAudio,
   listarRespostas,
   responder,
 } from "@/lib/feedbacksDaArte";
@@ -48,7 +45,7 @@ import { paraFeedbackItem, ehAudio, type FeedbackItem } from "./types";
 // Reexportado porque o tipo nasceu aqui e há quem importe daqui; some
 // em runtime, então não arrasta nada do módulo cliente junto.
 export type { FeedbackItem };
-import { useAudioRecorder, formatElapsed } from "./hooks/useAudioRecorder";
+import AudioCommentComposer, { useAudioCommentDraft } from "./AudioCommentComposer";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -74,6 +71,7 @@ type ArteMin = {
   arquivo: string;
   largura_px?: number | null;
   altura_px?: number | null;
+  versao?: number;
 };
 
 type Viewer = { email: string; nome?: string | null };
@@ -280,7 +278,7 @@ export default function FeedbackViewer({
     setRazao(el.naturalWidth / el.naturalHeight);
   }, [arte.arquivo]);
 
-  const recorder = useAudioRecorder();
+
 
   /*
    * A proporção da arte, que dá à moldura o tamanho exato da imagem.
@@ -339,6 +337,15 @@ export default function FeedbackViewer({
     () => temSessao && !readOnly && !!viewer?.email,
     [temSessao, readOnly, viewer],
   );
+  // O rascunho vive na tela, não na gaveta: fechar comentários no celular
+  // não perde o áudio, nem cria um segundo gravador na coluna do desktop.
+  const audioDraft = useAudioCommentDraft({ token, arteId: arte.id, versaoNumero: arte.versao ?? 1,
+    posicaoX: pin?.x ?? null, posicaoY: pin?.y ?? null,
+    disabled: !canComment || sending !== "none" || !!comment.trim(),
+    onCreated: (corpo) => { setFeedbacks(f => [...f, paraFeedbackItem(corpo)]); setPin(null); toast.success("Comentário enviado!"); },
+  });
+  const audioAtivo = audioDraft.ativo;
+
 
   /* — Encaixe da arte na área disponível — */
   useEffect(() => {
@@ -391,6 +398,7 @@ export default function FeedbackViewer({
        * engoli-lo ali deixava a pessoa sem saída com o cursor no campo.
        */
       if (e.key === "Escape") {
+        if (audioAtivo) return;
         if (pin) { setPin(null); setComment(""); return; }
         if (commentModeActive) setCommentMode(false);
         return;
@@ -404,7 +412,7 @@ export default function FeedbackViewer({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [commentModeActive, setCommentMode, pin]);
+  }, [commentModeActive, setCommentMode, pin, audioAtivo]);
 
   /*
    * Sair do modo comentário leva a marcação junto.
@@ -414,6 +422,7 @@ export default function FeedbackViewer({
    * escrevesse sem querer marcar nada.
    */
   function alternarModoComentario() {
+    if (audioAtivo) return;
     if (commentModeActive) { setPin(null); setComment(""); }
     setCommentMode(!commentModeActive);
   }
@@ -460,7 +469,7 @@ export default function FeedbackViewer({
 
   /* — Click on image to place pin — */
   function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!commentModeActive || !canComment || sending !== "none") return;
+    if (!commentModeActive || !canComment || sending !== "none" || audioAtivo) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -562,60 +571,6 @@ export default function FeedbackViewer({
       setSending("none");
     }
   }
-
-  /* — Audio — */
-  async function handleStartRecording() {
-    await recorder.start();
-  }
-
-  async function handleStopRecording() {
-    const gravacao = await recorder.stop();
-    if (!gravacao) return;
-    await uploadAudioBlob(gravacao.blob, gravacao.extensao);
-  }
-
-  async function uploadAudioBlob(blob: Blob, extensao: string) {
-    try {
-      setSending("audio");
-      // `email` e `nome` iam no formulário e o backend nunca os leu — o autor
-      // sai da sessão. Saíram junto com o repasse pela rota do Next.
-      const corpo = await enviarComentarioDeAudio({
-        token,
-        arteId: arte.id,
-        audio: blob,
-        extensao,
-        posicaoX: pin?.x ?? null,
-        posicaoY: pin?.y ?? null,
-      });
-
-      const created = paraFeedbackItem(corpo);
-      if (pin) { created.posicao_x = pin.x; created.posicao_y = pin.y; }
-      setFeedbacks((f) => [...f, created]);
-      setPin(null);
-      toast.success("Áudio enviado!");
-    } catch (e) {
-      console.error("[FeedbackViewer] Erro ao enviar áudio:", e);
-      toast.error("Não foi possível enviar o áudio.");
-    } finally {
-      setSending("none");
-    }
-  }
-
-  /*
-   * A transcrição NÃO é pedida daqui.
-   *
-   * Havia um `transcribeAudioFeedback` que, logo depois de enviar, mandava o
-   * MESMO blob para `/api/transcribe` — uma rota do Next que falava direto com
-   * a OpenAI. Só que o backend já transcreve ao receber o áudio e GRAVA o
-   * texto. Então o produto pagava o Whisper duas vezes por comentário, e a
-   * segunda transcrição era jogada fora: ela só chamava `setFeedbacks`, sem
-   * gravar nada, e desaparecia ao recarregar a página.
-   *
-   * O texto agora vem na própria resposta da criação (`transcricao`), que é o
-   * que ficou no banco. Quando não vem, a OpenAI falhou — e a tela diz isso
-   * em vez de inventar, com `GET /feedbacks/:id/transcricao` como caminho
-   * para tentar de novo.
-   */
 
   /* — TTS — */
   // Só o `id`: o texto sai do próprio comentário, no servidor.
@@ -857,47 +812,22 @@ export default function FeedbackViewer({
    */
   const compositor = (
             <div className={!canComment ? "opacity-60 pointer-events-none" : ""}>
-              <Textarea
+              {!audioAtivo && <Textarea
                 placeholder={readOnly ? "Comentários desabilitados" : "Escreva um comentário…"}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-              />
+              />}
               {aprovacoes && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   O comentário é enviado ao publicar. Para concluir a revisão,
                   use a aba Aprovações e escolha Aprovar ou Pedir ajustes.
                 </p>
               )}
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {recorder.state === "idle" ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleStartRecording}
-                      disabled={!canComment || sending !== "none"}
-                    >
-                      <Mic className="h-4 w-4 mr-1" />
-                      Gravar áudio
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleStopRecording}
-                      disabled={!canComment}
-                    >
-                      <Square className="h-4 w-4 mr-1" />
-                      Parar ({formatElapsed(recorder.elapsedMs)})
-                    </Button>
-                  )}
-                  {sending === "audio" && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Enviando…
-                    </span>
-                  )}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className={audioAtivo ? "w-full min-w-0" : "flex items-center gap-2"}>
+                  <AudioCommentComposer draft={audioDraft} />
                 </div>
-                <div className="flex items-center gap-2">
+                {!audioAtivo && <div className="flex items-center gap-2">
                   {/* Desistir precisa estar ao lado de enviar. Antes a única
                       saída era um X no rodapé da trilha — que no celular é
                       gaveta fechada, e aí não havia saída nenhuma. */}
@@ -906,7 +836,7 @@ export default function FeedbackViewer({
                       variant="ghost"
                       size="sm"
                       onClick={() => { setPin(null); setComment(""); }}
-                      disabled={sending !== "none"}
+                      disabled={sending !== "none" || audioAtivo}
                     >
                       Cancelar
                     </Button>
@@ -914,15 +844,12 @@ export default function FeedbackViewer({
                   <Button
                     size={pin ? "sm" : "default"}
                     onClick={handleAddComment}
-                    disabled={!canComment || !comment.trim() || sending !== "none"}
+                    disabled={!canComment || !comment.trim() || sending !== "none" || audioAtivo}
                   >
                     {sending === "text" ? "Enviando..." : pin ? "Enviar" : "Enviar comentário"}
                   </Button>
-                </div>
+                </div>}
               </div>
-              {recorder.permissionError && (
-                <p className="text-xs text-destructive mt-1">{recorder.permissionError}</p>
-              )}
             </div>
   );
 
@@ -1061,7 +988,7 @@ export default function FeedbackViewer({
                 <TooltipContent side="top" className="max-w-[200px]">
                   <p className="text-xs font-medium">{f.autor_nome || f.autor_email || "Anônimo"}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {ehAudio(f) ? (f.transcricao || "Áudio sem transcrição") : (f.conteudo || "(sem texto)")}
+                    {ehAudio(f) ? (f.conteudo || f.transcricao || "Áudio sem transcrição") : (f.conteudo || "(sem texto)")}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -1273,7 +1200,7 @@ export default function FeedbackViewer({
                         <div className="flex items-start gap-1.5 text-xs bg-muted/50 rounded p-2">
                           <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
                           <p className="whitespace-pre-wrap text-muted-foreground">
-                            {fb.transcricao || fb.conteudo || (
+                            {fb.conteudo || fb.transcricao || (
                               <em>Áudio sem transcrição</em>
                             )}
                           </p>

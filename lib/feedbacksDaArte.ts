@@ -59,6 +59,7 @@ export async function enviarComentarioDeAudio({
   arteId,
   audio,
   extensao = 'webm',
+  versaoNumero, revisado, conteudoRevisado, recibo,
   posicaoX,
   posicaoY,
 }: {
@@ -75,6 +76,10 @@ export async function enviarComentarioDeAudio({
    * iPhone, assim que o gravador passasse a saber gravar lá.
    */
   extensao?: string
+  versaoNumero?: number
+  revisado?: boolean
+  conteudoRevisado?: string
+  recibo?: string
   posicaoX: number | null
   posicaoY: number | null
 }): Promise<any> {
@@ -82,6 +87,10 @@ export async function enviarComentarioDeAudio({
   form.append('audio', audio, `gravacao_${Date.now()}.${extensao}`)
   // Com token a arte sai do próprio token; sem ele é preciso dizer qual é.
   if (!token) form.append('arteId', arteId)
+  if (versaoNumero !== undefined) form.append('versaoNumero', String(versaoNumero))
+  if (revisado) form.append('revisado', 'true')
+  if (conteudoRevisado !== undefined) form.append('conteudoRevisado', conteudoRevisado)
+  if (recibo) form.append('recibo', recibo)
   if (posicaoX !== null) form.append('posicaoX', String(posicaoX))
   if (posicaoY !== null) form.append('posicaoY', String(posicaoY))
 
@@ -179,4 +188,17 @@ export async function responder(
     parentId: feedbackId,
   })
   return paraFeedbackItem((res as any)?.data ?? res)
+}
+
+
+/** Prévia sem publicar: o blob fica no navegador até a confirmação. */
+export async function prepararComentarioDeAudio({ token, arteId, versaoNumero, audio, extensao }: {
+  token: string; arteId: string; versaoNumero: number; audio: Blob; extensao: string
+}): Promise<{ transcricao: string; recibo: string }> {
+  const form = new FormData()
+  form.append('arteId', arteId)
+  form.append('versaoNumero', String(versaoNumero))
+  form.append('audio', audio, `gravacao.${extensao}`)
+  const res = await apiUpload<{ data: { transcricao: string; recibo: string } }>(token ? `/links/${encodeURIComponent(token)}/feedbacks/audio/rascunho` : '/feedbacks/audio/rascunho', form)
+  return res.data
 }
