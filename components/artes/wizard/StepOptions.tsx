@@ -23,17 +23,17 @@ export default function StepOptions({
       <div className="space-y-2">
         <Label className="inline-flex items-center gap-3">
           <Switch checked={gerarLinkPublico} onCheckedChange={setGerarLinkPublico} />
-          Gerar link público
+          Criar link de compartilhamento
         </Label>
         <p className="text-xs text-muted-foreground">
-          Cria um link com token e validade para o cliente visualizar.
+          Compartilhe a arte e escolha o que a pessoa pode fazer pelo link.
         </p>
 
         {gerarLinkPublico && (
           <div className="mt-2 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label>Expira (dias)</Label>
+                <Label>Validade do link (dias)</Label>
                 <Input
                   type="number"
                   min={1}
@@ -46,10 +46,17 @@ export default function StepOptions({
                   }}
                 />
               </div>
-              <div className="flex items-end justify-between">
-                <Label className="mr-2">Somente leitura</Label>
-                <Switch checked={somenteLeitura} onCheckedChange={setSomenteLeitura} />
-              </div>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">Permissão do link</legend>
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input type="radio" name="permissaoLink" checked={somenteLeitura} onChange={() => setSomenteLeitura(true)} className="mt-1" />
+                  <span>Apenas visualizar<span className="block text-xs text-muted-foreground">Permite ver a arte e os comentários, sem enviar novos comentários.</span></span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input type="radio" name="permissaoLink" checked={!somenteLeitura} onChange={() => setSomenteLeitura(false)} className="mt-1" />
+                  <span>Revisar e comentar<span className="block text-xs text-muted-foreground">Permite enviar comentários por texto ou áudio após entrar na conta.</span></span>
+                </label>
+              </fieldset>
             </div>
 
             {/*
