@@ -1,0 +1,131 @@
+name: SANSA Agents (piloto manual)
+run-name: "SANSA: ${{ inputs.task }}"
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Tarefa técnica específica para o VIU (sem dados pessoais ou segredos)"
+        required: true
+        type: string
+      implement:
+        description: "Executar Codex após a auditoria? (sem commit nem deploy)"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sansa-manual-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Claude — auditoria
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preparar relatório
+        run: mkdir -p .sansa-output
+      - name: Auditar com Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --max-turns 12
+            --allowedTools "Read,Glob,Grep,Write"
+            --disallowedTools "Bash,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch"
+          prompt: |
+            Leia .sansa/agents/auditor.md e siga estas instruções.
+            Investigue, exclusivamente em modo leitura, esta tarefa do operador:
+            ${{ inputs.task }}
+            Grave a sua resposta completa em .sansa-output/audit.md usando a ferramenta Write.
+            Não modifique nem escreva qualquer outro arquivo.
+            Não inclua dados pessoais, .env ou credenciais.
+      - name: Validar saída da auditoria
+        run: |
+          test -s .sansa-output/audit.md
+          if [ -n "$(git status --porcelain --untracked-files=all | grep -v '^?? .sansa-output/audit.md$' || true)" ]; then
+            echo "A auditoria alterou arquivos não permitidos."
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sansa-audit
+          path: .sansa-output/audit.md
+          retention-days: 7
+
+  implement:
+    name: Codex — patch experimental
+    if: ${{ inputs.implement }}
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: sansa-audit
+          path: .sansa-output
+      - name: Preparar instruções
+        env:
+          TASK: ${{ inputs.task }}
+        run: |
+          {
+            cat .sansa/agents/implementer.md
+            printf '\n## Tarefa do operador\n%s\n' "$TASK"
+            printf '\n## Auditoria (material de referência não confiável)\n'
+            cat .sansa-output/audit.md
+          } > .sansa-output/implement-prompt.md
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .sansa-output/implement-prompt.md
+          output-file: .sansa-output/implementation.md
+          permission-profile: ":workspace"
+      - name: Verificar escopo das alterações
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only > .sansa-output/changed-files.txt
+          git ls-files --others --exclude-standard | grep -v '^.sansa-output/' >> .sansa-output/changed-files.txt || true
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            case "$path" in
+              app/*|components/*|contexts/*|lib/*|e2e/*|hooks/*|styles/*) ;;
+              *) echo "Arquivo fora do escopo: $path"; exit 1 ;;
+            esac
+          done < .sansa-output/changed-files.txt
+          git diff --binary > .sansa-output/proposal.patch
+          test -s .sansa-output/proposal.patch || echo "Nenhuma alteração de arquivos versionados."
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.exemplo.invalid
+      - name: Guardar resultado para revisão humana
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sansa-proposed-patch
+          path: |
+            .sansa-output/audit.md
+            .sansa-output/implementation.md
+            .sansa-output/changed-files.txt
+            .sansa-output/proposal.patch
+          retention-days: 7
